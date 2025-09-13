@@ -31,3 +31,16 @@
 <img width="504" height="405" alt="image" src="https://github.com/user-attachments/assets/6b1d3ab5-3168-476e-a797-ffcd850fa316" />
 
 <img width="900" height="359" alt="image" src="https://github.com/user-attachments/assets/276e7abf-8d5d-4f6f-8cd4-3021439bc38e" />
+
+# Իսկ ինչ մասերի են բաժանված լինելու մեր խցիկները, ինձ թվում է 6 (նաև ասեմ, որ դասավորում եմ կարևորության աստիճանով, իսկ * նշանովները երևի ռակիռովկայի կարիք ունեն)՝ 
+# 1․ Պլաստիկ
+# 2․ Ալյումին
+# 3․ ԲԻՈ աղբ *
+# 4․ Ապակի *
+# 5․ Թուղթ
+# 6․ Խառը աղբ *
+
+
+# Ու եթե մենք համաձայն ենք այս տարանջատումների հետ ապա ամեն մի խցիկի ծավալը լինում է ուղիղ 70,5 լիտր 
+
+<img width="321" height="508" alt="image" src="https://github.com/user-attachments/assets/82f05dab-4677-4dba-b3bb-c8943043cdf3" />
