@@ -1,4 +1,5 @@
 # HexaBin
+<img width="1024" height="1024" alt="Hexabin" src="https://github.com/user-attachments/assets/01d1b439-4ff4-40a2-92e7-8fc27feddea3" />
 
 # Ամենակարևոր բանը գրեմ թե ինչպես է դատան սարքում դատասեթ և պահպանվում մեր դատաբազաներում
 # Trash -> Photo -> Identity -> Description -> one-word description -> GEO location -> Time -> *C => DataSet -> Database
@@ -17,3 +18,16 @@
 <img width="890" height="843" alt="image" src="https://github.com/user-attachments/assets/1b1f7e74-bd79-4360-af6a-d9cf688ebcfb" />
 
 # Ուղղակի այս ինֆորմացիայի մեջ չգիտեմ Number-ը դա քանակն է աղբի թե կիլոգրամը, այս բոլոր սքրինշոտներն ու ուսումնասիրությունը արվել է smartbin.tech այս կայքից
+
+
+# Նախնական չափսերը երևի թե այսքան են պետք 
+
+<img width="1223" height="693" alt="image" src="https://github.com/user-attachments/assets/905d6638-7d15-416a-90e9-dbd92644023a" />
+
+<img width="1950" height="1950" alt="image" src="https://github.com/user-attachments/assets/46c12541-300c-4b86-9e05-508e81628ef3" />
+
+# Բարձրության 110 սմ-ի ու շառավիղի 35 սմ-ի դեպքում ծավալը կլինի 423 լիտր՝
+
+<img width="504" height="405" alt="image" src="https://github.com/user-attachments/assets/6b1d3ab5-3168-476e-a797-ffcd850fa316" />
+
+<img width="900" height="359" alt="image" src="https://github.com/user-attachments/assets/276e7abf-8d5d-4f6f-8cd4-3021439bc38e" />
