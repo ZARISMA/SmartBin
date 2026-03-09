@@ -1,0 +1,5 @@
+opencv-python
+depthai
+pandas
+google-genai
+openpyxl
