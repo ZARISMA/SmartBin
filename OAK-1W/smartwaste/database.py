@@ -5,6 +5,7 @@ Table schema mirrors the JSON/Excel entries plus the 5 simulated
 environment sensor columns, so all three storage backends stay in sync.
 """
 
+import os
 import sqlite3
 
 from .config import DB_FILE
@@ -42,6 +43,7 @@ VALUES
 
 def init_db() -> None:
     """Create the database file and table if they don't exist yet."""
+    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
     with sqlite3.connect(DB_FILE) as conn:
         conn.execute(_CREATE_TABLE)
     logger.info("SQLite database ready: %s", DB_FILE)
