@@ -1,146 +1,47 @@
 """
-mainauto.py — Smart Waste AI (Automatic Mode)
+mainauto.py — Smart Waste AI (Automatic Gate Mode)
 
-Local motion/presence detection gates all Gemini API calls:
-  - Warm-up phase: learns an empty-bin background model (no API calls)
-  - IDLE: bin looks empty → no API calls
-  - DETECTED: object presence confirmed by local diff → one API call
-  - CLASSIFIED: waiting for bin to clear → no API calls
-  - CLEARED: bin back to empty → reset to IDLE, ready for next item
+Local presence detection gates all Gemini API calls:
+  - Calibrating : learning empty-bin background  (no API)
+  - Ready/IDLE  : bin looks empty               (no API)
+  - Detected    : object confirmed by pixel-diff → one API call
+  - Classified  : waiting for bin to clear       (no API)
 
 Controls:
   q — quit
-  c — force-classify current frame immediately (manual override)
-  r — reset background model (re-calibrate)
+  c — force-classify current frame (manual override)
+  r — reset background model from current frame
 """
 
 import contextlib
 import sys
-import threading
 import time
 
 import cv2
 import depthai as dai
-import numpy as np
 
 from smartwaste.camera import crop_sides, make_pipeline
-from smartwaste.classifier import classify
-from smartwaste.config import CROP_PERCENT, DISPLAY_SIZE, JPEG_QUALITY, MAX_DT, WINDOW
+from smartwaste.config import CHECK_INTERVAL, CROP_PERCENT, DISPLAY_SIZE, MAX_DT, WINDOW
 from smartwaste.log_setup import get_logger
+from smartwaste.presence import PresenceDetector
 from smartwaste.state import AppState
 from smartwaste.ui import draw_overlay
+from smartwaste.utils import encode_frame, launch_classify
 
 logger = get_logger()
 logger.info("Starting Smart Waste AI (Auto Gate Mode)")
 
-# ── Local detection tuning ─────────────────────────────────────────────────────
-MOTION_THRESHOLD  = 12.0   # mean-abs pixel diff (0-255) to consider bin non-empty
-DETECT_CONFIRM_N  = 3      # consecutive above-threshold checks before triggering API
-EMPTY_CONFIRM_N   = 6      # consecutive below-threshold checks before resetting to IDLE
-BG_LEARNING_RATE  = 0.03   # how fast background model adapts when bin is empty
-BG_WARMUP_FRAMES  = 40     # local checks during warmup before detection is active
-CHECK_INTERVAL    = 0.5    # seconds between local presence checks
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-def _encode(frame) -> bytes | None:
-    ok, enc = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
-    return enc.tobytes() if ok else None
-
-
-def _launch_classify(img_bytes: bytes, frame_copy, state: AppState) -> None:
-    if img_bytes:
-        threading.Thread(target=classify, args=(img_bytes, frame_copy, state), daemon=True).start()
-    else:
-        state.set_status("Error", "JPEG encode failed.")
-        state.finish_classify()
-
-
-# ── Background / presence detector ────────────────────────────────────────────
-
-class PresenceDetector:
-    """
-    Maintains a rolling background model and reports whether an object
-    is present in the bin based on per-frame pixel-diff scoring.
-    """
-
-    def __init__(self):
-        self._bg: np.ndarray | None = None
-        self._warmup_count = 0
-        self._detect_streak = 0   # consecutive frames above threshold
-        self._empty_streak  = 0   # consecutive frames below threshold
-
-    @property
-    def ready(self) -> bool:
-        return self._warmup_count >= BG_WARMUP_FRAMES
-
-    @property
-    def warmup_progress(self) -> tuple[int, int]:
-        return self._warmup_count, BG_WARMUP_FRAMES
-
-    def reset(self, gray: np.ndarray | None = None) -> None:
-        """Force-reset the background model (e.g. on user request or bin-clear)."""
-        self._bg = gray.astype(np.float32) if gray is not None else None
-        self._warmup_count  = 0 if gray is None else BG_WARMUP_FRAMES
-        self._detect_streak = 0
-        self._empty_streak  = 0
-
-    def update(self, gray: np.ndarray) -> tuple[float, bool, bool]:
-        """
-        Feed a new grayscale frame.
-
-        Returns:
-            score       — mean absolute diff vs background
-            is_occupied — True when detect streak confirms object present
-            is_empty    — True when empty streak confirms bin has cleared
-        """
-        gray_f = gray.astype(np.float32)
-
-        if self._bg is None:
-            self._bg = gray_f.copy()
-
-        # Warmup: fast-learn background, never fire detections
-        if not self.ready:
-            cv2.accumulateWeighted(gray_f, self._bg, 0.15)
-            self._warmup_count += 1
-            return 0.0, False, False
-
-        score = float(np.abs(gray_f - self._bg).mean())
-
-        if score >= MOTION_THRESHOLD:
-            self._detect_streak += 1
-            self._empty_streak   = 0
-        else:
-            self._empty_streak  += 1
-            self._detect_streak  = 0
-            # Slowly drift background toward current frame only when bin is empty
-            cv2.accumulateWeighted(gray_f, self._bg, BG_LEARNING_RATE)
-
-        is_occupied = self._detect_streak >= DETECT_CONFIRM_N
-        is_empty    = self._empty_streak  >= EMPTY_CONFIRM_N
-        return score, is_occupied, is_empty
-
-    def accept_as_background(self, gray: np.ndarray) -> None:
-        """Hard-update background to current frame (called when bin confirmed empty)."""
-        self._bg = gray.astype(np.float32)
-        self._detect_streak = 0
-        self._empty_streak  = 0
-
-
-# ── Main loop ─────────────────────────────────────────────────────────────────
 
 def main() -> None:
     state    = AppState()
     detector = PresenceDetector()
 
-    # In auto-gate mode the toggle is always on from the user perspective
-    state.auto_classify = True
+    state.auto_classify = True   # always on in this entry point
 
-    # Main-thread-only tracking (no locking needed)
-    last_check_time  = 0.0
-    bin_occupied     = False   # True while we believe something is in the bin
-    item_classified  = False   # True once we've triggered the API for the current item
+    # Main-thread-only state (no locking needed)
+    last_check_time = 0.0
+    bin_occupied    = False   # True while object is detected in bin
+    item_classified = False   # True once API has been triggered for current item
 
     try:
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
@@ -180,7 +81,7 @@ def main() -> None:
 
         try:
             while True:
-                # ── Capture frames ─────────────────────────────────────────
+                # ── Capture ────────────────────────────────────────────────
                 for i, q in enumerate(queues):
                     if q.has():
                         frame      = q.get().getCvFrame()
@@ -209,11 +110,11 @@ def main() -> None:
                         done, total = detector.warmup_progress
                         state.set_status(
                             "Calibrating",
-                            f"Learning empty-bin background... ({done}/{total})"
+                            f"Learning empty-bin background... ({done}/{total})",
                         )
 
                     elif is_empty and bin_occupied:
-                        # ── Bin cleared → reset ────────────────────────────
+                        # Bin cleared → reset
                         bin_occupied    = False
                         item_classified = False
                         detector.accept_as_background(gray)
@@ -221,19 +122,20 @@ def main() -> None:
                         logger.info("Bin cleared. Background updated. score=%.1f", score)
 
                     elif is_occupied and not bin_occupied:
-                        # ── Object just entered bin ────────────────────────
+                        # Object just entered bin
                         bin_occupied    = True
                         item_classified = False
-                        state.set_status("Detected", f"Object detected (score={score:.1f}) — classifying...")
+                        state.set_status(
+                            "Detected",
+                            f"Object detected (score={score:.1f}) — classifying...",
+                        )
                         logger.info("Object detected. score=%.1f → API call queued", score)
 
-                    # ── API gate: fire exactly once per item ───────────────
-                    # (state.start_classify is atomic; returns False if already running)
+                    # Fire exactly one API call per item arrival
                     if bin_occupied and not item_classified and state.start_classify():
                         item_classified = True
-                        img_bytes = _encode(combined)
                         logger.info("Gemini API call triggered. score=%.1f", score)
-                        _launch_classify(img_bytes, combined.copy(), state)
+                        launch_classify(encode_frame(combined), combined.copy(), state)
 
                 # ── Keyboard ───────────────────────────────────────────────
                 key = cv2.waitKey(1) & 0xFF
@@ -243,13 +145,11 @@ def main() -> None:
                     break
 
                 if key == ord("c") and combined is not None and state.start_classify():
-                    # Manual force-classify (bypasses local gate)
                     item_classified = True
                     logger.info("Manual classify triggered.")
-                    _launch_classify(_encode(combined), combined.copy(), state)
+                    launch_classify(encode_frame(combined), combined.copy(), state)
 
                 if key == ord("r") and combined is not None:
-                    # Re-calibrate background from current frame
                     gray = cv2.cvtColor(combined, cv2.COLOR_BGR2GRAY)
                     detector.reset(gray)
                     bin_occupied    = False

@@ -1,33 +1,19 @@
 import contextlib
 import sys
-import threading
 import time
 
 import cv2
 import depthai as dai
 
 from smartwaste.camera import crop_sides, make_pipeline
-from smartwaste.classifier import classify
-from smartwaste.config import AUTO_INTERVAL, CROP_PERCENT, DISPLAY_SIZE, JPEG_QUALITY, MAX_DT, WINDOW
+from smartwaste.config import AUTO_INTERVAL, CROP_PERCENT, DISPLAY_SIZE, MAX_DT, WINDOW
 from smartwaste.log_setup import get_logger
 from smartwaste.state import AppState
 from smartwaste.ui import draw_overlay
+from smartwaste.utils import encode_frame, launch_classify
 
 logger = get_logger()
 logger.info("Starting Smart Waste AI")
-
-
-def _encode(frame) -> bytes | None:  # requires Python 3.10+
-    ok, enc = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
-    return enc.tobytes() if ok else None
-
-
-def _launch_classify(img_bytes: bytes, frame_copy, state: AppState) -> None:
-    if img_bytes:
-        threading.Thread(target=classify, args=(img_bytes, frame_copy, state), daemon=True).start()
-    else:
-        state.set_status("Error", "JPEG encode failed.")
-        state.finish_classify()
 
 
 def main() -> None:
@@ -92,7 +78,7 @@ def main() -> None:
                         and now - state.last_capture_time >= AUTO_INTERVAL
                         and state.start_classify()):
                     state.last_capture_time = now
-                    _launch_classify(_encode(combined), combined.copy(), state)
+                    launch_classify(encode_frame(combined), combined.copy(), state)
 
                 key = cv2.waitKey(1) & 0xFF
 
@@ -101,7 +87,7 @@ def main() -> None:
                     break
 
                 if key == ord("c") and combined is not None and state.start_classify():
-                    _launch_classify(_encode(combined), combined.copy(), state)
+                    launch_classify(encode_frame(combined), combined.copy(), state)
 
                 if key == ord("a"):
                     auto_on = state.toggle_auto()
