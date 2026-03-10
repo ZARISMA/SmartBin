@@ -7,6 +7,7 @@ import cv2
 import pandas as pd
 
 from .config import DATASET_DIR, EXCEL_FILE, META_FILE
+from .database import insert_entry
 from .log_setup import get_logger
 
 logger = get_logger()
@@ -55,7 +56,8 @@ def save_entry(label: str, img, description: str, brand_product: str) -> None:
     with open(META_FILE, "w", encoding="utf-8") as f:
         json.dump(_metadata, f, ensure_ascii=False, indent=4)
 
-    df = pd.DataFrame([{**entry, **_environment_data()}])
+    env = _environment_data()
+    df  = pd.DataFrame([{**entry, **env}])
     try:
         if not os.path.exists(EXCEL_FILE):
             df.to_excel(EXCEL_FILE, index=False, engine="openpyxl")
@@ -67,3 +69,5 @@ def save_entry(label: str, img, description: str, brand_product: str) -> None:
         logger.warning("Excel file is open — close it and retry.")
     except Exception as e:
         logger.exception("Excel write failed: %s", e)
+
+    insert_entry(entry, env)

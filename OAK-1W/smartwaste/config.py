@@ -5,6 +5,7 @@ LOG_DIR     = os.path.join(BASE_DIR, "logs")
 DATASET_DIR = os.path.join(BASE_DIR, "waste_dataset")
 META_FILE   = os.path.join(DATASET_DIR, "metadata.json")
 EXCEL_FILE  = os.path.join(DATASET_DIR, "waste_log.xlsx")
+DB_FILE     = os.path.join(DATASET_DIR, "waste.db")
 
 MODEL_NAME    = "gemini-3-flash-preview"
 VALID_CLASSES = ["Plastic", "Glass", "Paper", "Organic", "Aluminum", "Other", "Empty"]
