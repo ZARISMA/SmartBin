@@ -1,0 +1,17 @@
+# Virtual environment
+oak_env/
+
+# Runtime-generated data
+logs/
+waste_dataset/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code
+.vscode/
+
+# Environment variables
+.env
