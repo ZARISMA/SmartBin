@@ -5,7 +5,7 @@ import time
 import cv2
 import depthai as dai
 
-from smartwaste.camera import crop_sides, make_pipeline
+from smartwaste.cameraOak import crop_sides, make_pipeline
 from smartwaste.config import AUTO_INTERVAL, CROP_PERCENT, DISPLAY_SIZE, MAX_DT, WINDOW
 from smartwaste.log_setup import get_logger
 from smartwaste.state import AppState

@@ -53,8 +53,14 @@ Then remove `opencv-python` from `requirements.txt`.
 
 ## Running the Application
 
+**OAK cameras (default):**
 ```bash
 python main.py
+```
+
+**Raspberry Pi cameras:**
+```bash
+python mainraspberry.py
 ```
 
 **Runtime controls:**
@@ -64,9 +70,24 @@ python main.py
 
 ## Hardware Requirements
 
-- 2x OAK-D USB3 cameras (uses `depthai` SDK)
-- Expected device MXIDs are hardcoded — update in code if swapping hardware
+- 2x OAK-D USB3 cameras (uses `depthai` SDK) — for `main.py` / `mainauto.py`
+- **OR** 2x Raspberry Pi cameras (uses `picamera2`) — for `mainraspberry.py`
 - Internet access for Gemini API calls
+
+### Raspberry Pi camera setup
+
+```bash
+# Install picamera2 (already available on Pi OS Bookworm)
+sudo apt install -y python3-picamera2
+
+# Or inside a venv:
+pip install picamera2
+
+# Enable cameras in /boot/firmware/config.txt:
+# Pi 5 dual native ports — default (camera_auto_detect=1 is already on)
+# Camera multiplexer:
+#   dtoverlay=camera-mux-4port
+```
 
 ## Key Configuration Constants (in `smartwaste/config.py`)
 
@@ -104,11 +125,14 @@ python main.py
 ## Module Structure
 
 ```
-main.py                  ← entry point
+main.py                  ← entry point (OAK cameras)
+mainauto.py              ← entry point (OAK cameras, auto gate mode)
+mainraspberry.py         ← entry point (Raspberry Pi cameras)
 smartwaste/
   __init__.py
   config.py              ← all constants and paths
-  camera.py              ← OAK pipeline setup and frame cropping
+  cameraOak.py           ← OAK pipeline setup and frame cropping
+  cameraraspberry.py     ← Raspberry Pi picamera2 setup and frame capture
   classifier.py          ← Gemini API call, JSON parsing
   dataset.py             ← save images, metadata.json, Excel log
   log_setup.py           ← logging configuration
