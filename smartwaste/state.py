@@ -39,6 +39,11 @@ class AppState:
         with self._lock:
             self._is_classifying = False
 
+    @property
+    def is_classifying(self) -> bool:
+        with self._lock:
+            return self._is_classifying
+
     def toggle_auto(self) -> bool:
         """Toggle auto_classify and return the new value."""
         self.auto_classify = not self.auto_classify

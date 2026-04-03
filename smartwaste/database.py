@@ -23,21 +23,21 @@ CREATE TABLE IF NOT EXISTS waste_entries (
     location      TEXT,
     weight        TEXT,
     timestamp     TEXT,
-    temperature   REAL,
-    humidity      REAL,
-    vibration     REAL,
-    air_pollution REAL,
-    smoke         REAL
+    simulated_temperature   REAL,
+    simulated_humidity      REAL,
+    simulated_vibration     REAL,
+    simulated_air_pollution REAL,
+    simulated_smoke         REAL
 );
 """
 
 _INSERT_ROW = """
 INSERT INTO waste_entries
     (filename, label, description, brand_product, location, weight, timestamp,
-     temperature, humidity, vibration, air_pollution, smoke)
+     simulated_temperature, simulated_humidity, simulated_vibration, simulated_air_pollution, simulated_smoke)
 VALUES
     (:filename, :label, :description, :brand_product, :location, :weight, :timestamp,
-     :temperature, :humidity, :vibration, :air_pollution, :smoke);
+     :simulated_temperature, :simulated_humidity, :simulated_vibration, :simulated_air_pollution, :simulated_smoke);
 """
 
 
@@ -56,8 +56,8 @@ def insert_entry(entry: dict, env: dict) -> None:
     Args:
         entry: dict with keys filename, label, description, brand_product,
                location, weight, timestamp  (same dict built in dataset.save_entry)
-        env:   dict with keys temperature, humidity, vibration,
-               air_pollution, smoke  (from dataset._environment_data)
+        env:   dict with keys simulated_temperature, simulated_humidity, simulated_vibration,
+               simulated_air_pollution, simulated_smoke  (from dataset._environment_data)
     """
     row = {**entry, **env}
     try:

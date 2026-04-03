@@ -1,112 +1,53 @@
-import contextlib
-import sys
-import time
+"""
+main.py — Smart Waste AI (Manual Mode)
 
-import cv2
-import depthai as dai
+Controls:
+  c — classify current frame
+  a — toggle auto-classify (every --auto-interval seconds)
+  q — quit
 
-from smartwaste.cameraOak import crop_sides, make_pipeline
-from smartwaste.config import AUTO_INTERVAL, CROP_PERCENT, DISPLAY_SIZE, MAX_DT, WINDOW
-from smartwaste.log_setup import get_logger
-from smartwaste.state import AppState
-from smartwaste.ui import draw_overlay
-from smartwaste.utils import encode_frame, launch_classify
+CLI overrides (all also settable via env vars or .env):
+  --model NAME          Gemini model  (SMARTWASTE_MODEL_NAME)
+  --auto-interval SEC   Auto-classify interval  (SMARTWASTE_AUTO_INTERVAL)
+  --location NAME       Deployment location tag  (SMARTWASTE_LOCATION)
+"""
 
-logger = get_logger()
-logger.info("Starting Smart Waste AI")
+from __future__ import annotations
+
+import argparse
+import os
+
+
+def _parse() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="SmartWaste AI — Manual mode (dual OAK cameras)",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    p.add_argument("--model", metavar="NAME",
+                   help="Gemini model name")
+    p.add_argument("--auto-interval", type=int, metavar="SEC",
+                   help="Seconds between auto-classifications")
+    p.add_argument("--location", metavar="NAME",
+                   help="Deployment location written to dataset")
+    return p.parse_args()
 
 
 def main() -> None:
-    state = AppState()
+    args = _parse()
 
-    try:
-        cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(WINDOW, 1600, 800)
-    except cv2.error as e:
-        raise RuntimeError(
-            f"Cannot open display window: {e}\n"
-            "On Linux/Raspberry Pi: a monitor must be connected and a desktop session active.\n"
-            "If using SSH, run: export DISPLAY=:0  before starting the app."
-        ) from e
+    # Propagate CLI overrides as env vars BEFORE importing smartwaste so that
+    # Settings() picks them up when modules are first imported.
+    if args.model:
+        os.environ["SMARTWASTE_MODEL_NAME"] = args.model
+    if args.auto_interval is not None:
+        os.environ["SMARTWASTE_AUTO_INTERVAL"] = str(args.auto_interval)
+    if args.location:
+        os.environ["SMARTWASTE_LOCATION"] = args.location
 
-    with contextlib.ExitStack() as stack:
-        infos = dai.Device.getAllAvailableDevices()
-        if len(infos) < 2:
-            msg = f"Need 2 OAK devices connected. Found: {len(infos)}"
-            if sys.platform != "win32":
-                msg += (
-                    "\nOn Linux/Raspberry Pi: udev rules may be missing. Run once:\n"
-                    "  echo 'SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"03e7\", MODE=\"0666\"'"
-                    " | sudo tee /etc/udev/rules.d/80-movidius.rules\n"
-                    "  sudo udevadm control --reload-rules && sudo udevadm trigger\n"
-                    "Then reconnect the cameras."
-                )
-            raise RuntimeError(msg)
+    from smartwaste.app import run_loop
+    from smartwaste.strategies import ManualStrategy
 
-        logger.info("Using devices: %s", [i.getDeviceId() for i in infos[:2]])
-        devices = [stack.enter_context(dai.Device(info)) for info in infos[:2]]
-
-        pipelines, queues = [], []
-        for dev in devices:
-            p, q = make_pipeline(dev)
-            pipelines.append(p)
-            queues.append(q)
-
-        last_frames = [None, None]
-        last_ts     = [0.0, 0.0]
-
-        try:
-            while True:
-                for i, q in enumerate(queues):
-                    if q.has():
-                        frame      = q.get().getCvFrame()
-                        last_ts[i] = time.time()
-                        frame      = crop_sides(frame, CROP_PERCENT)
-                        frame      = cv2.resize(frame, DISPLAY_SIZE, interpolation=cv2.INTER_AREA)
-                        last_frames[i] = frame
-
-                combined = None
-                if last_frames[0] is not None and last_frames[1] is not None:
-                    if abs(last_ts[0] - last_ts[1]) <= MAX_DT:
-                        combined = cv2.hconcat([last_frames[0], last_frames[1]])
-                        label, detail, auto_on = state.get_display()
-                        draw_overlay(combined, label, detail, auto_on)
-                        cv2.imshow(WINDOW, combined)
-
-                now = time.time()
-                if (state.auto_classify and combined is not None
-                        and now - state.last_capture_time >= AUTO_INTERVAL
-                        and state.start_classify()):
-                    state.last_capture_time = now
-                    launch_classify(encode_frame(combined), combined.copy(), state)
-
-                key = cv2.waitKey(1) & 0xFF
-
-                if key == ord("q"):
-                    logger.info("Quit.")
-                    break
-
-                if key == ord("c") and combined is not None and state.start_classify():
-                    launch_classify(encode_frame(combined), combined.copy(), state)
-
-                if key == ord("a"):
-                    auto_on = state.toggle_auto()
-                    state.set_status("Ready", "Auto ON" if auto_on else "Auto OFF (manual: press 'c')")
-                    logger.info("AUTO_CLASSIFY=%s", auto_on)
-
-        except KeyboardInterrupt:
-            logger.info("Stopping (Ctrl+C)...")
-
-        finally:
-            cv2.destroyAllWindows()
-            cv2.waitKey(1)
-            time.sleep(0.2)
-            for p in pipelines:
-                try:
-                    p.stop()
-                except Exception:
-                    pass
-            logger.info("Stopped cleanly.")
+    run_loop(ManualStrategy())
 
 
 if __name__ == "__main__":

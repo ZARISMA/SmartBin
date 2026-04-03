@@ -4,9 +4,8 @@ import random
 from datetime import datetime
 
 import cv2
-import pandas as pd
 
-from .config import DATASET_DIR, EXCEL_FILE, META_FILE
+from .config import DATASET_DIR, LOCATION, META_FILE
 from .database import insert_entry
 from .log_setup import get_logger
 
@@ -29,11 +28,11 @@ _metadata = load_metadata()
 
 def _environment_data() -> dict:
     return {
-        "temperature":   round(random.uniform(15, 30),  2),
-        "humidity":      round(random.uniform(30, 70),  2),
-        "vibration":     round(random.uniform(0, 0.1),  3),
-        "air_pollution": round(random.uniform(5, 50),   2),
-        "smoke":         round(random.uniform(0, 1),    2),
+        "simulated_temperature":   round(random.uniform(15, 30),  2),
+        "simulated_humidity":      round(random.uniform(30, 70),  2),
+        "simulated_vibration":     round(random.uniform(0, 0.1),  3),
+        "simulated_air_pollution": round(random.uniform(5, 50),   2),
+        "simulated_smoke":         round(random.uniform(0, 1),    2),
     }
 
 
@@ -48,7 +47,7 @@ def save_entry(label: str, img, description: str, brand_product: str) -> None:
         "label":         label,
         "description":   description,
         "brand_product": brand_product,
-        "location":      "Yerevan",
+        "location":      LOCATION,
         "weight":        "",
         "timestamp":     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -56,18 +55,6 @@ def save_entry(label: str, img, description: str, brand_product: str) -> None:
     with open(META_FILE, "w", encoding="utf-8") as f:
         json.dump(_metadata, f, ensure_ascii=False, indent=4)
 
+    logger.info("Saved dataset entry: %s", filename)
     env = _environment_data()
-    df  = pd.DataFrame([{**entry, **env}])
-    try:
-        if not os.path.exists(EXCEL_FILE):
-            df.to_excel(EXCEL_FILE, index=False, engine="openpyxl")
-        else:
-            old = pd.read_excel(EXCEL_FILE, engine="openpyxl")
-            pd.concat([old, df], ignore_index=True).to_excel(EXCEL_FILE, index=False, engine="openpyxl")
-        logger.info("Saved dataset entry: %s", filename)
-    except PermissionError:
-        logger.warning("Excel file is open — close it and retry.")
-    except Exception as e:
-        logger.exception("Excel write failed: %s", e)
-
     insert_entry(entry, env)

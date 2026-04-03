@@ -141,6 +141,20 @@ smartwaste/
   ui.py                  ← OpenCV overlay rendering
 ```
 
+## Testing
+
+When adding new functionality or modifying existing behaviour, add corresponding tests in `tests/` if the change introduces new logic worth verifying.
+
+```bash
+# Run the full suite
+python -m pytest tests/
+
+# With coverage report
+python -m pytest tests/ --cov=smartwaste --cov-report=term-missing
+```
+
+Test files follow the pattern `tests/test_<module>.py`. Install test dependencies with `pip install -r requirements-test.txt`.
+
 ## Known Issues
 
 1. Gemini quota errors (HTTP 429) are handled but may silently skip classifications

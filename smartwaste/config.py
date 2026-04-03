@@ -1,26 +1,65 @@
+"""
+smartwaste/config.py — all runtime constants, sourced from the settings layer.
+
+Existing code continues to import from here unchanged::
+
+    from .config import MODEL_NAME
+
+To override without editing source, set env vars (SMARTWASTE_* prefix) or add
+entries to a .env file in the project root.  See smartwaste/settings.py.
+"""
+
 import os
 
+from .settings import settings
+
+# ── File / directory paths (not overridable; derived from install location) ───
 BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR     = os.path.join(BASE_DIR, "logs")
 DATASET_DIR = os.path.join(BASE_DIR, "waste_dataset")
 META_FILE   = os.path.join(DATASET_DIR, "metadata.json")
-EXCEL_FILE  = os.path.join(DATASET_DIR, "waste_log.xlsx")
 DB_FILE     = os.path.join(DATASET_DIR, "waste.db")
 
-MODEL_NAME    = "gemini-3-flash-preview"
+# ── Classification ─────────────────────────────────────────────────────────────
+MODEL_NAME    = settings.model_name
 VALID_CLASSES = ["Plastic", "Glass", "Paper", "Organic", "Aluminum", "Other", "Empty"]
+LOCATION      = settings.location
 
-WINDOW       = "Smart Waste AI (Dual OAK)"
-DISPLAY_SIZE = (800, 800)
-JPEG_QUALITY = 85
-AUTO_INTERVAL = 6      # seconds between auto-classifications
-CROP_PERCENT  = 0.20   # fraction to crop from each side before analysis
-MAX_DT        = 0.25   # max timestamp delta (s) between camera frames
+# ── Camera / display ───────────────────────────────────────────────────────────
+WINDOW        = "Smart Waste AI (Dual OAK)"
+DISPLAY_SIZE  = (800, 800)
+JPEG_QUALITY  = settings.jpeg_quality
+AUTO_INTERVAL = settings.auto_interval
+CROP_PERCENT  = settings.crop_percent
+MAX_DT        = settings.max_dt
 
 # ── Auto-gate mode (mainauto.py) ───────────────────────────────────────────────
-MOTION_THRESHOLD = 12.0   # mean-abs pixel diff (0-255) to consider bin non-empty
-DETECT_CONFIRM_N = 3      # consecutive above-threshold checks before triggering API
-EMPTY_CONFIRM_N  = 6      # consecutive below-threshold checks before resetting to IDLE
-BG_LEARNING_RATE = 0.03   # how fast background adapts when bin is empty
-BG_WARMUP_FRAMES = 40     # local checks during warmup before detection is active
-CHECK_INTERVAL   = 0.5    # seconds between local presence checks
+MOTION_THRESHOLD = settings.motion_threshold
+DETECT_CONFIRM_N = settings.detect_confirm_n
+EMPTY_CONFIRM_N  = settings.empty_confirm_n
+BG_LEARNING_RATE = settings.bg_learning_rate
+BG_WARMUP_FRAMES = settings.bg_warmup_frames
+CHECK_INTERVAL   = settings.check_interval
+
+# ── OAK-D Native mode (mainoak.py) ────────────────────────────────────────────
+OAK_WINDOW            = "Smart Waste AI (OAK-D Native)"
+OAK_DISPLAY_W         = settings.oak_display_w
+OAK_DISPLAY_H         = settings.oak_display_h
+
+DEPTH_ROI_FRACTION     = settings.depth_roi_fraction
+DEPTH_CHANGE_THRESHOLD = settings.depth_change_threshold
+OAK_CALIB_FRAMES       = settings.oak_calib_frames
+
+IMU_SAMPLE_RATE_HZ   = settings.imu_sample_rate_hz
+IMU_SHOCK_THRESHOLD  = settings.imu_shock_threshold
+IMU_BASELINE_SAMPLES = settings.imu_baseline_samples
+DROP_FLAG_DURATION   = settings.drop_flag_duration
+
+NN_MODEL_NAME  = settings.nn_model_name
+NN_SHAVES      = settings.nn_shaves
+NN_CONFIDENCE  = settings.nn_confidence
+
+OAK_VOTES_NEEDED     = settings.oak_votes_needed
+OAK_DETECT_CONFIRM_N = settings.oak_detect_confirm_n
+OAK_EMPTY_CONFIRM_N  = settings.oak_empty_confirm_n
+OAK_CHECK_INTERVAL   = settings.oak_check_interval

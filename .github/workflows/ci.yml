@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  # ── 1. Lint & format ─────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Format (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Check style (ruff lint)
+        run: ruff check smartwaste/
+
+      - name: Check formatting (ruff format)
+        run: ruff format --check smartwaste/
+
+  # ── 2. Type check ────────────────────────────────────────────────────────────
+  typecheck:
+    name: Type Check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install mypy + runtime deps (for type resolution)
+        run: |
+          pip install mypy
+          pip install opencv-python google-genai
+
+      - name: Run mypy
+        run: mypy smartwaste/ --ignore-missing-imports
+
+  # ── 3. Tests with coverage ───────────────────────────────────────────────────
+  test:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: test-key-for-ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        # depthai and picamera2 are mocked in conftest.py so not needed here
+        run: |
+          pip install opencv-python google-genai
+          pip install -r requirements-test.txt
+
+      - name: Run tests with coverage
+        run: pytest --cov=smartwaste --cov-report=term-missing tests/
