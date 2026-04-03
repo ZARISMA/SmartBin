@@ -14,4 +14,6 @@ __pycache__/
 .vscode/
 
 # Environment variables — never commit secrets
-
+.env
+.env.local
+.env.*.local
