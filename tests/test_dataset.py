@@ -1,73 +1,9 @@
-"""Tests for smartwaste/dataset.py — metadata, environment data, save_entry."""
+"""Tests for smartwaste/dataset.py — environment data and save_entry."""
 
-import json
-import os
 from unittest.mock import patch
 
 import numpy as np
 import pytest
-
-
-@pytest.fixture(autouse=True)
-def isolate_metadata(monkeypatch):
-    """Reset module-level _metadata list before/after each test."""
-    import smartwaste.dataset as ds
-    original = list(ds._metadata)
-    monkeypatch.setattr(ds, "_metadata", [])
-    yield
-    # Restore
-    monkeypatch.setattr(ds, "_metadata", original)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# load_metadata
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestLoadMetadata:
-    def test_returns_empty_list_for_missing_file(self, tmp_path):
-        import smartwaste.dataset as ds
-        with patch.object(ds, "META_FILE", str(tmp_path / "nonexistent.json")):
-            assert ds.load_metadata() == []
-
-    def test_returns_empty_list_for_invalid_json(self, tmp_path):
-        import smartwaste.dataset as ds
-        f = tmp_path / "bad.json"
-        f.write_text("not valid json {{}")
-        with patch.object(ds, "META_FILE", str(f)):
-            assert ds.load_metadata() == []
-
-    def test_returns_empty_list_for_empty_file(self, tmp_path):
-        import smartwaste.dataset as ds
-        f = tmp_path / "empty.json"
-        f.write_text("")
-        with patch.object(ds, "META_FILE", str(f)):
-            assert ds.load_metadata() == []
-
-    def test_loads_valid_list(self, tmp_path):
-        import smartwaste.dataset as ds
-        data = [{"label": "Plastic", "filename": "x.jpg"}]
-        f = tmp_path / "meta.json"
-        f.write_text(json.dumps(data), encoding="utf-8")
-        with patch.object(ds, "META_FILE", str(f)):
-            assert ds.load_metadata() == data
-
-    def test_loads_multiple_entries(self, tmp_path):
-        import smartwaste.dataset as ds
-        data = [{"label": f"L{i}"} for i in range(5)]
-        f = tmp_path / "meta.json"
-        f.write_text(json.dumps(data), encoding="utf-8")
-        with patch.object(ds, "META_FILE", str(f)):
-            result = ds.load_metadata()
-        assert len(result) == 5
-
-    def test_loads_unicode_content(self, tmp_path):
-        import smartwaste.dataset as ds
-        data = [{"label": "Organic", "brand_product": "Ջերմուկ"}]
-        f = tmp_path / "meta.json"
-        f.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        with patch.object(ds, "META_FILE", str(f)):
-            result = ds.load_metadata()
-        assert result[0]["brand_product"] == "Ջերմուկ"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -143,72 +79,29 @@ class TestEnvironmentData:
 class TestSaveEntry:
     def _run(self, tmp_path, **kwargs):
         import smartwaste.dataset as ds
-        meta_file = tmp_path / "metadata.json"
         label        = kwargs.get("label",        "Plastic")
         description  = kwargs.get("description",  "A bottle")
         brand_product = kwargs.get("brand_product", "Coca-Cola")
         frame = np.zeros((50, 50, 3), dtype=np.uint8)
 
         with patch.object(ds, "DATASET_DIR", str(tmp_path)), \
-             patch.object(ds, "META_FILE",   str(meta_file)), \
              patch("smartwaste.dataset.insert_entry") as mock_insert, \
              patch("cv2.imwrite", return_value=True):
             ds.save_entry(label, frame, description, brand_product)
-        return meta_file, mock_insert
-
-    def test_writes_metadata_json(self, tmp_path):
-        meta_file, _ = self._run(tmp_path)
-        assert meta_file.exists()
-
-    def test_metadata_contains_one_entry(self, tmp_path):
-        meta_file, _ = self._run(tmp_path)
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        assert len(data) == 1
-
-    def test_entry_label_correct(self, tmp_path):
-        meta_file, _ = self._run(tmp_path, label="Glass")
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        assert data[0]["label"] == "Glass"
-
-    def test_entry_description_correct(self, tmp_path):
-        meta_file, _ = self._run(tmp_path, description="Green jar")
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        assert data[0]["description"] == "Green jar"
-
-    def test_entry_brand_product_correct(self, tmp_path):
-        meta_file, _ = self._run(tmp_path, brand_product="Jermuk")
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        assert data[0]["brand_product"] == "Jermuk"
-
-    def test_entry_location_is_yerevan(self, tmp_path):
-        meta_file, _ = self._run(tmp_path)
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        assert data[0]["location"] == "Yerevan"
-
-    def test_entry_has_timestamp(self, tmp_path):
-        meta_file, _ = self._run(tmp_path)
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        assert "timestamp" in data[0] and data[0]["timestamp"]
-
-    def test_entry_has_filename(self, tmp_path):
-        meta_file, _ = self._run(tmp_path)
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        assert "filename" in data[0] and data[0]["filename"]
-
-    def test_entry_has_all_required_fields(self, tmp_path):
-        meta_file, _ = self._run(tmp_path)
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        for key in ("filename", "label", "description", "brand_product",
-                    "location", "weight", "timestamp"):
-            assert key in data[0]
+        return mock_insert
 
     def test_calls_insert_entry(self, tmp_path):
-        _, mock_insert = self._run(tmp_path)
+        mock_insert = self._run(tmp_path)
         assert mock_insert.called
+
+    def test_insert_entry_receives_entry_dict(self, tmp_path):
+        mock_insert = self._run(tmp_path, label="Glass", description="Green jar")
+        entry = mock_insert.call_args[0][0]
+        assert entry["label"] == "Glass"
+        assert entry["description"] == "Green jar"
 
     def test_insert_entry_receives_env_with_simulated_keys(self, tmp_path):
         import smartwaste.dataset as ds
-        meta_file = tmp_path / "metadata.json"
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         captured_env = {}
 
@@ -216,7 +109,6 @@ class TestSaveEntry:
             captured_env.update(env)
 
         with patch.object(ds, "DATASET_DIR", str(tmp_path)), \
-             patch.object(ds, "META_FILE",   str(meta_file)), \
              patch("smartwaste.dataset.insert_entry", side_effect=capture_insert), \
              patch("cv2.imwrite", return_value=True):
             ds.save_entry("Paper", frame, "sheet", "N/A")
@@ -225,26 +117,8 @@ class TestSaveEntry:
                     "simulated_vibration", "simulated_air_pollution", "simulated_smoke"):
             assert key in captured_env
 
-    def test_second_save_appends_to_existing_json(self, tmp_path):
-        import smartwaste.dataset as ds
-        meta_file = tmp_path / "metadata.json"
-        frame = np.zeros((10, 10, 3), dtype=np.uint8)
-
-        with patch.object(ds, "DATASET_DIR", str(tmp_path)), \
-             patch.object(ds, "META_FILE",   str(meta_file)), \
-             patch("smartwaste.dataset.insert_entry"), \
-             patch("cv2.imwrite", return_value=True):
-            ds.save_entry("Plastic", frame, "bottle", "Coke")
-            ds.save_entry("Glass",   frame, "jar",    "Bjni")
-
-        data = json.loads(meta_file.read_text(encoding="utf-8"))
-        assert len(data) == 2
-        assert data[0]["label"] == "Plastic"
-        assert data[1]["label"] == "Glass"
-
     def test_label_in_filename(self, tmp_path):
         import smartwaste.dataset as ds
-        meta_file = tmp_path / "metadata.json"
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         written_paths = []
 
@@ -253,9 +127,20 @@ class TestSaveEntry:
             return True
 
         with patch.object(ds, "DATASET_DIR", str(tmp_path)), \
-             patch.object(ds, "META_FILE",   str(meta_file)), \
              patch("smartwaste.dataset.insert_entry"), \
              patch("cv2.imwrite", side_effect=capture_write):
             ds.save_entry("Aluminum", frame, "can", "BOOM")
 
         assert written_paths and "Aluminum" in written_paths[0]
+
+    def test_entry_has_all_required_fields(self, tmp_path):
+        mock_insert = self._run(tmp_path)
+        entry = mock_insert.call_args[0][0]
+        for key in ("filename", "label", "description", "brand_product",
+                    "location", "weight", "timestamp"):
+            assert key in entry
+
+    def test_entry_location_is_yerevan(self, tmp_path):
+        mock_insert = self._run(tmp_path)
+        entry = mock_insert.call_args[0][0]
+        assert entry["location"] == "Yerevan"

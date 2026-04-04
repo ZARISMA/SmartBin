@@ -6,3 +6,7 @@ pandas
 blobconverter
 tenacity
 pydantic-settings>=2.0
+psycopg2-binary
+fastapi
+uvicorn[standard]
+jinja2

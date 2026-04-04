@@ -1,0 +1,14 @@
+OAK-1W/
+oak_env/
+.git/
+.github/
+.pytest_cache/
+__pycache__/
+*.pyc
+logs/
+waste_dataset/
+.env
+.env.local
+.vscode/
+.claude/
+*.db

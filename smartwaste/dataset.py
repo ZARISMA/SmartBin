@@ -1,29 +1,15 @@
-import json
 import os
 import random
 from datetime import datetime
 
 import cv2
 
-from .config import DATASET_DIR, LOCATION, META_FILE
+from .config import DATASET_DIR, LOCATION
 from .database import insert_entry
 from .log_setup import get_logger
 
 logger = get_logger()
 os.makedirs(DATASET_DIR, exist_ok=True)
-
-
-def load_metadata() -> list:
-    if not os.path.exists(META_FILE):
-        return []
-    try:
-        with open(META_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        return []
-
-
-_metadata = load_metadata()
 
 
 def _environment_data() -> dict:
@@ -51,9 +37,6 @@ def save_entry(label: str, img, description: str, brand_product: str) -> None:
         "weight":        "",
         "timestamp":     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    _metadata.append(entry)
-    with open(META_FILE, "w", encoding="utf-8") as f:
-        json.dump(_metadata, f, ensure_ascii=False, indent=4)
 
     logger.info("Saved dataset entry: %s", filename)
     env = _environment_data()

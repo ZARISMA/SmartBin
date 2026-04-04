@@ -17,8 +17,19 @@ from .settings import settings
 BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR     = os.path.join(BASE_DIR, "logs")
 DATASET_DIR = os.path.join(BASE_DIR, "waste_dataset")
-META_FILE   = os.path.join(DATASET_DIR, "metadata.json")
 DB_FILE     = os.path.join(DATASET_DIR, "waste.db")
+
+# ── Database ──────────────────────────────────────────────────────────────────
+DB_BACKEND  = settings.db_backend
+DB_HOST     = settings.db_host
+DB_PORT     = settings.db_port
+DB_NAME     = settings.db_name
+DB_USER     = settings.db_user
+DB_PASSWORD = settings.db_password
+
+# ── Web UI ────────────────────────────────────────────────────────────────────
+WEB_HOST = settings.web_host
+WEB_PORT = settings.web_port
 
 # ── Classification ─────────────────────────────────────────────────────────────
 MODEL_NAME    = settings.model_name

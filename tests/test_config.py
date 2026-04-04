@@ -11,17 +11,24 @@ from smartwaste.config import (
     CHECK_INTERVAL,
     CROP_PERCENT,
     DATASET_DIR,
+    DB_BACKEND,
     DB_FILE,
+    DB_HOST,
+    DB_NAME,
+    DB_PASSWORD,
+    DB_PORT,
+    DB_USER,
     DETECT_CONFIRM_N,
     DISPLAY_SIZE,
     EMPTY_CONFIRM_N,
     JPEG_QUALITY,
     LOG_DIR,
     MAX_DT,
-    META_FILE,
     MODEL_NAME,
     MOTION_THRESHOLD,
     VALID_CLASSES,
+    WEB_HOST,
+    WEB_PORT,
     WINDOW,
 )
 
@@ -106,17 +113,39 @@ class TestPaths:
     def test_log_dir_under_base(self):
         assert LOG_DIR.startswith(BASE_DIR)
 
-    def test_meta_file_under_dataset_dir(self):
-        assert META_FILE.startswith(DATASET_DIR)
-
     def test_db_file_under_dataset_dir(self):
         assert DB_FILE.startswith(DATASET_DIR)
-
-    def test_meta_file_is_json(self):
-        assert META_FILE.endswith(".json")
 
     def test_db_file_is_sqlite(self):
         assert DB_FILE.endswith(".db")
 
     def test_model_name_nonempty(self):
         assert isinstance(MODEL_NAME, str) and len(MODEL_NAME) > 0
+
+
+class TestDatabaseSettings:
+    def test_db_backend_valid(self):
+        assert DB_BACKEND in ("sqlite", "postgresql")
+
+    def test_db_host_nonempty(self):
+        assert isinstance(DB_HOST, str) and len(DB_HOST) > 0
+
+    def test_db_port_valid(self):
+        assert isinstance(DB_PORT, int) and 1 <= DB_PORT <= 65535
+
+    def test_db_name_nonempty(self):
+        assert isinstance(DB_NAME, str) and len(DB_NAME) > 0
+
+    def test_db_user_nonempty(self):
+        assert isinstance(DB_USER, str) and len(DB_USER) > 0
+
+    def test_db_password_nonempty(self):
+        assert isinstance(DB_PASSWORD, str) and len(DB_PASSWORD) > 0
+
+
+class TestWebSettings:
+    def test_web_host_nonempty(self):
+        assert isinstance(WEB_HOST, str) and len(WEB_HOST) > 0
+
+    def test_web_port_valid(self):
+        assert isinstance(WEB_PORT, int) and 1 <= WEB_PORT <= 65535

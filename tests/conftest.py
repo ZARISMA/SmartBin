@@ -15,6 +15,9 @@ import pytest
 # ── 1. Satisfy GEMINI_API_KEY check in classifier.py ─────────────────────────
 os.environ.setdefault("GEMINI_API_KEY", "test-key-for-pytest")
 
+# ── 1b. Default to SQLite for tests (no PostgreSQL required) ─────────────────
+os.environ.setdefault("SMARTWASTE_DB_BACKEND", "sqlite")
+
 # ── 2. Mock hardware-specific packages that may not be installed ──────────────
 for _mod in ("depthai", "picamera2"):
     sys.modules.setdefault(_mod, MagicMock())

@@ -87,6 +87,18 @@ class Settings(BaseSettings):
     cb_failure_threshold: int = 5    # consecutive failures → open circuit
     cb_recovery_sec: float = 60.0    # seconds to keep circuit open
 
+    # ── Database ───────────────────────────────────────────────────────────────
+    db_backend: str = "sqlite"       # "sqlite" or "postgresql"
+    db_host: str = "localhost"
+    db_port: int = 5432
+    db_name: str = "smartwaste"
+    db_user: str = "smartwaste"
+    db_password: str = "smartwaste"
+
+    # ── Web UI ─────────────────────────────────────────────────────────────────
+    web_host: str = "0.0.0.0"
+    web_port: int = 8000
+
 
 # Module-level singleton — imported by config.py and classifier.py
 settings = Settings()
