@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(oak_env/Scripts/python -m pytest tests/test_ui.py tests/test_state.py -v)"
+    ]
+  }
+}

@@ -183,6 +183,7 @@ def classify(img_bytes: bytes, img_original, state) -> None:
             label = "Other"
 
         state.set_status(label, f"{brand_product} | {description}")
+        state.add_to_history(label)
 
         if label != "Empty":
             save_entry(label, img_original, description, brand_product)

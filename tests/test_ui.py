@@ -71,3 +71,33 @@ class TestDrawOverlaySmallImage:
     def test_works_on_square_image(self):
         img = np.zeros((800, 800, 3), dtype=np.uint8)
         draw_overlay(img, "Plastic", "bottle", True)
+
+
+class TestDrawOverlayHistory:
+    def test_history_none_does_not_raise(self):
+        draw_overlay(_img(), "Plastic", "detail", False, None)
+
+    def test_history_empty_does_not_raise(self):
+        draw_overlay(_img(), "Plastic", "detail", False, [])
+
+    def test_history_renders_without_raise(self):
+        history = [("14:23", "Plastic"), ("14:22", "Glass"), ("14:20", "Paper")]
+        draw_overlay(_img(), "Organic", "detail", True, history)
+
+    def test_history_five_items_without_raise(self):
+        history = [
+            ("14:25", "Aluminum"),
+            ("14:24", "Plastic"),
+            ("14:23", "Glass"),
+            ("14:22", "Organic"),
+            ("14:21", "Paper"),
+        ]
+        draw_overlay(_img(), "Aluminum", "can", False, history)
+
+    def test_history_modifies_image(self):
+        img_with    = _img()
+        img_without = _img()
+        history = [("14:23", "Plastic")]
+        draw_overlay(img_with,    "Plastic", "detail", False, history)
+        draw_overlay(img_without, "Plastic", "detail", False, None)
+        assert img_with.sum() != img_without.sum()

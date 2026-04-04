@@ -118,7 +118,7 @@ def run_loop(strategy: Strategy) -> None:
                     if abs(last_ts[0] - last_ts[1]) <= MAX_DT:
                         combined = cv2.hconcat([last_frames[0], last_frames[1]])
                         label, detail, auto_on = state.get_display()
-                        draw_overlay(combined, label, detail, auto_on)
+                        draw_overlay(combined, label, detail, auto_on, state.get_history())
                         cv2.imshow(WINDOW, combined)
 
                 # ── Strategy logic ─────────────────────────────────────────────

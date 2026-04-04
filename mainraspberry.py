@@ -58,7 +58,7 @@ def main() -> None:
             if last_frames[0] is not None and last_frames[1] is not None:
                 combined = cv2.hconcat([last_frames[0], last_frames[1]])
                 label, detail, auto_on = state.get_display()
-                draw_overlay(combined, label, detail, auto_on)
+                draw_overlay(combined, label, detail, auto_on, state.get_history())
                 cv2.imshow(WINDOW, combined)
 
             now = time.time()

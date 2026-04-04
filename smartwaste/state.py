@@ -1,4 +1,6 @@
 import threading
+from collections import deque
+from datetime import datetime
 
 
 class AppState:
@@ -10,6 +12,7 @@ class AppState:
         self._label  = "Ready"
         self._detail = "Press 'c' to classify. 'a' auto. 'q' quit."
         self._is_classifying = False
+        self._history: deque[tuple[str, str]] = deque(maxlen=5)
         # Main-thread only (no lock needed):
         self.auto_classify    = False
         self.last_capture_time = 0.0
@@ -38,6 +41,17 @@ class AppState:
     def finish_classify(self) -> None:
         with self._lock:
             self._is_classifying = False
+
+    def add_to_history(self, label: str) -> None:
+        """Prepend a completed classification label to the history ring."""
+        ts = datetime.now().strftime("%H:%M")
+        with self._lock:
+            self._history.appendleft((ts, label))
+
+    def get_history(self) -> list[tuple[str, str]]:
+        """Return up to 5 recent (time_str, label) pairs, newest first."""
+        with self._lock:
+            return list(self._history)
 
     @property
     def is_classifying(self) -> bool:
