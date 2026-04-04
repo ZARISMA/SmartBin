@@ -32,9 +32,11 @@ class ManualStrategy(Strategy):
 
     def on_combined_frame(self, combined: np.ndarray, state: AppState) -> None:
         now = time.time()
-        if (state.auto_classify
-                and now - state.last_capture_time >= AUTO_INTERVAL
-                and state.start_classify()):
+        if (
+            state.auto_classify
+            and now - state.last_capture_time >= AUTO_INTERVAL
+            and state.start_classify()
+        ):
             state.last_capture_time = now
             launch_classify(encode_frame(combined), combined.copy(), state)
 
@@ -44,9 +46,7 @@ class ManualStrategy(Strategy):
 
         elif key == ord("a"):
             auto_on = state.toggle_auto()
-            state.set_status(
-                "Ready", "Auto ON" if auto_on else "Auto OFF (manual: press 'c')"
-            )
+            state.set_status("Ready", "Auto ON" if auto_on else "Auto OFF (manual: press 'c')")
             logger.info("AUTO_CLASSIFY=%s", auto_on)
 
 
@@ -65,9 +65,9 @@ class PresenceGateStrategy(Strategy):
     """
 
     def __init__(self) -> None:
-        self._detector        = PresenceDetector()
+        self._detector = PresenceDetector()
         self._last_check_time = 0.0
-        self._bin_occupied    = False
+        self._bin_occupied = False
         self._item_classified = False
 
     def setup(self, state: AppState) -> None:
@@ -91,7 +91,7 @@ class PresenceGateStrategy(Strategy):
 
         elif is_empty and self._bin_occupied:
             # Bin cleared → reset for next item
-            self._bin_occupied    = False
+            self._bin_occupied = False
             self._item_classified = False
             self._detector.accept_as_background(gray)
             state.set_status("Ready", "Bin is empty — waiting for item.")
@@ -99,7 +99,7 @@ class PresenceGateStrategy(Strategy):
 
         elif is_occupied and not self._bin_occupied:
             # Object just entered bin
-            self._bin_occupied    = True
+            self._bin_occupied = True
             self._item_classified = False
             state.set_status(
                 "Detected",
@@ -122,7 +122,7 @@ class PresenceGateStrategy(Strategy):
         elif key == ord("r") and combined is not None:
             gray = cv2.cvtColor(combined, cv2.COLOR_BGR2GRAY)
             self._detector.reset(gray)
-            self._bin_occupied    = False
+            self._bin_occupied = False
             self._item_classified = False
             state.set_status("Ready", "Background reset from current frame.")
             logger.info("Background manually reset.")

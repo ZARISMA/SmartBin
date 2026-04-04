@@ -45,23 +45,26 @@ logger = get_logger()
 
 # ── Result type ────────────────────────────────────────────────────────────────
 
+
 class SensorVotes(NamedTuple):
     depth_occupied: bool
     drop_flag: bool
     nn_occupied: bool
-    votes: int                    # sum of the three booleans above
+    votes: int  # sum of the three booleans above
     rgb_frame: np.ndarray | None  # latest RGB frame (getCvFrame), or None
-    depth_mm_delta: float         # baseline − current median depth (for display)
-    imu_delta: float              # accel magnitude above quiet baseline (for display)
-    nn_count: int                 # number of NN detections above threshold
+    depth_mm_delta: float  # baseline − current median depth (for display)
+    imu_delta: float  # accel magnitude above quiet baseline (for display)
+    nn_count: int  # number of NN detections above threshold
 
 
 # ── Pipeline construction ──────────────────────────────────────────────────────
+
 
 def _try_get_blob() -> tuple[str | None, bool]:
     """Download MobileNetSSD blob via blobconverter. Returns (path, available)."""
     try:
         import blobconverter  # type: ignore[import]
+
         path = blobconverter.from_zoo(
             name=NN_MODEL_NAME,
             shaves=NN_SHAVES,
@@ -91,9 +94,8 @@ def build_oak_pipeline(device: dai.Device) -> tuple:
 
     # ── RGB camera (CAM_A) ─────────────────────────────────────────────────────
     cam_a = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_A)
-    rgb_q = (
-        cam_a.requestFullResolutionOutput(type=dai.ImgFrame.Type.BGR888p)
-             .createOutputQueue(maxSize=4, blocking=False)
+    rgb_q = cam_a.requestFullResolutionOutput(type=dai.ImgFrame.Type.BGR888p).createOutputQueue(
+        maxSize=4, blocking=False
     )
 
     # ── Stereo cameras (CAM_B / CAM_C) → StereoDepth ──────────────────────────
@@ -102,17 +104,15 @@ def build_oak_pipeline(device: dai.Device) -> tuple:
         cam_b = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_B)
         cam_c = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_C)
 
-        left_out  = cam_b.requestOutput((640, 400), type=dai.ImgFrame.Type.GRAY8)
+        left_out = cam_b.requestOutput((640, 400), type=dai.ImgFrame.Type.GRAY8)
         right_out = cam_c.requestOutput((640, 400), type=dai.ImgFrame.Type.GRAY8)
 
         stereo = pipeline.create(dai.node.StereoDepth)
-        stereo.setDefaultProfilePreset(
-            dai.node.StereoDepth.PresetType.HIGH_DENSITY
-        )
+        stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetType.HIGH_DENSITY)
         stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
-        stereo.setExtendedDisparity(True)   # halves minimum range (~0.4m → ~0.2m)
-        stereo.setLeftRightCheck(True)      # filter invalid pixels
-        stereo.setSubpixel(False)           # integer depth saves bandwidth
+        stereo.setExtendedDisparity(True)  # halves minimum range (~0.4m → ~0.2m)
+        stereo.setLeftRightCheck(True)  # filter invalid pixels
+        stereo.setSubpixel(False)  # integer depth saves bandwidth
 
         left_out.link(stereo.left)
         right_out.link(stereo.right)
@@ -142,9 +142,7 @@ def build_oak_pipeline(device: dai.Device) -> tuple:
     if nn_available and blob_path is not None:
         try:
             # Resize RGB preview to 300×300 for MobileNetSSD input
-            nn_in = cam_a.requestOutput(
-                (300, 300), type=dai.ImgFrame.Type.BGR888p
-            )
+            nn_in = cam_a.requestOutput((300, 300), type=dai.ImgFrame.Type.BGR888p)
             det_nn = pipeline.create(dai.node.MobileNetDetectionNetwork)
             det_nn.setConfidenceThreshold(NN_CONFIDENCE)
             det_nn.setBlobPath(blob_path)
@@ -168,6 +166,7 @@ def build_oak_pipeline(device: dai.Device) -> tuple:
 
 
 # ── Detector ───────────────────────────────────────────────────────────────────
+
 
 class OAKOccupancyDetector:
     """
@@ -194,20 +193,20 @@ class OAKOccupancyDetector:
 
         # Calibration accumulators
         self._calib_depth_samples: list[float] = []
-        self._calib_imu_samples:   list[float] = []
+        self._calib_imu_samples: list[float] = []
 
         # Baselines (set after calibration)
-        self._depth_baseline:      float | None = None
+        self._depth_baseline: float | None = None
         self._imu_quiet_magnitude: float | None = None
 
         # IMU drop flag
-        self._drop_flag:        bool  = False
+        self._drop_flag: bool = False
         self._drop_flag_expiry: float = 0.0
 
         # Latest cached values (used for display even between sensor updates)
         self._last_depth_delta: float = 0.0
-        self._last_imu_delta:   float = 0.0
-        self._last_nn_count:    int   = 0
+        self._last_imu_delta: float = 0.0
+        self._last_nn_count: int = 0
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -235,10 +234,7 @@ class OAKOccupancyDetector:
                     self._calib_imu_samples.append(mag)
 
         # Finalise baselines when enough samples collected
-        if (
-            self._depth_baseline is None
-            and len(self._calib_depth_samples) >= OAK_CALIB_FRAMES
-        ):
+        if self._depth_baseline is None and len(self._calib_depth_samples) >= OAK_CALIB_FRAMES:
             self._depth_baseline = float(np.median(self._calib_depth_samples))
             logger.info("Depth baseline: %.0f mm", self._depth_baseline)
 
@@ -252,7 +248,7 @@ class OAKOccupancyDetector:
 
         # Depth is the primary calibration gate; IMU is optional
         depth_ready = (self._depth_q is None) or (self._depth_baseline is not None)
-        imu_ready   = (not self._imu_available) or (self._imu_quiet_magnitude is not None)
+        imu_ready = (not self._imu_available) or (self._imu_quiet_magnitude is not None)
         return depth_ready and imu_ready
 
     def update(self) -> SensorVotes:
@@ -261,10 +257,10 @@ class OAKOccupancyDetector:
 
         Should be called on every main-loop iteration (non-blocking).
         """
-        rgb_frame      = self._drain_rgb()
+        rgb_frame = self._drain_rgb()
         depth_occupied = self._update_depth()
         self._update_imu()
-        nn_count       = self._update_nn()
+        nn_count = self._update_nn()
 
         # Auto-expire drop flag
         if self._drop_flag and time.time() >= self._drop_flag_expiry:
@@ -273,19 +269,20 @@ class OAKOccupancyDetector:
         votes = int(depth_occupied) + int(self._drop_flag) + int(nn_count > 0)
 
         return SensorVotes(
-            depth_occupied  = depth_occupied,
-            drop_flag       = self._drop_flag,
-            nn_occupied     = nn_count > 0,
-            votes           = votes,
-            rgb_frame       = rgb_frame,
-            depth_mm_delta  = self._last_depth_delta,
-            imu_delta       = self._last_imu_delta,
-            nn_count        = nn_count,
+            depth_occupied=depth_occupied,
+            drop_flag=self._drop_flag,
+            nn_occupied=nn_count > 0,
+            votes=votes,
+            rgb_frame=rgb_frame,
+            depth_mm_delta=self._last_depth_delta,
+            imu_delta=self._last_imu_delta,
+            nn_count=nn_count,
         )
 
     def calibration_progress(self) -> int:
         """Return estimated calibration progress as a percentage (0–100)."""
         from .config import IMU_BASELINE_SAMPLES  # avoid circular at module level
+
         d_pct = min(100, len(self._calib_depth_samples) * 100 // OAK_CALIB_FRAMES)
         if self._imu_available:
             i_pct = min(100, len(self._calib_imu_samples) * 100 // IMU_BASELINE_SAMPLES)
@@ -296,13 +293,13 @@ class OAKOccupancyDetector:
         """Clear all calibration state so calibrate() starts fresh."""
         self._calib_depth_samples.clear()
         self._calib_imu_samples.clear()
-        self._depth_baseline      = None
+        self._depth_baseline = None
         self._imu_quiet_magnitude = None
-        self._drop_flag           = False
-        self._drop_flag_expiry    = 0.0
-        self._last_depth_delta    = 0.0
-        self._last_imu_delta      = 0.0
-        self._last_nn_count       = 0
+        self._drop_flag = False
+        self._drop_flag_expiry = 0.0
+        self._last_depth_delta = 0.0
+        self._last_imu_delta = 0.0
+        self._last_nn_count = 0
         logger.info("OAKOccupancyDetector reset — recalibrating.")
 
     def stop(self) -> None:
@@ -334,10 +331,10 @@ class OAKOccupancyDetector:
         h, w = depth_frame.shape[:2]
         margin_h = int(h * (1 - DEPTH_ROI_FRACTION) / 2)
         margin_w = int(w * (1 - DEPTH_ROI_FRACTION) / 2)
-        roi    = depth_frame[margin_h:h - margin_h, margin_w:w - margin_w]
-        valid  = roi[roi > 0]
+        roi = depth_frame[margin_h : h - margin_h, margin_w : w - margin_w]
+        valid = roi[roi > 0]
         if valid.size < roi.size * 0.5:
-            return 0.0   # too many invalid pixels — skip this frame
+            return 0.0  # too many invalid pixels — skip this frame
         return float(np.median(valid))
 
     def _update_depth(self) -> bool:
@@ -348,7 +345,7 @@ class OAKOccupancyDetector:
         current_median = None
         while self._depth_q.has():
             raw = self._depth_q.get().getFrame()
-            m   = self._roi_median(raw)
+            m = self._roi_median(raw)
             if m > 0:
                 current_median = m
 
@@ -370,11 +367,11 @@ class OAKOccupancyDetector:
         while self._imu_q.has():
             pkt = self._imu_q.get()
             for p in pkt.packets:
-                mag   = _accel_magnitude(p.acceleroMeter)
+                mag = _accel_magnitude(p.acceleroMeter)
                 delta = abs(mag - self._imu_quiet_magnitude)
                 self._last_imu_delta = max(self._last_imu_delta, delta)
                 if delta > IMU_SHOCK_THRESHOLD:
-                    self._drop_flag        = True
+                    self._drop_flag = True
                     self._drop_flag_expiry = time.time() + DROP_FLAG_DURATION
                     logger.debug("IMU drop event: delta=%.3f m/s²", delta)
 
@@ -389,8 +386,8 @@ class OAKOccupancyDetector:
 
         count = None
         while self._nn_q.has():
-            dets  = self._nn_q.get().detections
-            count = len(dets)   # already filtered by setConfidenceThreshold
+            dets = self._nn_q.get().detections
+            count = len(dets)  # already filtered by setConfidenceThreshold
 
         if count is not None:
             self._last_nn_count = count
@@ -399,6 +396,7 @@ class OAKOccupancyDetector:
 
 # ── Utility ────────────────────────────────────────────────────────────────────
 
+
 def _accel_magnitude(a) -> float:
     """Return vector magnitude of an IMU accelerometer reading in m/s²."""
-    return math.sqrt(a.x ** 2 + a.y ** 2 + a.z ** 2)
+    return math.sqrt(a.x**2 + a.y**2 + a.z**2)

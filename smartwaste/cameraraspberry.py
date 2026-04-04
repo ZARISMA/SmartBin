@@ -7,9 +7,7 @@ def make_cameras(num_cameras: int = 2) -> list:
     cameras = []
     for i in range(num_cameras):
         cam = Picamera2(i)
-        config = cam.create_preview_configuration(
-            main={"format": "BGR888", "size": (1280, 720)}
-        )
+        config = cam.create_preview_configuration(main={"format": "BGR888", "size": (1280, 720)})
         cam.configure(config)
         cam.start()
         cameras.append(cam)
@@ -35,6 +33,6 @@ def crop_sides(frame: np.ndarray, crop_percent: float) -> np.ndarray:
     if crop_percent <= 0:
         return frame
     h, w = frame.shape[:2]
-    left  = int(w * crop_percent)
+    left = int(w * crop_percent)
     right = int(w * (1 - crop_percent))
     return frame[:, left:right]

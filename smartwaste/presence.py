@@ -32,9 +32,9 @@ class PresenceDetector:
 
     def __init__(self) -> None:
         self._bg: np.ndarray | None = None
-        self._warmup_count  = 0
-        self._detect_streak = 0   # consecutive checks above threshold
-        self._empty_streak  = 0   # consecutive checks below threshold
+        self._warmup_count = 0
+        self._detect_streak = 0  # consecutive checks above threshold
+        self._empty_streak = 0  # consecutive checks below threshold
 
     # ── Properties ────────────────────────────────────────────────────────────
 
@@ -74,22 +74,22 @@ class PresenceDetector:
 
         if score >= MOTION_THRESHOLD:
             self._detect_streak += 1
-            self._empty_streak   = 0
+            self._empty_streak = 0
         else:
-            self._empty_streak  += 1
-            self._detect_streak  = 0
+            self._empty_streak += 1
+            self._detect_streak = 0
             # Slowly drift background toward current frame only when bin is empty
             cv2.accumulateWeighted(gray_f, self._bg, BG_LEARNING_RATE)
 
         is_occupied = self._detect_streak >= DETECT_CONFIRM_N
-        is_empty    = self._empty_streak  >= EMPTY_CONFIRM_N
+        is_empty = self._empty_streak >= EMPTY_CONFIRM_N
         return score, is_occupied, is_empty
 
     def accept_as_background(self, gray: np.ndarray) -> None:
         """Hard-snap background to current frame (call when bin confirmed empty)."""
         self._bg = gray.astype(np.float32)
         self._detect_streak = 0
-        self._empty_streak  = 0
+        self._empty_streak = 0
 
     def reset(self, gray: np.ndarray | None = None) -> None:
         """
@@ -99,6 +99,6 @@ class PresenceDetector:
         skipped; otherwise a fresh warmup cycle starts from scratch.
         """
         self._bg = gray.astype(np.float32) if gray is not None else None
-        self._warmup_count  = BG_WARMUP_FRAMES if gray is not None else 0
+        self._warmup_count = BG_WARMUP_FRAMES if gray is not None else 0
         self._detect_streak = 0
-        self._empty_streak  = 0
+        self._empty_streak = 0

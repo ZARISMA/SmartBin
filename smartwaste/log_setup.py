@@ -6,8 +6,8 @@ from .config import LOG_DIR
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
-RUN_ID        = datetime.now().strftime("%Y%m%d_%H%M%S")
-LOG_FILE      = os.path.join(LOG_DIR, f"run_{RUN_ID}.log")
+RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
+LOG_FILE = os.path.join(LOG_DIR, f"run_{RUN_ID}.log")
 ERR_JSON_FILE = os.path.join(LOG_DIR, f"last_api_error_{RUN_ID}.json")
 
 

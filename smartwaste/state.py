@@ -9,12 +9,12 @@ class AppState:
     def __init__(self):
         self._lock = threading.Lock()
         # Protected — written by classifier thread, read by main thread:
-        self._label  = "Ready"
+        self._label = "Ready"
         self._detail = "Press 'c' to classify. 'a' auto. 'q' quit."
         self._is_classifying = False
         self._history: deque[tuple[str, str]] = deque(maxlen=5)
         # Main-thread only (no lock needed):
-        self.auto_classify    = False
+        self.auto_classify = False
         self.last_capture_time = 0.0
 
     # ── read ──────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ class AppState:
 
     def set_status(self, label: str, detail: str) -> None:
         with self._lock:
-            self._label  = label
+            self._label = label
             self._detail = detail
 
     def start_classify(self) -> bool:

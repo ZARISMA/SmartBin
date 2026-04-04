@@ -80,7 +80,7 @@ def run_loop(strategy: Strategy) -> None:
             if sys.platform != "win32":
                 msg += (
                     "\nOn Linux/Raspberry Pi: udev rules may be missing. Run once:\n"
-                    "  echo 'SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"03e7\", MODE=\"0666\"'"
+                    '  echo \'SUBSYSTEM=="usb", ATTRS{idVendor}=="03e7", MODE="0666"\''
                     " | sudo tee /etc/udev/rules.d/80-movidius.rules\n"
                     "  sudo udevadm control --reload-rules && sudo udevadm trigger\n"
                     "Then reconnect the cameras."
@@ -91,25 +91,24 @@ def run_loop(strategy: Strategy) -> None:
         devices = [stack.enter_context(dai.Device(info)) for info in infos[:2]]
 
         pipelines: list = []
-        queues:    list = []
+        queues: list = []
         for dev in devices:
             p, q = make_pipeline(dev)
             pipelines.append(p)
             queues.append(q)
 
         last_frames: list = [None, None]
-        last_ts:     list = [0.0, 0.0]
+        last_ts: list = [0.0, 0.0]
 
         try:
             while True:
                 # ── Capture ────────────────────────────────────────────────────
                 for i, q in enumerate(queues):
                     if q.has():
-                        frame      = q.get().getCvFrame()
+                        frame = q.get().getCvFrame()
                         last_ts[i] = time.time()
-                        frame      = crop_sides(frame, CROP_PERCENT)
-                        frame      = cv2.resize(frame, DISPLAY_SIZE,
-                                                interpolation=cv2.INTER_AREA)
+                        frame = crop_sides(frame, CROP_PERCENT)
+                        frame = cv2.resize(frame, DISPLAY_SIZE, interpolation=cv2.INTER_AREA)
                         last_frames[i] = frame
 
                 # ── Sync + display ─────────────────────────────────────────────

@@ -43,6 +43,7 @@ logger = get_logger()
 
 # ── Gemini client ──────────────────────────────────────────────────────────────
 
+
 def _build_client() -> genai.Client:
     if not settings.gemini_api_key:
         raise RuntimeError(
@@ -58,9 +59,9 @@ client = _build_client()
 
 # ── Circuit breaker ────────────────────────────────────────────────────────────
 
-_cb_lock:       threading.Lock = threading.Lock()
-_cb_failures:   int            = 0
-_cb_open_until: float          = 0.0
+_cb_lock: threading.Lock = threading.Lock()
+_cb_failures: int = 0
+_cb_open_until: float = 0.0
 
 
 def _circuit_is_open() -> bool:
@@ -77,7 +78,7 @@ def _circuit_is_open() -> bool:
 def _record_success() -> None:
     global _cb_failures, _cb_open_until
     with _cb_lock:
-        _cb_failures   = 0
+        _cb_failures = 0
         _cb_open_until = 0.0
 
 
@@ -94,12 +95,13 @@ def _record_failure() -> bool:
                 _cb_failures,
                 settings.cb_recovery_sec,
             )
-            _cb_failures = 0   # reset so next window gets a fresh count
+            _cb_failures = 0  # reset so next window gets a fresh count
             return True
         return False
 
 
 # ── JSON extraction ────────────────────────────────────────────────────────────
+
 
 def _extract_json(text: str) -> dict:  # type: ignore[type-arg]
     t = (text or "").strip()
@@ -142,19 +144,26 @@ def _call_gemini(img_bytes: bytes) -> str:
     """Call Gemini and return the raw text response. Tenacity handles retries."""
     resp = client.models.generate_content(
         model=MODEL_NAME,
-        contents=[{
-            "role": "user",
-            "parts": [
-                {"inline_data": {"mime_type": "image/jpeg",
-                                 "data": base64.b64encode(img_bytes).decode()}},
-                {"text": PROMPT},
-            ],
-        }],
+        contents=[
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "inline_data": {
+                            "mime_type": "image/jpeg",
+                            "data": base64.b64encode(img_bytes).decode(),
+                        }
+                    },
+                    {"text": PROMPT},
+                ],
+            }
+        ],
     )
     return (resp.text or "").strip()
 
 
 # ── Public classify function ───────────────────────────────────────────────────
+
 
 def classify(img_bytes: bytes, img_original, state) -> None:
     """Gemini classification worker — run in a daemon thread."""
@@ -171,14 +180,14 @@ def classify(img_bytes: bytes, img_original, state) -> None:
         state.set_status("Classifying...", "Sending request to Gemini...")
         logger.info("Gemini request → model=%s  bytes=%d", MODEL_NAME, len(img_bytes))
 
-        raw = _call_gemini(img_bytes)   # tenacity handles up to 3 retries
+        raw = _call_gemini(img_bytes)  # tenacity handles up to 3 retries
         _record_success()
 
         logger.info("Gemini raw response: %s", raw)
 
-        data          = _extract_json(raw)
-        label         = str(data.get("category",     "Other")).strip().capitalize()
-        description   = str(data.get("description",  "N/A")).strip()
+        data = _extract_json(raw)
+        label = str(data.get("category", "Other")).strip().capitalize()
+        description = str(data.get("description", "N/A")).strip()
         brand_product = str(data.get("brand_product", "Unknown")).strip()
 
         if label not in VALID_CLASSES:
@@ -199,7 +208,7 @@ def classify(img_bytes: bytes, img_original, state) -> None:
         except Exception:
             pass
 
-        opened    = _record_failure()
+        opened = _record_failure()
         quota_hit = any(m in msg for m in _QUOTA_MARKERS)
 
         if quota_hit:
