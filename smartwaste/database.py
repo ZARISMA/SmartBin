@@ -63,9 +63,18 @@ CREATE INDEX IF NOT EXISTS idx_waste_ts ON waste_entries(timestamp);
 """
 
 _INSERT_COLS = (
-    "filename", "label", "description", "brand_product", "location", "weight",
-    "timestamp", "simulated_temperature", "simulated_humidity",
-    "simulated_vibration", "simulated_air_pollution", "simulated_smoke",
+    "filename",
+    "label",
+    "description",
+    "brand_product",
+    "location",
+    "weight",
+    "timestamp",
+    "simulated_temperature",
+    "simulated_humidity",
+    "simulated_vibration",
+    "simulated_air_pollution",
+    "simulated_smoke",
 )
 
 _SQLITE_INSERT = (
@@ -130,7 +139,9 @@ def init_db() -> None:
             with conn:
                 with conn.cursor() as cur:
                     cur.execute(_PG_CREATE)
-            logger.info("PostgreSQL database ready: %s@%s:%s/%s", DB_USER, DB_HOST, DB_PORT, DB_NAME)
+            logger.info(
+                "PostgreSQL database ready: %s@%s:%s/%s", DB_USER, DB_HOST, DB_PORT, DB_NAME
+            )
         finally:
             pool.putconn(conn)
     else:
@@ -160,15 +171,19 @@ def insert_entry(entry: dict, env: dict) -> None:
                 with conn:
                     with conn.cursor() as cur:
                         cur.execute(_PG_INSERT, row)
-                logger.info("DB entry saved (pg): label=%s ts=%s",
-                            entry.get("label"), entry.get("timestamp"))
+                logger.info(
+                    "DB entry saved (pg): label=%s ts=%s",
+                    entry.get("label"),
+                    entry.get("timestamp"),
+                )
             finally:
                 pool.putconn(conn)
         else:
             with sqlite3.connect(DB_FILE) as conn:
                 conn.execute(_SQLITE_INSERT, row)
-            logger.info("DB entry saved: label=%s ts=%s",
-                        entry.get("label"), entry.get("timestamp"))
+            logger.info(
+                "DB entry saved: label=%s ts=%s", entry.get("label"), entry.get("timestamp")
+            )
     except Exception as e:
         logger.error("DB insert failed: %s", e)
 
@@ -184,7 +199,8 @@ def get_entries(limit: int = 100, offset: int = 0) -> list[dict]:
             try:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT " + ", ".join(cols)
+                        "SELECT "
+                        + ", ".join(cols)
                         + " FROM waste_entries ORDER BY id DESC LIMIT %s OFFSET %s",
                         (limit, offset),
                     )
@@ -196,7 +212,8 @@ def get_entries(limit: int = 100, offset: int = 0) -> list[dict]:
             with sqlite3.connect(DB_FILE) as conn:
                 conn.row_factory = sqlite3.Row
                 cur = conn.execute(
-                    "SELECT " + ", ".join(cols)
+                    "SELECT "
+                    + ", ".join(cols)
                     + " FROM waste_entries ORDER BY id DESC LIMIT ? OFFSET ?",
                     (limit, offset),
                 )
@@ -215,17 +232,13 @@ def get_label_counts() -> dict[str, int]:
             conn = pool.getconn()
             try:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT label, COUNT(*) FROM waste_entries GROUP BY label"
-                    )
+                    cur.execute("SELECT label, COUNT(*) FROM waste_entries GROUP BY label")
                     return dict(cur.fetchall())
             finally:
                 pool.putconn(conn)
         else:
             with sqlite3.connect(DB_FILE) as conn:
-                cur = conn.execute(
-                    "SELECT label, COUNT(*) FROM waste_entries GROUP BY label"
-                )
+                cur = conn.execute("SELECT label, COUNT(*) FROM waste_entries GROUP BY label")
                 return dict(cur.fetchall())
     except Exception as e:
         logger.error("DB query failed: %s", e)
@@ -242,12 +255,12 @@ def get_entry_count() -> int:
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT COUNT(*) FROM waste_entries")
-                    return cur.fetchone()[0]
+                    return int(cur.fetchone()[0])
             finally:
                 pool.putconn(conn)
         else:
             with sqlite3.connect(DB_FILE) as conn:
-                return conn.execute("SELECT COUNT(*) FROM waste_entries").fetchone()[0]
+                return int(conn.execute("SELECT COUNT(*) FROM waste_entries").fetchone()[0])
     except Exception as e:
         logger.error("DB query failed: %s", e)
         return 0

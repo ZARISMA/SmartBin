@@ -18,7 +18,7 @@ def make_cameras(num_cameras: int = 2) -> list:
 
 def grab_frame(cam) -> np.ndarray:
     """Capture a single BGR frame from a Picamera2 instance."""
-    return cam.capture_array("main")
+    return np.asarray(cam.capture_array("main"))
 
 
 def stop_cameras(cameras: list) -> None:

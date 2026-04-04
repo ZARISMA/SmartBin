@@ -314,11 +314,11 @@ class OAKOccupancyDetector:
 
     @property
     def imu_available(self) -> bool:
-        return self._imu_available
+        return bool(self._imu_available)
 
     @property
     def nn_available(self) -> bool:
-        return self._nn_available
+        return bool(self._nn_available)
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 

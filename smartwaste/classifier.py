@@ -101,17 +101,19 @@ def _record_failure() -> bool:
 
 # ── JSON extraction ────────────────────────────────────────────────────────────
 
-def _extract_json(text: str) -> dict:
+def _extract_json(text: str) -> dict:  # type: ignore[type-arg]
     t = (text or "").strip()
     if t.startswith("```"):
         t = t.replace("```json", "").replace("```", "").strip()
     try:
-        return json.loads(t)
+        result: dict = json.loads(t)  # type: ignore[assignment]
+        return result
     except Exception:
         pass
     start, end = t.find("{"), t.rfind("}")
     if start != -1 and end > start:
-        return json.loads(t[start : end + 1])
+        result = json.loads(t[start : end + 1])  # type: ignore[assignment]
+        return result
     raise json.JSONDecodeError("No JSON object found", t, 0)
 
 

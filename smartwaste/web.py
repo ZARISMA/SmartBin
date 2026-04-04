@@ -80,7 +80,8 @@ def _camera_loop() -> None:
     global _cameras_ok
 
     try:
-        import depthai as dai
+        import depthai as dai  # noqa: I001
+
         from .cameraOak import crop_sides, make_pipeline
     except Exception as e:
         logger.error("Cannot import camera modules: %s", e)
@@ -99,8 +100,8 @@ def _camera_loop() -> None:
             pipelines.append(p)
             queues.append(q)
 
-        last_frames = [None, None]
-        last_ts = [0.0, 0.0]
+        last_frames: list[np.ndarray | None] = [None, None]
+        last_ts: list[float] = [0.0, 0.0]
         _cameras_ok = True
         logger.info("Camera thread started with %d devices", len(devices))
 
@@ -153,16 +154,9 @@ def _generate_frames():
             display = frame.copy()
             label, detail, auto_on = _state.get_display()
             draw_overlay(display, label, detail, auto_on, _state.get_history())
-            ok, jpeg = cv2.imencode(
-                ".jpg", display, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY]
-            )
+            ok, jpeg = cv2.imencode(".jpg", display, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
             if ok:
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n"
-                    + jpeg.tobytes()
-                    + b"\r\n"
-                )
+                yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n")
         else:
             # No camera — send placeholder
             placeholder = np.zeros((800, 1600, 3), dtype=np.uint8)
@@ -178,12 +172,7 @@ def _generate_frames():
             )
             ok, jpeg = cv2.imencode(".jpg", placeholder)
             if ok:
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n"
-                    + jpeg.tobytes()
-                    + b"\r\n"
-                )
+                yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n")
         time.sleep(0.033)  # ~30 FPS cap
 
 
@@ -229,9 +218,7 @@ def api_state():
         "detail": detail,
         "auto_on": auto_on,
         "is_classifying": _state.is_classifying,
-        "history": [
-            {"time": ts, "label": lbl} for ts, lbl in _state.get_history()
-        ],
+        "history": [{"time": ts, "label": lbl} for ts, lbl in _state.get_history()],
     }
 
 

@@ -51,8 +51,8 @@ class Settings(BaseSettings):
     # ── Camera / capture ───────────────────────────────────────────────────────
     jpeg_quality: int = 85
     crop_percent: float = 0.20
-    max_dt: float = 0.25      # max seconds between synced camera frames
-    auto_interval: int = 6    # seconds between auto-classifications (manual mode)
+    max_dt: float = 0.25  # max seconds between synced camera frames
+    auto_interval: int = 6  # seconds between auto-classifications (manual mode)
 
     # ── Auto-gate mode (mainauto.py) ───────────────────────────────────────────
     motion_threshold: float = 12.0
@@ -81,14 +81,14 @@ class Settings(BaseSettings):
     oak_check_interval: float = 0.4
 
     # ── API retry / circuit breaker ────────────────────────────────────────────
-    api_retry_attempts: int = 3      # max tenacity attempts per classify call
+    api_retry_attempts: int = 3  # max tenacity attempts per classify call
     api_retry_min_wait: float = 1.0  # first backoff wait (seconds)
     api_retry_max_wait: float = 8.0  # max backoff wait (seconds)
-    cb_failure_threshold: int = 5    # consecutive failures → open circuit
-    cb_recovery_sec: float = 60.0    # seconds to keep circuit open
+    cb_failure_threshold: int = 5  # consecutive failures → open circuit
+    cb_recovery_sec: float = 60.0  # seconds to keep circuit open
 
     # ── Database ───────────────────────────────────────────────────────────────
-    db_backend: str = "sqlite"       # "sqlite" or "postgresql"
+    db_backend: str = "sqlite"  # "sqlite" or "postgresql"
     db_host: str = "localhost"
     db_port: int = 5432
     db_name: str = "smartwaste"
