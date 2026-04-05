@@ -6,6 +6,11 @@ Run with::
     python -m smartwaste.web
 
 Replaces cv2.imshow when running inside Docker.
+
+Camera mode is selected via the SMARTWASTE_CAMERA_MODE env var:
+  oak          — dual OAK-D USB3 cameras (default)
+  raspberry    — dual Raspberry Pi cameras (picamera2)
+  oak-native   — single OAK-D with depth/IMU/NN sensor fusion
 """
 
 import contextlib
@@ -25,10 +30,17 @@ from starlette.responses import StreamingResponse
 
 from .config import (
     AUTO_INTERVAL,
+    CAMERA_MODE,
     CROP_PERCENT,
     DISPLAY_SIZE,
     JPEG_QUALITY,
     MAX_DT,
+    OAK_CHECK_INTERVAL,
+    OAK_DETECT_CONFIRM_N,
+    OAK_DISPLAY_H,
+    OAK_DISPLAY_W,
+    OAK_EMPTY_CONFIRM_N,
+    OAK_VOTES_NEEDED,
     WEB_HOST,
     WEB_PORT,
 )
@@ -72,10 +84,10 @@ def _get_frame() -> np.ndarray | None:
         return _latest_frame.copy() if _latest_frame is not None else None
 
 
-# ── Camera thread ─────────────────────────────────────────────────────────────
+# ── Camera loops ─────────────────────────────────────────────────────────────
 
 
-def _camera_loop() -> None:
+def _camera_loop_oak() -> None:
     """Capture frames from dual OAK cameras in a background thread."""
     global _cameras_ok
 
@@ -84,7 +96,7 @@ def _camera_loop() -> None:
 
         from .cameraOak import crop_sides, make_pipeline
     except Exception as e:
-        logger.error("Cannot import camera modules: %s", e)
+        logger.error("Cannot import OAK camera modules: %s", e)
         return
 
     with contextlib.ExitStack() as stack:
@@ -103,7 +115,7 @@ def _camera_loop() -> None:
         last_frames: list[np.ndarray | None] = [None, None]
         last_ts: list[float] = [0.0, 0.0]
         _cameras_ok = True
-        logger.info("Camera thread started with %d devices", len(devices))
+        logger.info("OAK camera thread started with %d devices", len(devices))
 
         try:
             while True:
@@ -131,15 +143,189 @@ def _camera_loop() -> None:
 
                 time.sleep(0.01)
         except Exception as e:
-            logger.error("Camera loop error: %s", e)
+            logger.error("OAK camera loop error: %s", e)
         finally:
             for p in pipelines:
                 with contextlib.suppress(Exception):
                     p.stop()
 
 
+def _camera_loop_raspberry() -> None:
+    """Capture frames from dual Raspberry Pi cameras in a background thread."""
+    global _cameras_ok
+
+    try:
+        from .cameraraspberry import crop_sides, grab_frame, make_cameras, stop_cameras
+    except Exception as e:
+        logger.error("Cannot import Raspberry Pi camera modules: %s", e)
+        return
+
+    try:
+        from picamera2 import Picamera2
+
+        num_cameras = len(Picamera2.global_camera_info())
+        if num_cameras < 2:
+            logger.warning("Need 2 Pi cameras, found %d. Camera stream unavailable.", num_cameras)
+            return
+    except Exception as e:
+        logger.error("picamera2 not available: %s", e)
+        return
+
+    cameras = make_cameras(2)
+    _cameras_ok = True
+    logger.info("Raspberry Pi camera thread started with %d cameras", len(cameras))
+
+    try:
+        while True:
+            last_frames: list[np.ndarray | None] = [None, None]
+            for i, cam in enumerate(cameras):
+                frame = grab_frame(cam)
+                frame = crop_sides(frame, CROP_PERCENT)
+                frame = cv2.resize(frame, DISPLAY_SIZE, interpolation=cv2.INTER_AREA)
+                last_frames[i] = frame
+
+            if last_frames[0] is not None and last_frames[1] is not None:
+                combined = cv2.hconcat([last_frames[0], last_frames[1]])
+                _set_frame(combined)
+
+                # Auto-classify
+                if _state.auto_classify:
+                    now = time.time()
+                    if now - _state.last_capture_time >= AUTO_INTERVAL:
+                        if _state.start_classify():
+                            _state.last_capture_time = now
+                            img_bytes = encode_frame(combined)
+                            launch_classify(img_bytes, combined.copy(), _state)
+
+            time.sleep(0.01)
+    except Exception as e:
+        logger.error("Raspberry Pi camera loop error: %s", e)
+    finally:
+        stop_cameras(cameras)
+
+
+def _camera_loop_oak_native() -> None:
+    """Capture frames from a single OAK-D with sensor fusion in a background thread."""
+    global _cameras_ok
+
+    try:
+        import depthai as dai  # noqa: I001
+
+        from .oak_native import OAKOccupancyDetector
+    except Exception as e:
+        logger.error("Cannot import OAK native modules: %s", e)
+        return
+
+    infos = dai.Device.getAllAvailableDevices()
+    if not infos:
+        logger.warning("No OAK-D device found. Camera stream unavailable.")
+        return
+
+    logger.info("Using OAK device: %s", infos[0].getDeviceId())
+
+    with dai.Device(infos[0]) as device:
+        detector = OAKOccupancyDetector(device)
+        _cameras_ok = True
+        _state.set_status("Calibrating", "Warming up OAK-D sensors...")
+        logger.info("OAK-D Native camera thread started")
+
+        # State machine (mirrors mainoak.py)
+        oak_state = "calibrating"
+        detect_streak = 0
+        empty_streak = 0
+        last_check = 0.0
+
+        try:
+            while True:
+                votes = detector.update()
+
+                # Update frame for the web stream
+                if votes.rgb_frame is not None:
+                    disp = cv2.resize(
+                        votes.rgb_frame,
+                        (OAK_DISPLAY_W, OAK_DISPLAY_H),
+                        interpolation=cv2.INTER_AREA,
+                    )
+                    _set_frame(disp)
+
+                # State machine tick
+                now = time.time()
+                if now - last_check >= OAK_CHECK_INTERVAL:
+                    last_check = now
+
+                    if oak_state == "calibrating":
+                        done = detector.calibrate()
+                        pct = detector.calibration_progress()
+                        _state.set_status("Calibrating", f"Warming up sensors... {pct}%")
+                        if done:
+                            oak_state = "ready"
+                            _state.set_status("Ready", "Bin empty -- waiting for item.")
+                            logger.info("Calibration complete.")
+
+                    elif oak_state == "ready":
+                        if votes.votes >= OAK_VOTES_NEEDED:
+                            detect_streak += 1
+                            _state.set_status(
+                                "Detecting",
+                                f"Object signals: {votes.votes} vote(s) ({detect_streak}/{OAK_DETECT_CONFIRM_N})",
+                            )
+                            if detect_streak >= OAK_DETECT_CONFIRM_N:
+                                logger.info("Occupancy confirmed (%d votes). Triggering classify.", votes.votes)
+                                oak_state = "detected"
+                                detect_streak = 0
+                        else:
+                            if detect_streak:
+                                _state.set_status("Ready", "Bin empty -- waiting for item.")
+                            detect_streak = 0
+
+                    elif oak_state == "detected":
+                        if votes.rgb_frame is not None and _state.start_classify():
+                            img_bytes = encode_frame(votes.rgb_frame)
+                            launch_classify(img_bytes, votes.rgb_frame.copy(), _state)
+                            _state.set_status("Classifying...", "Sending to Gemini AI...")
+                            oak_state = "classifying"
+
+                    elif oak_state == "classifying":
+                        if not _state.is_classifying:
+                            logger.info("Classification complete.")
+                            oak_state = "classified"
+
+                    elif oak_state == "classified":
+                        if votes.votes == 0:
+                            empty_streak += 1
+                            if empty_streak >= OAK_EMPTY_CONFIRM_N:
+                                _state.set_status("Ready", "Bin cleared -- waiting for next item.")
+                                logger.info("Bin empty confirmed -- returning to Ready.")
+                                oak_state = "ready"
+                                empty_streak = 0
+                        else:
+                            empty_streak = 0
+
+                time.sleep(0.01)
+        except Exception as e:
+            logger.error("OAK-D Native camera loop error: %s", e)
+        finally:
+            detector.stop()
+
+
+_CAMERA_LOOPS = {
+    "oak": _camera_loop_oak,
+    "raspberry": _camera_loop_raspberry,
+    "oak-native": _camera_loop_oak_native,
+}
+
+
 def _start_camera_thread() -> None:
-    t = threading.Thread(target=_camera_loop, daemon=True, name="camera-thread")
+    loop_fn = _CAMERA_LOOPS.get(CAMERA_MODE)
+    if loop_fn is None:
+        logger.error(
+            "Unknown SMARTWASTE_CAMERA_MODE=%r. Valid: %s",
+            CAMERA_MODE,
+            ", ".join(_CAMERA_LOOPS),
+        )
+        return
+    logger.info("Starting camera thread in %r mode", CAMERA_MODE)
+    t = threading.Thread(target=loop_fn, daemon=True, name="camera-thread")
     t.start()
 
 

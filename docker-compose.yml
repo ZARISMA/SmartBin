@@ -27,14 +27,15 @@ services:
       - SMARTWASTE_DB_PASSWORD=${SMARTWASTE_DB_PASSWORD:-smartwaste}
       - SMARTWASTE_LOCATION=${SMARTWASTE_LOCATION:-Yerevan}
       - SMARTWASTE_MODEL_NAME=${SMARTWASTE_MODEL_NAME:-gemini-3-flash-preview}
+      - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak}
     ports:
       - "8000:8000"
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
+      - /dev/bus/usb:/dev/bus/usb
       - waste_images:/app/waste_dataset
 
   grafana:

@@ -9,7 +9,7 @@ from starlette.testclient import TestClient
 @pytest.fixture
 def client():
     # Prevent camera thread from starting during tests
-    with patch("smartwaste.web._camera_loop"):
+    with patch("smartwaste.web._start_camera_thread"):
         from smartwaste.web import app
         with TestClient(app) as c:
             yield c
