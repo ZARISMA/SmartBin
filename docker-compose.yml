@@ -17,17 +17,12 @@ services:
 
   app:
     build: .
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SMARTWASTE_DB_BACKEND=postgresql
       - SMARTWASTE_DB_HOST=postgres
-      - SMARTWASTE_DB_PORT=5432
-      - SMARTWASTE_DB_NAME=smartwaste
-      - SMARTWASTE_DB_USER=smartwaste
-      - SMARTWASTE_DB_PASSWORD=${SMARTWASTE_DB_PASSWORD:-smartwaste}
-      - SMARTWASTE_LOCATION=${SMARTWASTE_LOCATION:-Yerevan}
-      - SMARTWASTE_MODEL_NAME=${SMARTWASTE_MODEL_NAME:-gemini-3-flash-preview}
-      - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak}
     ports:
       - "8000:8000"
     privileged: true
