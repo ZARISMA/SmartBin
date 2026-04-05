@@ -270,7 +270,10 @@ def _camera_loop_oak_native() -> None:
                                 f"Object signals: {votes.votes} vote(s) ({detect_streak}/{OAK_DETECT_CONFIRM_N})",
                             )
                             if detect_streak >= OAK_DETECT_CONFIRM_N:
-                                logger.info("Occupancy confirmed (%d votes). Triggering classify.", votes.votes)
+                                logger.info(
+                                    "Occupancy confirmed (%d votes). Triggering classify.",
+                                    votes.votes,
+                                )
                                 oak_state = "detected"
                                 detect_streak = 0
                         else:
