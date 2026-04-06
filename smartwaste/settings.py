@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     # ── Web UI ─────────────────────────────────────────────────────────────────
     web_host: str = "0.0.0.0"
     web_port: int = 8000
+    camera_mode: str = "oak"  # "oak", "raspberry", or "oak-native"
 
 
 # Module-level singleton — imported by config.py and classifier.py

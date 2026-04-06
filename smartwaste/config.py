@@ -30,6 +30,7 @@ DB_PASSWORD = settings.db_password
 # ── Web UI ────────────────────────────────────────────────────────────────────
 WEB_HOST = settings.web_host
 WEB_PORT = settings.web_port
+CAMERA_MODE = settings.camera_mode
 
 # ── Classification ─────────────────────────────────────────────────────────────
 MODEL_NAME = settings.model_name
