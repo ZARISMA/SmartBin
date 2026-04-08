@@ -1,326 +1,295 @@
 # SmartBin Code Review — Production Readiness Assessment
 
-**Date:** 2026-03-20
-**Scope:** Full codebase review of `OAK-1W/` — dual-camera waste classification system
+**Date:** 2026-04-06
+**Scope:** Full codebase review — dual-camera waste classification system
+**Supersedes:** 2026-03-20 review
 
 ---
 
 ## Overall Verdict
 
-The project is a solid prototype that proves the core idea works: two OAK cameras, Gemini vision API, real-time classification. The module separation is clean and the presence-detection gate (`mainauto.py`) is a smart architectural choice. But the gap between "working prototype" and "product a corporation would ship" is significant. This review covers every dimension of that gap.
+The project has matured significantly since the March 2026 review. The core architecture is solid: clean module separation, Pydantic config layering, sensor fusion, a full test suite, CI/CD, and Docker. The gap between "working prototype" and "product a corporation would ship" has narrowed — but it remains. This review covers where the project stands today and what it takes to close that gap.
+
+---
+
+## Progress Since Last Review
+
+The following items from the old P0/P1 list have been addressed:
+
+| Item | Status |
+|------|--------|
+| No tests | **Done** — 2,210 lines across 14 test modules, thread-safety tests, edge cases |
+| No CI/CD | **Done** — GitHub Actions: ruff, mypy, pytest --cov |
+| No config system | **Done** — Pydantic BaseSettings, 50+ env-var-overridable constants |
+| No `pyproject.toml` | **Done** — CLI entry points, ruff/mypy/pytest config |
+| No retry/backoff | **Done** — tenacity + circuit breaker with configurable thresholds |
+| No Docker | **Done** — docker-compose with app + PostgreSQL + Grafana |
+| No web UI | **Done** — FastAPI + MJPEG stream + stats + history |
+| Duplicated entry points | **Done** — strategies pattern (ManualStrategy, PresenceGateStrategy) |
+| OAK-D depth unused | **Done** — `oak_native.py`: depth + IMU + MobileNetSSD voting |
+| Fake sensor data unlabeled | **Done** — columns are now `simulated_*` in all backends |
+| Excel/JSON write paths | **Done** — SQLite is sole source of truth |
+| Location hardcoded | **Done** — `LOCATION` configurable via env var |
 
 ---
 
 ## 1. CRITICAL — Fix Before Any Deployment
 
-### 1.1 Thread Safety Bugs
+### 1.1 Thread Safety: `toggle_auto()` Still Unprotected
 
-**`state.py:44` — `toggle_auto()` is not thread-safe.** It reads and writes `self.auto_classify` without holding `self._lock`, while `get_display()` reads it under the lock. This is a data race.
+**`state.py` — `toggle_auto()` reads and writes `self.auto_classify` without holding `self._lock`.** The classify daemon threads read `auto_classify` via `get_display()` which _does_ acquire the lock. This is a live data race that can cause inconsistent auto-mode behavior under load.
 
-**`dataset.py:27` — `_metadata` list is a global mutable shared across threads.** `save_entry()` appends to it and rewrites the JSON file, but it's called from daemon threads (via `classifier.py`). Two concurrent classifications could corrupt `metadata.json`. Protect with a lock or move to a queue-based design.
+**Fix:** Wrap the read-modify-write in `toggle_auto()` with `with self._lock:`. Three lines.
 
-### 1.2 Fake Sensor Data Ships as Real Data
+### 1.2 No Authentication on the Web UI or API
 
-`dataset.py:30-37` — `_environment_data()` generates random numbers for temperature, humidity, vibration, air pollution, and smoke. These fake values are written to the Excel log, metadata JSON, and SQLite database with no indication that they are simulated. Anyone consuming this data (investors, researchers, partners) will assume it's real sensor output.
+Every FastAPI endpoint — including `/api/classify` and `/api/toggle-auto` — is open to anyone on the network. A guest on the same Wi-Fi can trigger classifications, disable auto mode, or scrape the full entry history.
 
-**Action:** Either integrate real sensors (BME280, MQ-2, etc.) via I2C/GPIO on the Raspberry Pi, or clearly mark these columns as `simulated_*` in all storage backends and UI. Do not silently ship random data as ground truth.
+**Action:**
+- Add an `X-API-Key` header check as FastAPI middleware (simplest approach)
+- Set the key via `API_KEY` env var; 401 if missing or wrong
+- Alternatively, issue a short-lived JWT on a `/login` endpoint and validate the bearer token
 
-### 1.3 No API Key Rotation or Secret Management
+### 1.3 Confidence Scores Still Not Implemented
 
-`classifier.py:22` — The Gemini client is created once at module import time using a raw environment variable. There is no `.env` file loading, no secret manager integration, no key rotation support. If the key leaks, there's no way to rotate without restarting the process.
+This was flagged in the last review and remains unaddressed. Gemini's output is accepted as ground truth regardless of how uncertain the model was. An ambiguous item (e.g., mixed paper/plastic packaging) gets the same confidence treatment as an obvious aluminum can.
 
-**Action:** Use `python-dotenv` for local development. For production on Pi, use a systemd `EnvironmentFile` or a hardware secret store. Build the client lazily (not at import time) so the key can be refreshed.
-
-### 1.4 Excel File Corruption Risk
-
-`dataset.py:62-66` — Every single classification rewrites the entire Excel file: read all rows, concat, write all rows. On a Raspberry Pi SD card with 10,000+ entries, this is:
-- Slow (full read + write on every insert)
-- Fragile (power loss during write = corrupted file)
-- A concurrency hazard (two threads writing simultaneously)
-
-**Action:** Drop Excel as a primary storage format. Use SQLite (which you already have) as the source of truth. Generate Excel exports on-demand via a separate script or API endpoint.
+**Action:** Add `"confidence": 0.0-1.0` to the prompt's expected JSON schema. In `classifier.py`, treat results below a threshold (e.g., 0.65) as `"Other"` and log a warning. Store confidence in the database.
 
 ---
 
 ## 2. HIGH — Architecture & Engineering
 
-### 2.1 No Tests Exist
+### 2.1 Polling Architecture Does Not Scale
 
-Zero test files in the entire project. No unit tests, no integration tests, no smoke tests. This makes every code change a deployment gamble.
+The frontend polls `/api/state` every 1 second, `/api/stats` every 5 seconds. With 10 concurrent browser clients, that's 10 requests/second of overhead delivering nothing new most of the time.
 
-**What to test first (highest impact):**
-- `_extract_json()` — parse edge cases: markdown fences, garbage prefix/suffix, nested JSON, unicode
-- `PresenceDetector` — state transitions: warmup -> ready, detect streaks, empty streaks, reset behavior
-- `AppState` — concurrent access: start/finish classify from multiple threads
-- `crop_sides()` — boundary conditions: 0%, 50%, negative values
-- `save_entry()` — file I/O mocking, verify JSON structure, verify DB insert
+**Action:** Add a FastAPI `WebSocket` endpoint for classification events. The camera loop broadcasts a JSON message after each classification; clients subscribe once. MJPEG stream stays as-is (that's already push-based).
 
-**Framework:** `pytest` + `pytest-cov`. Target 80%+ coverage on the `smartwaste/` package. Add a `tests/` directory with `conftest.py` for shared fixtures (mock frames, mock state).
+### 2.2 No Local/Offline Fallback Model
 
-### 2.2 No CI/CD Pipeline
+The system has 100% dependency on Google Gemini. A connectivity blip in an Armenian municipal building means zero classifications until the connection recovers.
 
-No GitHub Actions, no linting, no formatting enforcement, no automated checks of any kind. Every push to `master` is unvalidated.
+**Roadmap (already described in old review — still not started):**
+1. Collect labeled images from `waste_dataset/` (already accumulating)
+2. Train MobileNetV2 classifier; convert to OpenVINO blob for OAK VPU
+3. Run on-device for core categories (Plastic/Glass/Paper/Organic/Aluminum)
+4. Use Gemini only for low-confidence predictions and new brand/variant recognition
 
-**Action — create `.github/workflows/ci.yml`:**
-```
-- ruff check + ruff format --check (linting + formatting)
-- mypy --strict smartwaste/ (type checking)
-- pytest --cov=smartwaste tests/ (tests with coverage)
-```
+This is the single highest-leverage engineering investment remaining. It eliminates API costs for routine classifications, enables offline operation, and creates a proprietary training flywheel.
 
-Also add `pyproject.toml` to define the project properly (see section 2.8).
+### 2.3 No Health Check for the App Container
 
-### 2.3 Duplicated Entry Points
+`docker-compose.yml` defines a `pg_isready` health check for PostgreSQL but nothing for the FastAPI app. A container that started but crashed silently after 30 seconds shows as healthy.
 
-`main.py` and `mainauto.py` share ~60% identical code: camera init, device detection, frame capture loop, error messages, cleanup. When you fix a bug in one, you must remember to fix it in the other.
+**Action:** Add `GET /health` (liveness — is the process alive?) and `GET /ready` (readiness — are cameras connected and DB reachable?) to `web.py`. Add `healthcheck` in docker-compose pointing at `/health`.
 
-**Action:** Extract the shared skeleton into a base class or a `run_loop()` function in `smartwaste/app.py` that accepts a strategy/callback for the classification trigger logic. The two entry points become thin wrappers:
+### 2.4 No Rate Limiting or CORS
 
-```python
-# main.py
-from smartwaste.app import run_loop
-from smartwaste.strategies import ManualStrategy
-run_loop(ManualStrategy())
-
-# mainauto.py
-from smartwaste.app import run_loop
-from smartwaste.strategies import PresenceGateStrategy
-run_loop(PresenceGateStrategy())
-```
-
-### 2.4 OAK-D Depth Sensor Is Completely Unused
-
-You're using OAK-D cameras — they have stereo depth, IMU, and an on-device neural accelerator (Myriad X). The current code only uses the RGB stream (`CAM_A`). This is like buying a Tesla and only using the radio.
-
-**What depth unlocks:**
-- **Volume estimation** — measure how full the bin is, estimate object size
-- **Better presence detection** — depth change is far more reliable than pixel-diff (lighting-invariant)
-- **Object segmentation** — depth discontinuities separate the object from the pipe background
-- **3D bounding boxes** — useful for robotics/sorting integration later
-
-**Action:** Add a `StereoDepth` node to the pipeline in `camera.py`. Use depth for presence detection instead of (or alongside) the pixel-diff approach. Report fill-level as a percentage.
-
-### 2.5 No On-Device Inference (Edge AI)
-
-Every classification requires a round-trip to Google's servers. On a Raspberry Pi in Armenia, that's 200-500ms+ latency, plus internet dependency. The OAK's Myriad X VPU can run MobileNet, YOLO, or custom models at 30+ FPS with zero internet.
-
-**Roadmap:**
-1. **Short-term:** Train a simple MobileNetV2 classifier on your own `waste_dataset/` images (you're already collecting labeled data). Convert to OpenVINO blob. Run on-device for instant classification.
-2. **Medium-term:** Use Gemini only as a fallback for low-confidence on-device predictions. This cuts API costs by 80%+ and works offline.
-3. **Long-term:** Fine-tune on-device model with new data collected in the field. The Gemini labels become your training pipeline.
-
-### 2.6 No Configuration System
-
-All config is in `config.py` as module-level constants. Changing anything (thresholds, model name, camera count) requires editing source code and redeploying.
-
-**Action:** Implement a layered config system:
-1. `config.py` — default values (what you have now)
-2. `.env` file — per-deployment overrides (API keys, device IDs, location)
-3. CLI arguments — runtime overrides (`--model gemini-2.0-flash --auto --threshold 15`)
-4. Environment variables — container/systemd overrides
-
-Use `pydantic-settings` or `python-dotenv` + `argparse`. Make every constant in `config.py` overridable without code changes.
-
-### 2.7 No Error Recovery or Retry Logic
-
-`classifier.py:73-86` — If the Gemini API call fails, the error is logged and the status is updated. No retry. No exponential backoff. No circuit breaker. A single transient network error means a missed classification forever.
+Nothing prevents a client from calling `/api/classify` in a tight loop, exhausting the Gemini quota in minutes. There are also no CORS headers, so cross-origin requests from any domain succeed.
 
 **Action:**
-- Add retry with exponential backoff (3 attempts, 1s/2s/4s) using `tenacity` library
-- Add a circuit breaker: after N consecutive failures, stop calling the API for M seconds and show a clear status
-- Queue failed classifications for retry when the connection recovers
+- Add `slowapi` rate limiting (e.g., 10 req/min on `/api/classify`)
+- Add `CORSMiddleware` with an explicit origin whitelist via `CORS_ORIGINS` env var
 
-### 2.8 No Python Packaging
+### 2.5 No HTTPS
 
-No `pyproject.toml`, no `setup.py`, no package metadata. The project can't be installed with `pip install -e .`, can't declare its Python version requirement, can't declare entry points.
+The web UI and API run over plain HTTP. Any API key or session token transmitted is cleartext on the network.
 
-**Action — create `pyproject.toml`:**
-```toml
-[project]
-name = "smartwaste"
-version = "0.1.0"
-requires-python = ">=3.10"
-dependencies = [
-    "opencv-python",
-    "depthai",
-    "pandas",
-    "google-genai",
-    "openpyxl",
-]
+**Action:** Add an `nginx` or `caddy` service to docker-compose as TLS-terminating reverse proxy. Self-signed cert for LAN deployment; Let's Encrypt for any public-facing deployment.
 
-[project.scripts]
-smartwaste = "main:main"
-smartwaste-auto = "mainauto:main"
+### 2.6 Temporal Reasoning Absent
 
-[tool.ruff]
-target-version = "py310"
-line-length = 100
+Each frame is classified independently. A blurry or transitional frame (item mid-drop) gets the same weight as a sharp, stable frame.
 
-[tool.mypy]
-python_version = "3.10"
-strict = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-```
+**Action:** Buffer the last 3 classification results. If they don't agree within the same top-level category, emit the majority vote (or abstain and log `"Uncertain"`).
 
 ---
 
-## 3. MEDIUM — Data, Storage & Observability
+## 3. MEDIUM — Data, Monitoring & Observability
 
-### 3.1 Triple Storage Backend Is Redundant
+### 3.1 No Prometheus Metrics
 
-You write every classification to JSON, Excel, AND SQLite. Three write paths means three failure modes, three places to keep in sync, and three migration strategies. The JSON file is O(n) on every write (rewrite entire array). The Excel file is O(n) too and even more fragile.
+The Grafana dashboard queries PostgreSQL for business data but exposes zero operational metrics: no API call latency, no circuit breaker state, no classification throughput, no error rate.
 
-**Action:** Make SQLite the single source of truth. Add a CLI command or script to export to CSV/Excel/JSON on demand. Delete the JSON and Excel write paths from the hot path entirely.
+**Action:** Add `prometheus-client` and expose `/metrics`. Key metrics to instrument:
+- `smartwaste_classifications_total` (counter, labels: category, result)
+- `smartwaste_api_latency_seconds` (histogram)
+- `smartwaste_circuit_breaker_open` (gauge)
+- `smartwaste_frames_captured_total` (counter, labels: camera)
 
-### 3.2 No Data Validation or Schema Enforcement
+Add a Prometheus service to docker-compose; update Grafana to use it alongside PostgreSQL.
 
-The Gemini response is parsed with `_extract_json()` which does basic bracket-matching. There's no validation that the `description` field is actually a string, that `brand_product` isn't absurdly long, or that the JSON has no extra unexpected fields.
+### 3.2 No Database Migration Framework
 
-**Action:** Define a Pydantic model for the API response:
-```python
-class ClassificationResult(BaseModel):
-    category: Literal["Plastic", "Glass", "Paper", "Organic", "Aluminum", "Other", "Empty"]
-    description: str = Field(max_length=500)
-    brand_product: str = Field(max_length=200)
-```
-Validate every response through it. This also gives you automatic serialization for free.
+Schema DDL is embedded in `database.py`. Adding a column means editing code and running a manual `ALTER TABLE`. There is no migration history, no rollback, and no way to verify which schema version is deployed.
 
-### 3.3 No Log Rotation
+**Action:** Adopt Alembic. Current schema becomes revision `0001_initial`. Future changes are versioned migrations. The app runs `alembic upgrade head` at startup (or in a separate init container).
 
-`log_setup.py` creates a new log file per run, but there's no cleanup. After months of deployment, the `logs/` directory will consume significant SD card space.
+### 3.3 No Data Retention Policy
 
-**Action:** Use `logging.handlers.RotatingFileHandler` (e.g., 5 MB max, 3 backups). Or add a cron job / systemd timer to clean logs older than 7 days.
-
-### 3.4 No Metrics or Monitoring
-
-There is no way to know, remotely, whether a deployed bin is working. No uptime tracking, no classification success rate, no API latency metrics, no error rate dashboards.
-
-**Action (staged):**
-1. **Immediate:** Log structured metrics (classification count, latency, error count) to a local SQLite `metrics` table
-2. **Next:** Expose a simple HTTP endpoint (`/health`, `/metrics`) using a lightweight server (Flask/FastAPI)
-3. **Later:** Push metrics to a central service (Prometheus, Grafana Cloud, or even a simple webhook)
-
-### 3.5 Location and Device Identity Are Hardcoded
-
-`dataset.py:52` — `"location": "Yerevan"` is hardcoded. There's no device ID, bin ID, or deployment site identifier. When you have 10 bins deployed, you can't tell which one generated which data.
-
-**Action:** Add `DEVICE_ID`, `BIN_ID`, and `LOCATION` to the config system. Auto-generate a unique device ID from the Pi's serial number or MAC address if not explicitly set.
-
----
-
-## 4. MEDIUM — UX & Robustness
-
-### 4.1 No Headless / Remote Mode
-
-The system requires a display (OpenCV window). On a deployed bin, there's no monitor. You can't run it headless, can't monitor it over SSH without X forwarding.
+Images and database rows accumulate indefinitely. A Raspberry Pi SD card with months of 24/7 operation will fill up without warning.
 
 **Action:**
-- Add a `--headless` flag that skips all `cv2.imshow` / `cv2.namedWindow` calls
-- Add a lightweight web UI (even just serving the latest frame as JPEG over HTTP) for remote monitoring
-- Log status to console/file in headless mode so you can `tail -f` over SSH
+- Add `DATA_RETENTION_DAYS` setting (default: 90)
+- Add a cleanup function in `dataset.py`: delete images and DB rows older than retention window
+- Call it as a background task (FastAPI `BackgroundTasks` or a simple APScheduler job) daily
 
-### 4.2 No Graceful Single-Camera Degradation
+### 3.4 No OpenAPI Documentation
 
-`main.py:34` — If only 1 camera is detected, the system crashes. A real product should degrade gracefully: run with one camera if only one is available, log a warning, and continue classifying.
+FastAPI generates `/docs` and `/redoc` automatically — but only if endpoints have Pydantic response models. Currently, all endpoints return raw dicts with no schema declaration.
 
-**Action:** Make the camera count configurable (1 or 2). If 2 are expected but only 1 is found, warn but continue. Adjust the frame concatenation logic to handle single-frame input.
+**Action:** Define Pydantic response models (`StateResponse`, `EntryResponse`, `StatsResponse`) and add them to all `@app.get`/`@app.post` decorators. Costs ~30 lines; gives a free interactive API explorer.
 
-### 4.3 Hardcoded UI Layout
+### 3.5 No Structured Logging
 
-`ui.py` — Pixel coordinates (`(15, 15)`, `(1575, 135)`, etc.) are hardcoded for 1600x800. If the window size changes, the overlay breaks. Font sizes, margins, colors — all magic numbers.
+Logs go to rotating file + stdout as plain text. Feeding them to Loki, ELK, or Datadog requires fragile regex parsing.
 
-**Action:** Compute overlay positions relative to frame dimensions. Define colors and font sizes as named constants. Consider adding classification history display (last 5 items) to the overlay.
+**Action:** Add `python-json-logger` and configure `log_setup.py` to emit JSON by default (enable via `LOG_FORMAT=json` env var). Keep human-readable format for local dev (default).
 
-### 4.4 No Startup Self-Test
+### 3.6 Weight Field Is Always Empty
 
-The system doesn't verify at startup that:
-- The Gemini API key is valid (not just present, but actually works)
-- The cameras produce valid frames (not just that they're detected)
-- The output directories are writable
-- The SQLite database is accessible
+Every database row has `weight: ""`. This looks like a data bug to anyone querying the database. Either hook up an HX711 load cell (sub-$5 component with Pi GPIO) or remove the column entirely.
 
-**Action:** Add a `self_test()` function that runs at startup: make a lightweight API call (or validate the key format), capture one test frame from each camera, write and delete a test file. Fail fast with clear messages.
+### 3.7 Prompt Has No Version Tracking
 
----
+When the prompt in `prompt.py` changes, there's no way to attribute a shift in classification accuracy to the prompt change versus data drift.
 
-## 5. LOWER PRIORITY — Polish & Scale
-
-### 5.1 No Containerization
-
-No `Dockerfile`, no `docker-compose.yml`. Deployment is manual: SSH into the Pi, pull code, install deps, hope for the best.
-
-**Action:**
-```dockerfile
-FROM python:3.11-slim
-# ... install system deps for OpenCV and depthai
-COPY . /app
-RUN pip install -e .
-CMD ["smartwaste-auto"]
-```
-Use `docker-compose` to add optional services (metrics dashboard, web UI).
-
-### 5.2 No Structured Prompt Versioning
-
-`prompt.py` contains a single hardcoded prompt string. When you iterate on the prompt (and you will — constantly), there's no versioning, no A/B testing, no way to track which prompt produced which results.
-
-**Action:** Add a `PROMPT_VERSION` string. Log it with every classification. Store it in the database row. This lets you compare accuracy across prompt iterations.
-
-### 5.3 Weight Field Is Always Empty
-
-`dataset.py:53` — `"weight": ""` is always an empty string. The database schema has it, the Excel has it, but nothing populates it.
-
-**Action:** Either integrate a load cell / scale sensor (HX711 + load cell is <$5 and works with RPi GPIO), or remove the field entirely. Empty fields in production data look like bugs.
-
-### 5.4 No Classification Confidence Score
-
-Gemini's response is treated as absolute truth. There's no confidence score, no "I'm not sure" pathway. When the model is uncertain, it still picks a category.
-
-**Action:** Add a `confidence` field to the prompt's expected JSON output. Set a threshold (e.g., 0.7) below which the system classifies as "Other" or flags for human review. This is critical for building trust in the system.
-
-### 5.5 No Data Privacy Controls
-
-Captured images are stored permanently with no retention policy, no anonymization, no way for a user to request deletion. If a person's hand or face appears in a frame, that's PII stored indefinitely.
-
-**Action:** Add a configurable retention period (e.g., delete images older than 30 days). Consider adding face/hand detection and blurring before storage. Document your data handling policy.
+**Action:** Add `PROMPT_VERSION = "v1.2"` to `config.py`. Log it with every classification. Add a `prompt_version` column to the database. Then Grafana can segment accuracy by prompt version.
 
 ---
 
-## 6. Summary — Prioritized Action Plan
+## 4. Competitive Gap Analysis — What Big Company Projects Have
+
+This section maps the gap between SmartBin's current state and what commercially-deployed waste AI products ship (AMP Robotics, ZenRobotics, Bin-e, Greyparrot).
+
+### 4.1 Multi-Bin Fleet Management
+
+**Enterprise products:** Central dashboard managing hundreds of bins. Per-bin status, alerts, historical data, map view.
+
+**SmartBin now:** Single device, local UI only. No concept of a "fleet."
+
+**Gap:** Add a lightweight cloud relay service (FastAPI + PostgreSQL). Each bin authenticates and POSTs classifications. Central Grafana shows per-bin dashboards. Use MQTT as the protocol — it's designed for IoT fleet telemetry and handles intermittent connectivity natively.
+
+### 4.2 Offline-First Edge Architecture
+
+**Enterprise products:** Function fully offline. Cloud sync when available.
+
+**SmartBin now:** Fails completely when Gemini is unreachable.
+
+**Gap:** See section 2.2. On-device model is not optional for commercial deployment — it's a hard requirement in most real-world settings.
+
+### 4.3 Gamification & User Behavior Change
+
+**Enterprise products (Recycle Coach, Rubicon):** Points, streaks, environmental impact equivalents ("you've recycled the equivalent of X plastic bottles"). Drives behavior change which is the actual product goal.
+
+**SmartBin now:** No user-facing feedback beyond the classification label.
+
+**Gap:** Add a "session impact" display to the web UI. Show: items classified this session, estimated CO2 offset (use a lookup table by category), cumulative totals. No backend changes required — compute from existing data.
+
+### 4.4 Regulatory Compliance & Audit Trail
+
+**Enterprise products:** Tamper-evident audit logs, GDPR data deletion, data export for regulatory reporting, chain-of-custody for waste streams.
+
+**SmartBin now:** No audit log, no deletion API, no export.
+
+**Gap:**
+- Add an `audit_log` table (action, actor, timestamp, entry_id) — append-only
+- Add `DELETE /api/entries/{id}` for GDPR right-to-erasure
+- Add `GET /api/export?format=csv&from=&to=` for regulatory export
+
+### 4.5 Mobile App / PWA
+
+**Enterprise products:** iOS/Android apps for bin operators. Push notifications when bins are full.
+
+**SmartBin now:** Browser-only; no mobile optimization.
+
+**Gap:** Add a PWA manifest (`manifest.json`) + service worker to `web_static/`. Costs 1-2 hours; enables "Add to Home Screen" on iOS/Android, offline shell, push notification infrastructure.
+
+### 4.6 ERP/Building Management System Integration
+
+**AMP Robotics, Greyparrot:** Integrate with SAP, Oracle, BMS platforms. Waste haulers receive automated pickup requests when fill level exceeds threshold.
+
+**SmartBin now:** No integration surface.
+
+**Gap:** Add a webhook system. Configure `WEBHOOK_URL` + `WEBHOOK_EVENTS` (e.g., `bin_full,circuit_open`). POST JSON payload on event. This is the minimum integration surface for a B2B sale.
+
+### 4.7 Predictive Analytics
+
+**Enterprise products:** Forecast when a bin will reach capacity. Optimize pickup schedules. Reduce unnecessary collections by 30-40%.
+
+**SmartBin now:** Depth sensor data exists (in oak_native.py) but is only used for presence detection; no fill-level time series stored.
+
+**Gap:** Store depth-derived fill percentage in the database on each classification. After 2-4 weeks of data, a simple linear regression per bin can forecast fill time. Expose as `GET /api/predictions/fill-time`.
+
+### 4.8 Internationalization
+
+**Enterprise products:** Multi-language UI, locale-specific regulatory mappings, regional brand recognition.
+
+**SmartBin now:** English-only UI. Armenian brand examples in prompt (good product thinking, but hardcoded).
+
+**Gap:** Extract UI strings to a JSON locale file. Add a `LOCALE` env var. Move brand hint examples in `prompt.py` to locale-specific config files loaded at startup.
+
+### 4.9 Regulatory Category Mapping
+
+**EU, US, and many markets require waste classified to specific regulatory codes** (EU Waste Catalogue LoW codes, EPA categories, etc.) for compliance reporting.
+
+**SmartBin now:** 7 internal categories. No mapping to any standard.
+
+**Gap:** Add a `REGULATORY_MAPPING` config (JSON dict per region) that maps `Plastic → 15 01 02` (EU LoW). Include in export and audit log. Configurable per deployment without code change.
+
+### 4.10 Hardware Failure Alerting
+
+**Enterprise products:** Ops team gets paged when a camera goes offline, when a model stops responding, when disk fills.
+
+**SmartBin now:** Circuit breaker opens silently (logged, not alerted). No disk monitoring. No camera watchdog.
+
+**Gap:** Add alerting hooks to the circuit breaker's open/close state transition, to camera reconnect failure, and to a disk-space check. Route alerts to a `ALERT_WEBHOOK_URL` (Slack, PagerDuty, email relay — caller's choice).
+
+---
+
+## 5. Updated Priority Action Plan
 
 | Priority | Item | Effort | Impact |
 |----------|------|--------|--------|
-| P0 | Fix thread safety bugs (1.1) | Small | Prevents data corruption |
-| P0 | Remove or label fake sensor data (1.2) | Small | Prevents credibility damage |
-| P0 | Add secret management (1.3) | Small | Security baseline |
-| P1 | Add tests + CI (2.1, 2.2) | Medium | Foundation for everything else |
-| P1 | Deduplicate entry points (2.3) | Medium | Maintainability |
-| P1 | Add config system (2.6) | Medium | Deployability |
-| P1 | Add retry/backoff (2.7) | Small | Reliability |
-| P1 | Consolidate storage to SQLite (3.1) | Medium | Performance + correctness |
-| P2 | Use depth sensor (2.4) | Large | Major feature differentiator |
-| P2 | On-device inference (2.5) | Large | Offline capability, cost reduction |
-| P2 | Add headless mode + web UI (4.1) | Medium | Real-world deployability |
-| P2 | Monitoring + metrics (3.4) | Medium | Operational visibility |
-| P2 | Pydantic response validation (3.2) | Small | Data quality |
-| P2 | pyproject.toml (2.8) | Small | Proper Python project |
-| P3 | Single-camera fallback (4.2) | Small | Robustness |
-| P3 | Startup self-test (4.4) | Small | Fail-fast |
-| P3 | Docker (5.1) | Medium | Deployment |
-| P3 | Prompt versioning (5.2) | Small | Experiment tracking |
-| P3 | Confidence scores (5.4) | Small | Trust |
-| P3 | Data privacy controls (5.5) | Medium | Compliance |
+| P0 | Fix `toggle_auto()` thread safety (`state.py`) | XS | Data integrity |
+| P0 | Add web UI/API authentication (API key middleware) | S | Security baseline |
+| P0 | Add confidence score to Gemini prompt + threshold logic | S | Classification quality |
+| P1 | Add `/health` + `/ready` endpoints + docker-compose healthcheck | XS | Container orchestration |
+| P1 | Add rate limiting (SlowAPI) + CORS middleware | S | Security |
+| P1 | Prometheus `/metrics` endpoint + docker-compose Prometheus service | M | Operational visibility |
+| P1 | WebSocket push for classification events | M | Real-time UX, scalability |
+| P2 | Data retention: `DATA_RETENTION_DAYS` setting + daily cleanup | S | Disk management |
+| P2 | HTTPS: nginx/Caddy TLS termination in docker-compose | S | Security |
+| P2 | OpenAPI response models (Pydantic) on all endpoints | S | API documentation |
+| P2 | Structured JSON logging via `python-json-logger` | S | Log aggregation |
+| P2 | Prompt version tracking (`PROMPT_VERSION` in config + DB) | XS | Experiment traceability |
+| P2 | Weight field: integrate HX711 load cell or drop the column | XS | Data quality |
+| P2 | Alembic migration framework | M | Schema evolution |
+| P2 | Session impact display in web UI (CO2 offset, totals) | M | User engagement |
+| P3 | Local TFLite/OpenVINO on-device model (offline fallback) | XL | Offline capability, cost -80% |
+| P3 | Fleet management backend (MQTT/REST + central dashboard) | XL | Commercial scalability |
+| P3 | Webhook system for events (bin_full, circuit_open, disk_low) | M | Operations, B2B integration |
+| P3 | PWA manifest + service worker | M | Mobile UX |
+| P3 | Predictive fill-time analytics (linear regression on depth data) | L | Enterprise differentiator |
+| P3 | Data export: `GET /api/export?format=csv` | S | Compliance |
+| P3 | GDPR deletion: `DELETE /api/entries/{id}` + audit log | S | Compliance |
+| P3 | Regulatory category mapping (EU LoW codes, etc.) | M | Enterprise compliance |
+| P3 | i18n: locale files + `LOCALE` env var | M | International deployment |
 
 ---
 
-## 7. What You're Doing Right
+## 6. What the Project Is Doing Right
 
 Don't lose these strengths while improving:
 
-- **Clean module separation** — each file has a single responsibility. This is better than most prototypes.
-- **Presence-gated API calls** — the `PresenceDetector` is a smart optimization that saves API costs and reduces latency. Most teams wouldn't think of this until they see the bill.
-- **Dual-camera approach** — two angles significantly reduce classification ambiguity. This is a genuine competitive advantage.
-- **Thread-safe state** — `AppState` with lock-based classify gating shows you understand concurrency. Just fix the two gaps noted above.
-- **Armenian brand recognition** — domain-specific prompt tuning for the deployment location. This shows product thinking, not just engineering.
-- **Progressive data collection** — every classification builds your training dataset. This is the flywheel that will enable on-device inference later.
+- **Clean module separation** — each file has a single responsibility. Strategies, presence detection, sensor fusion, classifier, and database are genuinely decoupled. This is better than most prototypes.
+- **Presence-gated API calls** — `PresenceDetector` is a smart cost optimization that most teams wouldn't think of until they see the Gemini bill.
+- **Dual-camera approach** — two angles reduce classification ambiguity. Genuine hardware differentiator.
+- **Sensor fusion (`oak_native.py`)** — depth + IMU + on-device NN voting is rare in open-source IoT. This is publication-worthy engineering.
+- **Pydantic config layering** — 50+ constants overridable via env vars without code changes. Enterprise-grade.
+- **Armenian brand recognition** — domain-specific prompt tuning for the deployment location signals product thinking, not just engineering.
+- **Progressive dataset accumulation** — every Gemini-labeled classification feeds a future on-device model. The flywheel is running.
+- **CI/CD pipeline** — ruff + mypy + pytest --cov on every push. Most startups skip this until regressions become a crisis.
+- **Docker Compose + Grafana** — operations infrastructure from day one.
+- **Thread-safe AppState** — proper lock-based classify gating shows concurrency awareness. Fix the one gap noted above and it's solid.
