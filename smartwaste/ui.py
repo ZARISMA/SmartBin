@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import cv2
 import numpy as np
 
@@ -7,21 +9,21 @@ _AA = cv2.LINE_AA
 
 # ── Color palette (BGR) ───────────────────────────────────────────────────────
 _C_WHITE = (255, 255, 255)
-_C_GRAY = (170, 170, 170)
-_C_DARK_PANEL = (15, 15, 15)
-_C_ACCENT = (60, 200, 255)  # title + divider line
-_C_MODE_AUTO = (80, 210, 100)  # green badge
-_C_MODE_MANUAL = (110, 150, 220)  # blue badge
+_C_GRAY = (140, 140, 140)       # Stone Gray #8C8C8C
+_C_DARK_PANEL = (20, 26, 11)    # Dark green-tinted panel
+_C_ACCENT = (66, 90, 45)        # Forest Green #2D5A42 (BGR)
+_C_MODE_AUTO = (80, 175, 76)    # Success #4CAF50 (BGR)
+_C_MODE_MANUAL = (107, 77, 26)  # Deep Smart Blue #1A4D6B (BGR)
 
-# Per-category label colors (BGR)
+# Per-category label colors (BGR) — brand modular system colors
 _CAT_COLOR: dict[str, tuple[int, int, int]] = {
-    "Plastic": (40, 165, 255),
-    "Glass": (220, 220, 50),
-    "Paper": (255, 200, 100),
-    "Organic": (60, 200, 80),
-    "Aluminum": (210, 210, 210),
-    "Other": (200, 110, 210),
-    "Empty": (120, 120, 120),
+    "Plastic": (235, 206, 135),   # #87CEEB
+    "Glass": (208, 224, 64),      # #40E0D0
+    "Paper": (140, 180, 210),     # #D2B48C
+    "Organic": (43, 77, 30),      # #1E4D2B
+    "Aluminum": (169, 169, 169),  # #A9A9A9
+    "Other": (219, 112, 147),     # #9370DB
+    "Empty": (140, 140, 140),     # #8C8C8C
 }
 
 # ── Layout proportions (relative to frame dimensions) ─────────────────────────
@@ -116,3 +118,47 @@ def draw_overlay(
             if y_h > bar_h - 2:
                 break
             cv2.putText(img, f"{ts}  {lbl}", (x_h, y_h), _FONT, fs_hist, _cat_color(lbl), 1, _AA)
+
+
+# ── NN bounding-box drawing ──────────────────────────────────────────────────
+
+# MobileNetSSD was trained on Pascal VOC (21 classes including background)
+_VOC_LABELS = [
+    "background", "aeroplane", "bicycle", "bird", "boat", "bottle",
+    "bus", "car", "cat", "chair", "cow", "diningtable", "dog",
+    "horse", "motorbike", "person", "pottedplant", "sheep", "sofa",
+    "train", "tvmonitor",
+]
+
+_C_GREEN_BOX = (0, 255, 0)  # BGR
+_C_BLACK = (0, 0, 0)
+
+
+def draw_nn_detections(
+    img: np.ndarray,
+    detections: list,
+) -> None:
+    """Draw green bounding boxes with labels for each NN detection onto *img* in-place."""
+    if not detections:
+        return
+    h, w = img.shape[:2]
+    base = max(w / 1600.0, 0.35)
+    fs = base * 0.50
+    thickness = max(int(base * 2.0), 1)
+
+    for det in detections:
+        x1 = int(det.xmin * w)
+        y1 = int(det.ymin * h)
+        x2 = int(det.xmax * w)
+        y2 = int(det.ymax * h)
+
+        label = _VOC_LABELS[det.label_idx] if det.label_idx < len(_VOC_LABELS) else f"id:{det.label_idx}"
+        text = f"{label} {det.confidence:.0%}"
+
+        # Green bounding box
+        cv2.rectangle(img, (x1, y1), (x2, y2), _C_GREEN_BOX, thickness, _AA)
+
+        # Label background + text
+        (tw, th), _ = cv2.getTextSize(text, _FONT, fs, 1)
+        cv2.rectangle(img, (x1, y1 - th - 8), (x1 + tw + 6, y1), _C_GREEN_BOX, -1)
+        cv2.putText(img, text, (x1 + 3, y1 - 4), _FONT, fs, _C_BLACK, 1, _AA)

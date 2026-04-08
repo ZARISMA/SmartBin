@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <canvas id="particles"></canvas>
+
     <header>
         <h1>Smart Waste AI</h1>
         <div id="mode-badge" class="badge manual">MANUAL</div>
@@ -14,7 +16,9 @@
 
     <main>
         <section class="stream-panel">
-            <img id="video-feed" src="/stream" alt="Live camera feed">
+            <div class="stream-container">
+                <img id="video-feed" src="/stream" alt="Live camera feed">
+            </div>
         </section>
 
         <aside class="info-panel">
@@ -28,7 +32,7 @@
             </div>
 
             <div class="controls">
-                <button id="btn-classify" onclick="classify()">Classify</button>
+                <button id="btn-classify" onclick="classify(event)">Classify</button>
                 <button id="btn-auto" onclick="toggleAuto()">Toggle Auto</button>
             </div>
 
@@ -39,8 +43,9 @@
 
             <div class="stats-card">
                 <h2>Statistics</h2>
-                <p>Total: <span id="stat-total">0</span></p>
-                <ul id="stat-categories"></ul>
+                <div class="stat-total-label">Total Classifications</div>
+                <div id="stat-total" class="stat-total">0</div>
+                <div id="stat-bars"></div>
             </div>
 
             <div class="entries-card">
@@ -62,17 +67,30 @@
 
     <script>
         const CAT_COLORS = {
-            Plastic: '#ffa528', Glass: '#32dcdc', Paper: '#64c8ff',
-            Organic: '#3cc850', Aluminum: '#d2d2d2', Other: '#6ed2c8',
-            Empty: '#787878'
+            Plastic: '#87CEEB', Glass: '#40E0D0', Paper: '#D2B48C',
+            Organic: '#1E4D2B', Aluminum: '#A9A9A9', Other: '#9370DB',
+            Empty: '#8C8C8C'
         };
 
         function catColor(label) {
             return CAT_COLORS[label] || '#ffffff';
         }
 
-        async function classify() {
+        /* ── Classify with ripple ───────────────────────────────────────── */
+        async function classify(e) {
             const btn = document.getElementById('btn-classify');
+            // Ripple effect
+            if (e) {
+                const rect = btn.getBoundingClientRect();
+                const ripple = document.createElement('span');
+                ripple.className = 'ripple';
+                const size = Math.max(rect.width, rect.height);
+                ripple.style.width = ripple.style.height = size + 'px';
+                ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+                ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+                btn.appendChild(ripple);
+                setTimeout(() => ripple.remove(), 600);
+            }
             btn.disabled = true;
             try {
                 const res = await fetch('/api/classify', { method: 'POST' });
@@ -96,6 +114,7 @@
             badge.className = 'badge ' + (auto ? 'auto' : 'manual');
         }
 
+        /* ── Poll State ─────────────────────────────────────────────────── */
         async function pollState() {
             try {
                 const res = await fetch('/api/state');
@@ -104,19 +123,27 @@
 
                 document.getElementById('label').textContent = s.label || 'Ready';
                 document.getElementById('detail').textContent = s.detail || '';
-                document.getElementById('cat-dot').style.backgroundColor = catColor(s.label);
+
+                const dot = document.getElementById('cat-dot');
+                const c = catColor(s.label);
+                dot.style.backgroundColor = c;
+                dot.style.boxShadow = `0 0 12px ${c}`;
+                document.getElementById('label').style.color = c;
+
                 updateModeBadge(s.auto_on);
 
                 const ul = document.getElementById('history-list');
                 ul.innerHTML = '';
-                for (const h of (s.history || [])) {
+                (s.history || []).forEach((h, i) => {
                     const li = document.createElement('li');
+                    li.style.animationDelay = (i * 0.06) + 's';
                     li.innerHTML = `<span class="hist-time">${h.time}</span> <span style="color:${catColor(h.label)}">${h.label}</span>`;
                     ul.appendChild(li);
-                }
+                });
             } catch (e) { /* ignore transient errors */ }
         }
 
+        /* ── Poll Stats with bars ───────────────────────────────────────── */
         async function pollStats() {
             try {
                 const res = await fetch('/api/stats');
@@ -124,16 +151,28 @@
                 if (!s) return;
 
                 document.getElementById('stat-total').textContent = s.total;
-                const ul = document.getElementById('stat-categories');
-                ul.innerHTML = '';
-                for (const [cat, count] of Object.entries(s.by_category || {})) {
-                    const li = document.createElement('li');
-                    li.innerHTML = `<span style="color:${catColor(cat)}">${cat}</span>: ${count}`;
-                    ul.appendChild(li);
+
+                const container = document.getElementById('stat-bars');
+                const cats = s.by_category || {};
+                const max = Math.max(1, ...Object.values(cats));
+
+                container.innerHTML = '';
+                for (const [cat, count] of Object.entries(cats)) {
+                    const pct = (count / max * 100).toFixed(1);
+                    const color = catColor(cat);
+                    container.innerHTML += `
+                        <div class="stat-item">
+                            <span class="stat-label" style="color:${color}">${cat}</span>
+                            <div class="stat-bar">
+                                <div class="stat-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${color},${color}aa)"></div>
+                            </div>
+                            <span class="stat-count">${count}</span>
+                        </div>`;
                 }
             } catch (e) { /* ignore */ }
         }
 
+        /* ── Poll Entries ───────────────────────────────────────────────── */
         async function pollEntries() {
             try {
                 const res = await fetch('/api/entries?limit=10');
@@ -148,6 +187,51 @@
             } catch (e) { /* ignore */ }
         }
 
+        /* ── Particle Background ────────────────────────────────────────── */
+        (function initParticles() {
+            const canvas = document.getElementById('particles');
+            const ctx = canvas.getContext('2d');
+            let particles = [];
+            const COUNT = 25;
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            for (let i = 0; i < COUNT; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    r: Math.random() * 1.5 + 0.5,
+                    dx: (Math.random() - 0.5) * 0.3,
+                    dy: (Math.random() - 0.5) * 0.3,
+                    alpha: Math.random() * 0.3 + 0.05,
+                });
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                for (const p of particles) {
+                    p.x += p.dx;
+                    p.y += p.dy;
+                    if (p.x < 0) p.x = canvas.width;
+                    if (p.x > canvas.width) p.x = 0;
+                    if (p.y < 0) p.y = canvas.height;
+                    if (p.y > canvas.height) p.y = 0;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(45, 90, 66, ${p.alpha})`;
+                    ctx.fill();
+                }
+                requestAnimationFrame(draw);
+            }
+            draw();
+        })();
+
+        /* ── Start polling ──────────────────────────────────────────────── */
         setInterval(pollState, 1000);
         setInterval(pollStats, 5000);
         setInterval(pollEntries, 5000);

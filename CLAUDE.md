@@ -32,6 +32,21 @@ docker-compose logs -f app
 Services: Web UI `:8000`, Grafana `:3000` (admin/admin), PostgreSQL `:5432`.
 Requires Linux host with OAK-D cameras on USB.
 
+## Presentation Website
+
+Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketing/presentation site showcasing the SmartBin product.
+
+**Sections:** Hero, About, Modules (6 waste categories), Live Statistics (from `/api/stats`), Deployment Map (Leaflet/OpenStreetMap, 8 Yerevan landmarks), Media/Video (placeholder for 3D renders and real-life footage), Contact/Footer.
+
+**Files:**
+- `smartwaste/web_templates/site.html` — Jinja2 template (single-page scrolling)
+- `smartwaste/web_static/site.css` — Dedicated glassmorphism dark theme, responsive (768px/1024px breakpoints)
+- `smartwaste/web_static/site.js` — Stats fetching, Leaflet map init, scroll animations, animated counters
+
+**External CDN deps:** Leaflet 1.9.4 (map tiles via CARTO dark basemap), Google Fonts Inter.
+
+**Contact placeholders:** Phone `+374 12 345 678`, email `info@smartbin.am` — update in `site.html` footer.
+
 ## Database Backend
 
 Set via `SMARTWASTE_DB_BACKEND`:
@@ -94,11 +109,51 @@ smartwaste/
   utils.py           ← shared frame helpers
   web.py             ← FastAPI web UI with MJPEG stream
   web_templates/     ← Jinja2 HTML templates
+    index.html       ← operational dashboard (live stream, controls)
+    site.html        ← presentation/marketing website
   web_static/        ← CSS/JS static files
+    style.css        ← dashboard styles
+    site.css         ← presentation site styles
+    site.js          ← presentation site JS (stats, map, animations)
 scripts/
   migrate_json_to_pg.py ← one-time data migration to PostgreSQL
 grafana/             ← Grafana provisioning and dashboards
 ```
+
+## Brand Color Palette
+
+All UI (web dashboard, overlays, Grafana) must use these project colors.
+
+**Primary**
+- Forest Green: `#2D5A42`
+- Deep Smart Blue: `#1A4D6B`
+
+**Secondary**
+- Stone Gray: `#8C8C8C`
+- Taupe: `#BDB76B`
+
+**Modular System (waste category colors)**
+| Category | Color | Hex |
+|----------|-------|-----|
+| Paper | Warm Cellulose | `#D2B48C` |
+| Aluminum | Brushed Metallic Gray | `#A9A9A9` |
+| Organic | Deep Biophilic Green | `#1E4D2B` |
+| Glass | Translucent Aqua / Crystal Teal | `#40E0D0` |
+| Plastic | Refined Synthetic Tone | `#87CEEB` |
+| Other | Dynamic Module Gradient | `#9370DB` → `#1E90FF` |
+| Empty | Stone Gray | `#8C8C8C` |
+
+**Semantic**
+- Success: `#4CAF50`
+- Warning: `#FF9800`
+- Error: `#C62828`
+- Info: `#2196F3`
+
+**Neutral**
+- Pure White: `#FFFFFF`
+- Off-White: `#F5F5F7`
+- Light Gray: `#E0E0E0`
+- Dark Charcoal: `#333333`
 
 ## Testing
 

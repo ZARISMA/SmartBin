@@ -47,7 +47,7 @@ from .config import (
 from .database import get_entries, get_entry_count, get_label_counts
 from .log_setup import get_logger
 from .state import AppState
-from .ui import draw_overlay
+from .ui import draw_nn_detections, draw_overlay
 from .utils import encode_frame, launch_classify
 
 logger = get_logger()
@@ -246,6 +246,7 @@ def _camera_loop_oak_native() -> None:
                         (OAK_DISPLAY_W, OAK_DISPLAY_H),
                         interpolation=cv2.INTER_AREA,
                     )
+                    draw_nn_detections(disp, votes.nn_detections)
                     _set_frame(disp)
 
                 # State machine tick
@@ -371,6 +372,11 @@ def _generate_frames():
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
+
+
+@app.get("/site", response_class=HTMLResponse)
+def site(request: Request):
+    return templates.TemplateResponse(request=request, name="site.html")
 
 
 @app.get("/stream")

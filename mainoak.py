@@ -89,6 +89,7 @@ from smartwaste.config import (
 from smartwaste.log_setup import get_logger
 from smartwaste.oak_native import OAKOccupancyDetector, SensorVotes
 from smartwaste.state import AppState
+from smartwaste.ui import draw_nn_detections
 from smartwaste.utils import encode_frame, launch_classify
 
 logger = get_logger()
@@ -346,7 +347,7 @@ def main() -> None:
         last_check    = 0.0
         calib_pct     = [0]         # mutable container so _tick can write to it
         last_votes    = SensorVotes(
-            False, False, False, 0, None, 0.0, 0.0, 0
+            False, False, False, 0, None, 0.0, 0.0, 0, []
         )
 
         # Dual-mode frame state
@@ -400,6 +401,7 @@ def main() -> None:
                         classify_frame, (display_w, display_h),
                         interpolation=cv2.INTER_AREA,
                     )
+                    draw_nn_detections(disp, last_votes.nn_detections)
                     _draw_overlay(disp, oak_state, last_votes, app_state,
                                   detector, calib_pct[0], title=mode_title)
                     cv2.imshow(OAK_WINDOW, disp)

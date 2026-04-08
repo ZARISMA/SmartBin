@@ -43,7 +43,17 @@ from .log_setup import get_logger
 logger = get_logger()
 
 
-# ── Result type ────────────────────────────────────────────────────────────────
+# ── Result types ───────────────────────────────────────────────────────────────
+
+
+class Detection(NamedTuple):
+    """Single NN bounding-box detection (normalised 0-1 coordinates)."""
+    xmin: float
+    ymin: float
+    xmax: float
+    ymax: float
+    confidence: float
+    label_idx: int
 
 
 class SensorVotes(NamedTuple):
@@ -55,6 +65,7 @@ class SensorVotes(NamedTuple):
     depth_mm_delta: float  # baseline − current median depth (for display)
     imu_delta: float  # accel magnitude above quiet baseline (for display)
     nn_count: int  # number of NN detections above threshold
+    nn_detections: list[Detection]  # bounding boxes for display
 
 
 # ── Pipeline construction ──────────────────────────────────────────────────────
@@ -207,6 +218,7 @@ class OAKOccupancyDetector:
         self._last_depth_delta: float = 0.0
         self._last_imu_delta: float = 0.0
         self._last_nn_count: int = 0
+        self._last_nn_detections: list[Detection] = []
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -260,7 +272,7 @@ class OAKOccupancyDetector:
         rgb_frame = self._drain_rgb()
         depth_occupied = self._update_depth()
         self._update_imu()
-        nn_count = self._update_nn()
+        nn_count, nn_detections = self._update_nn()
 
         # Auto-expire drop flag
         if self._drop_flag and time.time() >= self._drop_flag_expiry:
@@ -277,6 +289,7 @@ class OAKOccupancyDetector:
             depth_mm_delta=self._last_depth_delta,
             imu_delta=self._last_imu_delta,
             nn_count=nn_count,
+            nn_detections=nn_detections,
         )
 
     def calibration_progress(self) -> int:
@@ -300,6 +313,7 @@ class OAKOccupancyDetector:
         self._last_depth_delta = 0.0
         self._last_imu_delta = 0.0
         self._last_nn_count = 0
+        self._last_nn_detections = []
         logger.info("OAKOccupancyDetector reset — recalibrating.")
 
     def stop(self) -> None:
@@ -379,19 +393,25 @@ class OAKOccupancyDetector:
         if not self._drop_flag:
             self._last_imu_delta = 0.0
 
-    def _update_nn(self) -> int:
-        """Drain NN queue; return count of detections above confidence threshold."""
+    def _update_nn(self) -> tuple[int, list[Detection]]:
+        """Drain NN queue; return count and bounding boxes of detections."""
         if self._nn_q is None:
-            return self._last_nn_count
+            return self._last_nn_count, self._last_nn_detections
 
         count = None
+        detections: list[Detection] = []
         while self._nn_q.has():
             dets = self._nn_q.get().detections
-            count = len(dets)  # already filtered by setConfidenceThreshold
+            count = len(dets)
+            detections = [
+                Detection(d.xmin, d.ymin, d.xmax, d.ymax, d.confidence, d.label)
+                for d in dets
+            ]
 
         if count is not None:
             self._last_nn_count = count
-        return self._last_nn_count
+            self._last_nn_detections = detections
+        return self._last_nn_count, self._last_nn_detections
 
 
 # ── Utility ────────────────────────────────────────────────────────────────────

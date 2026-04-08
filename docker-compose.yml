@@ -32,6 +32,7 @@ services:
     volumes:
       - /dev/bus/usb:/dev/bus/usb
       - waste_images:/app/waste_dataset
+      - ./smartwaste:/app/smartwaste
 
   grafana:
     image: grafana/grafana:11.0.0
