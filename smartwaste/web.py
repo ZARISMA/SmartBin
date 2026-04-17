@@ -41,6 +41,7 @@ from .config import (
     CROP_PERCENT,
     DATASET_DIR,
     DISPLAY_SIZE,
+    EDGE_API_KEY,
     EDGE_MODE,
     JPEG_QUALITY,
     MAX_DT,
@@ -90,8 +91,10 @@ def _is_authenticated(request: Request) -> bool:
     if request.session.get("user"):
         return True
     auth = request.headers.get("authorization", "")
-    if auth.startswith("Bearer ") and auth[7:] == ADMIN_PASSWORD:
-        return True
+    if auth.startswith("Bearer "):
+        token = auth[7:]
+        if token == ADMIN_PASSWORD or (EDGE_API_KEY and token == EDGE_API_KEY):
+            return True
     return False
 
 

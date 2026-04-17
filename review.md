@@ -1,295 +1,344 @@
-# SmartBin Code Review — Production Readiness Assessment
+# SmartBin — Competitive Review & Enterprise Gap Analysis
 
-**Date:** 2026-04-06
-**Scope:** Full codebase review — dual-camera waste classification system
-**Supersedes:** 2026-03-20 review
-
----
-
-## Overall Verdict
-
-The project has matured significantly since the March 2026 review. The core architecture is solid: clean module separation, Pydantic config layering, sensor fusion, a full test suite, CI/CD, and Docker. The gap between "working prototype" and "product a corporation would ship" has narrowed — but it remains. This review covers where the project stands today and what it takes to close that gap.
+*Reviewed 2026-04-17 against SmartBin v0.1.0 (branch `master`).*
+*Benchmarks: Bigbelly (fleet hardware), Nordsense (wireless fill sensors), Compology (vision for dumpsters), Greyparrot AI (MRF-line classification), CleanRobotics TrashBot (autonomous sorting), Recycleye (robotic picking), Enevo (route optimization).*
 
 ---
 
-## Progress Since Last Review
+## 1. Executive Summary
 
-The following items from the old P0/P1 list have been addressed:
+SmartBin is a **working, visually credible MVP** with a distinctive technical angle (dual OAK-D stereo cameras + Gemini vision + edge-to-server topology) and a marketing site polished enough to pass for Series-A. It is **not yet an enterprise product.** The gap to Bigbelly/Nordsense/Compology is not the classifier — it's everything *around* the classifier: multi-tenancy, security, observability, fleet management, analytics, compliance.
 
-| Item | Status |
-|------|--------|
-| No tests | **Done** — 2,210 lines across 14 test modules, thread-safety tests, edge cases |
-| No CI/CD | **Done** — GitHub Actions: ruff, mypy, pytest --cov |
-| No config system | **Done** — Pydantic BaseSettings, 50+ env-var-overridable constants |
-| No `pyproject.toml` | **Done** — CLI entry points, ruff/mypy/pytest config |
-| No retry/backoff | **Done** — tenacity + circuit breaker with configurable thresholds |
-| No Docker | **Done** — docker-compose with app + PostgreSQL + Grafana |
-| No web UI | **Done** — FastAPI + MJPEG stream + stats + history |
-| Duplicated entry points | **Done** — strategies pattern (ManualStrategy, PresenceGateStrategy) |
-| OAK-D depth unused | **Done** — `oak_native.py`: depth + IMU + MobileNetSSD voting |
-| Fake sensor data unlabeled | **Done** — columns are now `simulated_*` in all backends |
-| Excel/JSON write paths | **Done** — SQLite is sole source of truth |
-| Location hardcoded | **Done** — `LOCATION` configurable via env var |
+The three shortest honest sentences:
+
+1. **A single leaked `.env` compromises every deployed bin.** Auth is one shared admin password; the edge API key is a single shared secret; `INSTRUCTIONS.md` commits both in plaintext; the admin password also doubles as a valid Bearer token (`smartwaste/web.py:96`).
+2. **The product's headline metric — fill level — is faked.** `weight` is a never-populated string (`smartwaste/schemas.py:18`, `smartwaste/dataset.py:37`); all environmental sensors are `random.uniform()` (`smartwaste/dataset.py:15-22`). Procurement will catch this in the first demo.
+3. **One vendor outage = full service outage.** Every classification path depends on Google Gemini (`smartwaste/classifier.py:27,58`). No on-device fallback, no multi-model strategy, no cost telemetry.
+
+None of this is fatal. All of it is fixable in roughly **90 days** of focused work (Section 6). SmartBin's open-source stack, OAK-native sensor fusion, and clean codebase are real advantages — they just need to be wrapped in the operational scaffolding every enterprise buyer expects.
+
+**Bottom line for investors:** viable pilot product today, 3 months from being credibly enterprise-ready, 6 months from being competitively differentiated. The engineering is ahead of the operations.
 
 ---
 
-## 1. CRITICAL — Fix Before Any Deployment
+## 2. Competitive Landscape
 
-### 1.1 Thread Safety: `toggle_auto()` Still Unprotected
+| Player | What they do well | SmartBin's gap |
+|---|---|---|
+| **Bigbelly** | Solar-powered fleet of 75k+ connected bins; mature fleet mgmt, OTA, SLA contracts with cities. | No OTA, no fleet hierarchy, no SLA tracking. |
+| **Nordsense** | Ultrasonic fill-level sensors + route-optimization API; municipal integrations. | No real fill sensor; no route API; no municipal ERP hooks. |
+| **Compology** | Camera-in-dumpster + contamination scoring + weekly PDF reports to haulers. | No contamination score, no report export, no hauler portal. |
+| **Greyparrot AI** | MRF conveyor vision, ISO 27001, multi-language dashboards, on-prem option. | No certifications, no i18n, Gemini-cloud only. |
+| **CleanRobotics TrashBot** | Autonomous lid + motorized sorting. | Vision-only, no actuation. |
+| **Enevo** | Collection route optimization from historical fill data. | No time-series analytics, no forecasting. |
 
-**`state.py` — `toggle_auto()` reads and writes `self.auto_classify` without holding `self._lock`.** The classify daemon threads read `auto_classify` via `get_display()` which _does_ acquire the lock. This is a live data race that can cause inconsistent auto-mode behavior under load.
-
-**Fix:** Wrap the read-modify-write in `toggle_auto()` with `with self._lock:`. Three lines.
-
-### 1.2 No Authentication on the Web UI or API
-
-Every FastAPI endpoint — including `/api/classify` and `/api/toggle-auto` — is open to anyone on the network. A guest on the same Wi-Fi can trigger classifications, disable auto mode, or scrape the full entry history.
-
-**Action:**
-- Add an `X-API-Key` header check as FastAPI middleware (simplest approach)
-- Set the key via `API_KEY` env var; 401 if missing or wrong
-- Alternatively, issue a short-lived JWT on a `/login` endpoint and validate the bearer token
-
-### 1.3 Confidence Scores Still Not Implemented
-
-This was flagged in the last review and remains unaddressed. Gemini's output is accepted as ground truth regardless of how uncertain the model was. An ambiguous item (e.g., mixed paper/plastic packaging) gets the same confidence treatment as an obvious aluminum can.
-
-**Action:** Add `"confidence": 0.0-1.0` to the prompt's expected JSON schema. In `classifier.py`, treat results below a threshold (e.g., 0.65) as `"Other"` and log a warning. Store confidence in the database.
+SmartBin's **edge**: open-source, commodity hardware (OAK-D + Raspberry Pi), on-device sensor fusion (`smartwaste/oak_native.py`), fast iteration. Preserve these while closing the operational gap.
 
 ---
 
-## 2. HIGH — Architecture & Engineering
+## 3. Severity Legend
 
-### 2.1 Polling Architecture Does Not Scale
-
-The frontend polls `/api/state` every 1 second, `/api/stats` every 5 seconds. With 10 concurrent browser clients, that's 10 requests/second of overhead delivering nothing new most of the time.
-
-**Action:** Add a FastAPI `WebSocket` endpoint for classification events. The camera loop broadcasts a JSON message after each classification; clients subscribe once. MJPEG stream stays as-is (that's already push-based).
-
-### 2.2 No Local/Offline Fallback Model
-
-The system has 100% dependency on Google Gemini. A connectivity blip in an Armenian municipal building means zero classifications until the connection recovers.
-
-**Roadmap (already described in old review — still not started):**
-1. Collect labeled images from `waste_dataset/` (already accumulating)
-2. Train MobileNetV2 classifier; convert to OpenVINO blob for OAK VPU
-3. Run on-device for core categories (Plastic/Glass/Paper/Organic/Aluminum)
-4. Use Gemini only for low-confidence predictions and new brand/variant recognition
-
-This is the single highest-leverage engineering investment remaining. It eliminates API costs for routine classifications, enables offline operation, and creates a proprietary training flywheel.
-
-### 2.3 No Health Check for the App Container
-
-`docker-compose.yml` defines a `pg_isready` health check for PostgreSQL but nothing for the FastAPI app. A container that started but crashed silently after 30 seconds shows as healthy.
-
-**Action:** Add `GET /health` (liveness — is the process alive?) and `GET /ready` (readiness — are cameras connected and DB reachable?) to `web.py`. Add `healthcheck` in docker-compose pointing at `/health`.
-
-### 2.4 No Rate Limiting or CORS
-
-Nothing prevents a client from calling `/api/classify` in a tight loop, exhausting the Gemini quota in minutes. There are also no CORS headers, so cross-origin requests from any domain succeed.
-
-**Action:**
-- Add `slowapi` rate limiting (e.g., 10 req/min on `/api/classify`)
-- Add `CORSMiddleware` with an explicit origin whitelist via `CORS_ORIGINS` env var
-
-### 2.5 No HTTPS
-
-The web UI and API run over plain HTTP. Any API key or session token transmitted is cleartext on the network.
-
-**Action:** Add an `nginx` or `caddy` service to docker-compose as TLS-terminating reverse proxy. Self-signed cert for LAN deployment; Let's Encrypt for any public-facing deployment.
-
-### 2.6 Temporal Reasoning Absent
-
-Each frame is classified independently. A blurry or transitional frame (item mid-drop) gets the same weight as a sharp, stable frame.
-
-**Action:** Buffer the last 3 classification results. If they don't agree within the same top-level category, emit the majority vote (or abstain and log `"Uncertain"`).
+- **BLOCKER** — prevents sale to any enterprise or municipal buyer. Must fix before go-to-market.
+- **MAJOR** — competitor parity requirement. Missing it means losing deals you'd otherwise win.
+- **MINOR** — polish / trust signal. Fix before a Series A or a keynote demo.
 
 ---
 
-## 3. MEDIUM — Data, Monitoring & Observability
+## 4. Gap Analysis
 
-### 3.1 No Prometheus Metrics
+### 4.1 Backend Architecture & API
 
-The Grafana dashboard queries PostgreSQL for business data but exposes zero operational metrics: no API call latency, no circuit breaker state, no classification throughput, no error rate.
+**What exists today.** FastAPI service (`smartwaste/web.py`) with session-cookie auth (`:81`), Bearer-token auth for edges (`:89–98`), an in-memory bin registry (`_bin_registry: dict` at `:113`), thirteen endpoints covering login/dashboard/stream/classify/state/entries/stats/bins/report/heartbeat. Pydantic-typed edge payloads (`smartwaste/schemas.py`). Async lifespan starts the camera thread and (if `EDGE_MODE`) a heartbeat thread.
 
-**Action:** Add `prometheus-client` and expose `/metrics`. Key metrics to instrument:
-- `smartwaste_classifications_total` (counter, labels: category, result)
-- `smartwaste_api_latency_seconds` (histogram)
-- `smartwaste_circuit_breaker_open` (gauge)
-- `smartwaste_frames_captured_total` (counter, labels: camera)
+**Gaps vs. enterprise.**
+- **[BLOCKER] No multi-tenancy.** One admin account (`smartwaste/settings.py:105-106`, default `admin`/`password123`). No organizations, districts, users, roles, or per-tenant scoping. A single customer = the whole deployment.
+- **[BLOCKER] Admin password is a valid Bearer token.** `smartwaste/web.py:96` — `token == ADMIN_PASSWORD or token == EDGE_API_KEY`. Whoever logs in can also hit the edge API; whoever sniffs an edge request can log in.
+- **[BLOCKER] Bin registry is volatile.** `_bin_registry` at `smartwaste/web.py:113` is a plain `dict` — `docker compose restart app` wipes the known-fleet topology until every bin re-heartbeats.
+- **[MAJOR] No API versioning.** `/api/report` has no `v1/` prefix; one breaking change forces a fleet-wide firmware push.
+- **[MAJOR] No rate limiting.** `/api/report` and `/api/heartbeat` accept unlimited POSTs with no throttling. Any leaked edge key can DoS the server.
+- **[MAJOR] No audit log / request log.** No record of who classified, logged in, exported, or mutated state.
+- **[MINOR] No OpenAPI customization / client SDKs.** FastAPI auto-docs exist but no published, versioned SDK for integrators.
 
-Add a Prometheus service to docker-compose; update Grafana to use it alongside PostgreSQL.
+**Remediation.** Add a `tenants`/`users`/`api_keys` schema; replace the dual-use auth with per-user sessions (Argon2 hashes) and per-device API keys issued from an admin UI. Persist the bin registry to Postgres. Add `slowapi` for rate limits, `fastapi_versioning` for `/api/v1/*`, and a middleware that writes audit events (`actor_id, action, resource, ip, ts`) to an append-only table.
 
-### 3.2 No Database Migration Framework
-
-Schema DDL is embedded in `database.py`. Adding a column means editing code and running a manual `ALTER TABLE`. There is no migration history, no rollback, and no way to verify which schema version is deployed.
-
-**Action:** Adopt Alembic. Current schema becomes revision `0001_initial`. Future changes are versioned migrations. The app runs `alembic upgrade head` at startup (or in a separate init container).
-
-### 3.3 No Data Retention Policy
-
-Images and database rows accumulate indefinitely. A Raspberry Pi SD card with months of 24/7 operation will fill up without warning.
-
-**Action:**
-- Add `DATA_RETENTION_DAYS` setting (default: 90)
-- Add a cleanup function in `dataset.py`: delete images and DB rows older than retention window
-- Call it as a background task (FastAPI `BackgroundTasks` or a simple APScheduler job) daily
-
-### 3.4 No OpenAPI Documentation
-
-FastAPI generates `/docs` and `/redoc` automatically — but only if endpoints have Pydantic response models. Currently, all endpoints return raw dicts with no schema declaration.
-
-**Action:** Define Pydantic response models (`StateResponse`, `EntryResponse`, `StatsResponse`) and add them to all `@app.get`/`@app.post` decorators. Costs ~30 lines; gives a free interactive API explorer.
-
-### 3.5 No Structured Logging
-
-Logs go to rotating file + stdout as plain text. Feeding them to Loki, ELK, or Datadog requires fragile regex parsing.
-
-**Action:** Add `python-json-logger` and configure `log_setup.py` to emit JSON by default (enable via `LOG_FORMAT=json` env var). Keep human-readable format for local dev (default).
-
-### 3.6 Weight Field Is Always Empty
-
-Every database row has `weight: ""`. This looks like a data bug to anyone querying the database. Either hook up an HX711 load cell (sub-$5 component with Pi GPIO) or remove the column entirely.
-
-### 3.7 Prompt Has No Version Tracking
-
-When the prompt in `prompt.py` changes, there's no way to attribute a shift in classification accuracy to the prompt change versus data drift.
-
-**Action:** Add `PROMPT_VERSION = "v1.2"` to `config.py`. Log it with every classification. Add a `prompt_version` column to the database. Then Grafana can segment accuracy by prompt version.
+**Effort.** 2–3 weeks for one backend engineer.
 
 ---
 
-## 4. Competitive Gap Analysis — What Big Company Projects Have
+### 4.2 ML / AI Pipeline
 
-This section maps the gap between SmartBin's current state and what commercially-deployed waste AI products ship (AMP Robotics, ZenRobotics, Bin-e, Greyparrot).
+**What exists today.** Cloud-only Gemini classification (`smartwaste/classifier.py:27` imports `google.genai`; `:58` builds the client at module import, failing hard if no key). Tenacity exponential-backoff retries (`:132-142`) and a thread-safe circuit breaker (`:67-100`). Strict JSON schema with 7 fixed categories (`smartwaste/prompt.py`). Separate OAK-native sensor fusion pipeline (`smartwaste/oak_native.py`) combining RGB + depth ROI + IMU shock detection + MobileNet-SSD voting — but the final classification label still comes from Gemini.
 
-### 4.1 Multi-Bin Fleet Management
+**Gaps vs. enterprise.**
+- **[BLOCKER] Single-vendor lock-in.** Gemini goes down → every SmartBin worldwide stops classifying. No local fallback, no multi-model fan-out, no "safe default" category.
+- **[BLOCKER] Privacy / data-residency.** Every image leaves the LAN and hits Google servers. No on-device option = immediate disqualification for EU municipal contracts, hospitals, defense sites.
+- **[MAJOR] No confidence / contamination score.** The prompt (`smartwaste/prompt.py:17-23`) returns `category` / `description` / `brand_product` but no probability or "mixed-waste ratio." Compology's flagship metric is *contamination %*; SmartBin cannot produce it.
+- **[MAJOR] Weight & volume are unused.** `EdgeReport.weight: str = ""` (`smartwaste/schemas.py:18`), and `save_entry()` hard-codes `"weight": ""` (`smartwaste/dataset.py:37`). The schema looks production-ready; the data is blank.
+- **[MAJOR] Armenian brands hard-coded in the prompt.** `smartwaste/prompt.py:22` mentions "Jermuk, Bjni, BOOM" — untouchable without a code change. Doesn't generalize to any other market.
+- **[MAJOR] No dataset / feedback loop.** Images save to `waste_dataset/*.jpg` but there is no labeling UI, no active-learning queue, no way for an operator to correct a misclassification and improve the model.
+- **[MAJOR] No model pinning / cost telemetry.** `MODEL_NAME = "gemini-3-flash-preview"` is a moving target; no per-call token or USD cost is logged.
+- **[MINOR] Classifier client built at import time** (`:58`). Unit tests must stub Gemini or module import crashes without `GEMINI_API_KEY`.
 
-**Enterprise products:** Central dashboard managing hundreds of bins. Per-bin status, alerts, historical data, map view.
+**Remediation.** Ship a small on-device fallback (`ultralytics YOLOv8-n` or MobileNet-SSD already loaded in OAK) that runs when circuit is open; return a `confidence: float` and `contamination_pct: float` field; pin `model_name` per deployment; extract brand list to `config/brands/<region>.yaml`; add a `corrections` table + minimal label-fix UI; log every Gemini call with input/output token counts and computed USD cost.
 
-**SmartBin now:** Single device, local UI only. No concept of a "fleet."
-
-**Gap:** Add a lightweight cloud relay service (FastAPI + PostgreSQL). Each bin authenticates and POSTs classifications. Central Grafana shows per-bin dashboards. Use MQTT as the protocol — it's designed for IoT fleet telemetry and handles intermittent connectivity natively.
-
-### 4.2 Offline-First Edge Architecture
-
-**Enterprise products:** Function fully offline. Cloud sync when available.
-
-**SmartBin now:** Fails completely when Gemini is unreachable.
-
-**Gap:** See section 2.2. On-device model is not optional for commercial deployment — it's a hard requirement in most real-world settings.
-
-### 4.3 Gamification & User Behavior Change
-
-**Enterprise products (Recycle Coach, Rubicon):** Points, streaks, environmental impact equivalents ("you've recycled the equivalent of X plastic bottles"). Drives behavior change which is the actual product goal.
-
-**SmartBin now:** No user-facing feedback beyond the classification label.
-
-**Gap:** Add a "session impact" display to the web UI. Show: items classified this session, estimated CO2 offset (use a lookup table by category), cumulative totals. No backend changes required — compute from existing data.
-
-### 4.4 Regulatory Compliance & Audit Trail
-
-**Enterprise products:** Tamper-evident audit logs, GDPR data deletion, data export for regulatory reporting, chain-of-custody for waste streams.
-
-**SmartBin now:** No audit log, no deletion API, no export.
-
-**Gap:**
-- Add an `audit_log` table (action, actor, timestamp, entry_id) — append-only
-- Add `DELETE /api/entries/{id}` for GDPR right-to-erasure
-- Add `GET /api/export?format=csv&from=&to=` for regulatory export
-
-### 4.5 Mobile App / PWA
-
-**Enterprise products:** iOS/Android apps for bin operators. Push notifications when bins are full.
-
-**SmartBin now:** Browser-only; no mobile optimization.
-
-**Gap:** Add a PWA manifest (`manifest.json`) + service worker to `web_static/`. Costs 1-2 hours; enables "Add to Home Screen" on iOS/Android, offline shell, push notification infrastructure.
-
-### 4.6 ERP/Building Management System Integration
-
-**AMP Robotics, Greyparrot:** Integrate with SAP, Oracle, BMS platforms. Waste haulers receive automated pickup requests when fill level exceeds threshold.
-
-**SmartBin now:** No integration surface.
-
-**Gap:** Add a webhook system. Configure `WEBHOOK_URL` + `WEBHOOK_EVENTS` (e.g., `bin_full,circuit_open`). POST JSON payload on event. This is the minimum integration surface for a B2B sale.
-
-### 4.7 Predictive Analytics
-
-**Enterprise products:** Forecast when a bin will reach capacity. Optimize pickup schedules. Reduce unnecessary collections by 30-40%.
-
-**SmartBin now:** Depth sensor data exists (in oak_native.py) but is only used for presence detection; no fill-level time series stored.
-
-**Gap:** Store depth-derived fill percentage in the database on each classification. After 2-4 weeks of data, a simple linear regression per bin can forecast fill time. Expose as `GET /api/predictions/fill-time`.
-
-### 4.8 Internationalization
-
-**Enterprise products:** Multi-language UI, locale-specific regulatory mappings, regional brand recognition.
-
-**SmartBin now:** English-only UI. Armenian brand examples in prompt (good product thinking, but hardcoded).
-
-**Gap:** Extract UI strings to a JSON locale file. Add a `LOCALE` env var. Move brand hint examples in `prompt.py` to locale-specific config files loaded at startup.
-
-### 4.9 Regulatory Category Mapping
-
-**EU, US, and many markets require waste classified to specific regulatory codes** (EU Waste Catalogue LoW codes, EPA categories, etc.) for compliance reporting.
-
-**SmartBin now:** 7 internal categories. No mapping to any standard.
-
-**Gap:** Add a `REGULATORY_MAPPING` config (JSON dict per region) that maps `Plastic → 15 01 02` (EU LoW). Include in export and audit log. Configurable per deployment without code change.
-
-### 4.10 Hardware Failure Alerting
-
-**Enterprise products:** Ops team gets paged when a camera goes offline, when a model stops responding, when disk fills.
-
-**SmartBin now:** Circuit breaker opens silently (logged, not alerted). No disk monitoring. No camera watchdog.
-
-**Gap:** Add alerting hooks to the circuit breaker's open/close state transition, to camera reconnect failure, and to a disk-space check. Route alerts to a `ALERT_WEBHOOK_URL` (Slack, PagerDuty, email relay — caller's choice).
+**Effort.** 4–6 weeks (includes retraining the on-device fallback on the saved `waste_dataset/`).
 
 ---
 
-## 5. Updated Priority Action Plan
+### 4.3 Hardware & Device Fleet Management
 
-| Priority | Item | Effort | Impact |
-|----------|------|--------|--------|
-| P0 | Fix `toggle_auto()` thread safety (`state.py`) | XS | Data integrity |
-| P0 | Add web UI/API authentication (API key middleware) | S | Security baseline |
-| P0 | Add confidence score to Gemini prompt + threshold logic | S | Classification quality |
-| P1 | Add `/health` + `/ready` endpoints + docker-compose healthcheck | XS | Container orchestration |
-| P1 | Add rate limiting (SlowAPI) + CORS middleware | S | Security |
-| P1 | Prometheus `/metrics` endpoint + docker-compose Prometheus service | M | Operational visibility |
-| P1 | WebSocket push for classification events | M | Real-time UX, scalability |
-| P2 | Data retention: `DATA_RETENTION_DAYS` setting + daily cleanup | S | Disk management |
-| P2 | HTTPS: nginx/Caddy TLS termination in docker-compose | S | Security |
-| P2 | OpenAPI response models (Pydantic) on all endpoints | S | API documentation |
-| P2 | Structured JSON logging via `python-json-logger` | S | Log aggregation |
-| P2 | Prompt version tracking (`PROMPT_VERSION` in config + DB) | XS | Experiment traceability |
-| P2 | Weight field: integrate HX711 load cell or drop the column | XS | Data quality |
-| P2 | Alembic migration framework | M | Schema evolution |
-| P2 | Session impact display in web UI (CO2 offset, totals) | M | User engagement |
-| P3 | Local TFLite/OpenVINO on-device model (offline fallback) | XL | Offline capability, cost -80% |
-| P3 | Fleet management backend (MQTT/REST + central dashboard) | XL | Commercial scalability |
-| P3 | Webhook system for events (bin_full, circuit_open, disk_low) | M | Operations, B2B integration |
-| P3 | PWA manifest + service worker | M | Mobile UX |
-| P3 | Predictive fill-time analytics (linear regression on depth data) | L | Enterprise differentiator |
-| P3 | Data export: `GET /api/export?format=csv` | S | Compliance |
-| P3 | GDPR deletion: `DELETE /api/entries/{id}` + audit log | S | Compliance |
-| P3 | Regulatory category mapping (EU LoW codes, etc.) | M | Enterprise compliance |
-| P3 | i18n: locale files + `LOCALE` env var | M | International deployment |
+**What exists today.** Entry points for dual OAK (`main.py`), auto-gate presence (`mainauto.py`), OAK-native sensor fusion (`mainoak.py`), Raspberry Pi dual-camera (`mainraspberry.py`). Heartbeat every 30 s (`settings.py:116`); bin flips offline after 60 s silence (`smartwaste/web.py:116`). Docker Compose variants for server, full-edge, and lightweight-edge.
+
+**Gaps vs. enterprise.**
+- **[BLOCKER] No OTA updates.** Firmware/code lives in the Docker image. Pushing a fix to 100 deployed bins = 100 SSH sessions. Bigbelly ships firmware updates from a cloud console.
+- **[BLOCKER] Shared edge API key.** Every device uses the same `SMARTWASTE_EDGE_API_KEY`. One key leak = whole fleet compromise, no revocation path. No per-device certificate, no mTLS.
+- **[BLOCKER] No real fill-level sensor.** Environmental fields are `random.uniform()` (`smartwaste/dataset.py:15-22`). "Volume sensor" does not exist in the repo. Ultrasonic ToF + weight cell is the Nordsense commodity offering.
+- **[MAJOR] No fleet topology.** Bins are a flat list — no zones, routes, districts, depots, or device groups.
+- **[MAJOR] Health is one signal.** Only "heartbeat seen in last 60 s." No CPU/RAM/disk, USB-camera-up, Gemini-key-valid, DB-reachable, uptime distribution.
+- **[MAJOR] No remote reboot / diagnostics.** Field engineer must physically visit.
+- **[MAJOR] No factory provisioning flow.** A new Pi has to be hand-edited (`INSTRUCTIONS.md:122-128`) — no QR-scan-to-enroll, no zero-touch.
+- **[MINOR] No lid actuation / access control.** CleanRobotics TrashBot can refuse to open for wrong waste; SmartBin cannot.
+
+**Remediation.** Adopt **balena**, **Mender**, or **AWS IoT Greengrass** for OTA + diagnostics. Issue per-device X.509 certs via a tiny CA; rotate via API. Add a real `VL53L1X` ToF sensor + HX711 load cell over I²C on the Pi; expose `weight_g` / `fill_pct` in `EdgeReport`. Introduce a `devices`/`device_groups` table; add `/api/v1/devices/:id/reboot`, `/api/v1/devices/:id/diagnostics` endpoints.
+
+**Effort.** 4–8 weeks (hardware BOM + CI + OTA infra).
 
 ---
 
-## 6. What the Project Is Doing Right
+### 4.4 Data, Analytics & Reporting
 
-Don't lose these strengths while improving:
+**What exists today.** Single flat table `waste_entries` in SQLite or Postgres (`smartwaste/database.py:27-65`). Columns cover label/description/brand/timestamp/weight/bin_id + five `simulated_*` env fields. Indexes on label and timestamp (Postgres only, `:63-64`). Threaded Postgres pool with `maxconn=5` (`:109-117`). Grafana mounted as a sidecar.
 
-- **Clean module separation** — each file has a single responsibility. Strategies, presence detection, sensor fusion, classifier, and database are genuinely decoupled. This is better than most prototypes.
-- **Presence-gated API calls** — `PresenceDetector` is a smart cost optimization that most teams wouldn't think of until they see the Gemini bill.
-- **Dual-camera approach** — two angles reduce classification ambiguity. Genuine hardware differentiator.
-- **Sensor fusion (`oak_native.py`)** — depth + IMU + on-device NN voting is rare in open-source IoT. This is publication-worthy engineering.
-- **Pydantic config layering** — 50+ constants overridable via env vars without code changes. Enterprise-grade.
-- **Armenian brand recognition** — domain-specific prompt tuning for the deployment location signals product thinking, not just engineering.
-- **Progressive dataset accumulation** — every Gemini-labeled classification feeds a future on-device model. The flywheel is running.
-- **CI/CD pipeline** — ruff + mypy + pytest --cov on every push. Most startups skip this until regressions become a crisis.
-- **Docker Compose + Grafana** — operations infrastructure from day one.
-- **Thread-safe AppState** — proper lock-based classify gating shows concurrency awareness. Fix the one gap noted above and it's solid.
+**Gaps vs. enterprise.**
+- **[BLOCKER] No CSV / PDF / webhook export.** City council reporting, hauler invoicing, ESG audits all require export. Compology sends weekly PDFs; SmartBin has no `/api/export` of any kind.
+- **[BLOCKER] `bin_id` is not a tenant key.** `bin_id TEXT DEFAULT 'bin-01'` (`:42`) — nullable, no FK to an `organizations` table, no row-level security. Every logged-in user sees every bin's data.
+- **[BLOCKER] Headline metric is simulated.** Analytics built on `simulated_temperature`, `simulated_humidity`, `simulated_vibration`, `simulated_air_pollution`, `simulated_smoke` (`smartwaste/dataset.py:15-22`) are demo-only. Any data scientist who opens Grafana will spot the `random.uniform()` distribution inside a week.
+- **[MAJOR] No time-series schema.** Fill-rate curves, collection-interval forecasts, anomaly detection all require time-bucketed rollups. The repo has none.
+- **[MAJOR] No retention policy.** `waste_dataset/*.jpg` grows unbounded; Postgres volume grows unbounded.
+- **[MAJOR] No schema migrations.** `CREATE TABLE IF NOT EXISTS` only (`:27, :47`). First schema change in production = manual DDL. No Alembic, no Flyway.
+- **[MAJOR] Postgres pool is tiny.** `maxconn=5` (`:111`) will deadlock under any concurrent load.
+- **[MAJOR] No GDPR subject-access / delete.** No endpoint to export or purge an individual's or a tenant's data.
+
+**Remediation.** Introduce Alembic migrations; add `organizations`, `users`, `device_groups`, `daily_bin_stats` (time-bucketed) tables with `org_id` FKs; wire Postgres RLS. Add `/api/v1/export?format=csv|pdf&range=7d` using `pandas` + `weasyprint`. Swap simulated env fields for a `sensors` JSONB column populated only by real sensors, or delete them. Add a nightly image-retention job (`delete where created_at < now() - :days`). Raise pool `maxconn` to ≥ (2 × gunicorn workers).
+
+**Effort.** 3–4 weeks.
+
+---
+
+### 4.5 Security & Compliance
+
+**What exists today.** Session middleware with configurable secret (`smartwaste/settings.py:107`). Bearer auth for edges. `.env`-based secrets.
+
+**Gaps vs. enterprise. This section is the single biggest risk.**
+- **[BLOCKER] Secrets committed to the repo.** `INSTRUCTIONS.md:6` — Pi SSH password `Hexa1234`. `INSTRUCTIONS.md:8` — edge API key `smartbin-edge-2026-a7f3k9` *and* admin credentials `admin`/`password123`. `INSTRUCTIONS.md:80` repeats the key in a shell snippet. These are now in git history, *forever*, and visible to anyone with repo read access.
+- **[BLOCKER] Default session secret shipped in source.** `secret_key: str = "smartwaste-session-secret-change-in-prod"` (`smartwaste/settings.py:107`). Session forgery is trivial unless the operator happens to set `SMARTWASTE_SECRET_KEY`.
+- **[BLOCKER] Default admin credentials.** `admin`/`password123` (`smartwaste/settings.py:105-106`). Ships enabled.
+- **[BLOCKER] Admin password doubles as Bearer token.** `smartwaste/web.py:96`. Either credential compromises both surfaces.
+- **[BLOCKER] No TLS.** FastAPI served on plain HTTP `0.0.0.0:8000` (`smartwaste/settings.py:100-101`; `INSTRUCTIONS.md:5` uses `http://`). Credentials, session cookies, and edge keys cross the LAN in clear text.
+- **[MAJOR] Grafana ships as `admin/admin`.** `docker-compose.yml:46` defaults `GF_SECURITY_ADMIN_PASSWORD` to `admin`.
+- **[MAJOR] DB password `smartwaste`** default (`smartwaste/settings.py:97`, `docker-compose.yml:13`), connection unencrypted (`sslmode=disable`).
+- **[MAJOR] No secrets management.** `.env` files only — no Vault, no AWS Secrets Manager, no SOPS, no K8s Secret CSI.
+- **[MAJOR] No dependency scanning.** No Dependabot/Renovate config, no `pip-audit` in CI.
+- **[MAJOR] Container runs as root.** No `USER` directive in Dockerfile.
+- **[MAJOR] No CSRF protection** on state-changing forms.
+- **[MINOR] No brute-force protection** on `/login`.
+- **[MINOR] No security.txt / SECURITY.md** responsible-disclosure contact.
+
+**Remediation.** **Rotate every secret today** (Pi SSH, edge API key, admin password, Gemini key — the git history assumes compromise). Delete hard-coded secrets from `INSTRUCTIONS.md`, add an `INSTRUCTIONS.example.md`. Force a generated `SECRET_KEY` on first run or refuse to boot. Remove the admin-password-as-Bearer path (`smartwaste/web.py:96`). Add Caddy or nginx reverse proxy with Let's Encrypt / internal CA. Add non-root `USER` + `HEALTHCHECK` to Dockerfile. Enable Dependabot + CodeQL on GitHub. Target **SOC 2 Type I** within 12 months if enterprise is the plan.
+
+**Effort.** 1 week for the bleeding (rotate + TLS + non-root + default fixes); 2–3 months for SOC 2 readiness.
+
+---
+
+### 4.6 DevOps, Infrastructure & SRE
+
+**What exists today.** Three Docker Compose files, GitHub Actions CI (ruff, mypy, pytest). PostgreSQL healthcheck in compose. Python `logging` to file (`smartwaste/log_setup.py`). Grafana provisioning under `grafana/`.
+
+**Gaps vs. enterprise.**
+- **[BLOCKER] Single point of failure everywhere.** One Postgres instance, one FastAPI instance, one Gemini dependency, one laptop at `10.19.189.171` per `INSTRUCTIONS.md:5`. Any restart = outage.
+- **[BLOCKER] No backups, no PITR.** `pgdata:/` named volume in `docker-compose.yml:15` — no dump schedule, no off-host copy, no restore test documented.
+- **[MAJOR] No `/health` or `/ready` endpoint.** Kubernetes/ECS cannot probe liveness.
+- **[MAJOR] No Prometheus metrics / OpenTelemetry traces.** Grafana reads Postgres only; no RED/USE metrics, no latency histograms, no cross-service trace IDs.
+- **[MAJOR] No log aggregation.** `logs/run_*.log` is a local file. No Loki / ELK / Datadog / Sentry.
+- **[MAJOR] No alerting rules.** Grafana ships dashboards (`grafana/dashboards/`) but no alert policies; silence is the only feedback a down bin gives.
+- **[MAJOR] App container has no healthcheck** and no resource limits in `docker-compose.yml:24-40`.
+- **[MAJOR] CI is lint + test only.** No coverage gate, no container build, no image signing, no SBOM, no CD, no environments (stage / prod).
+- **[MAJOR] No Kubernetes manifests / Helm chart.** Procurement teams that mandate GKE/EKS are blocked.
+- **[MINOR] Bind-mount `./smartwaste:/app/smartwaste`** in `docker-compose.yml:40` — useful for dev, risky for prod (host edits land live).
+
+**Remediation.** Add `/health` + `/ready` returning DB + Gemini + disk status. Expose Prometheus metrics via `starlette-prometheus`; ship an OpenTelemetry collector. Pipe logs to Loki. Replace Grafana-only with Grafana + Alertmanager (PagerDuty / Slack). Write a Helm chart; CI builds and pushes signed container images (`cosign`) to GHCR on main. Schedule nightly `pg_dump` → S3, document a verified restore script. Add a `USER`, `HEALTHCHECK`, and `--read-only` to the app image.
+
+**Effort.** 3–4 weeks.
+
+---
+
+### 4.7 Testing & Quality
+
+**What exists today.** Roughly fourteen `tests/test_*.py` files exercising camera, classifier, config, database, dataset, presence, prompt, state, strategies, UI, utils, web. Pytest + coverage configured in `pyproject.toml`. CI runs ruff + mypy + pytest on 3.11.
+
+**Gaps vs. enterprise.**
+- **[MAJOR] No end-to-end tests.** Edge-device-to-server-to-dashboard flow is uncovered.
+- **[MAJOR] No load or stress tests.** No idea what 100 bins × 1 classification/min does to the system.
+- **[MAJOR] No chaos / fault injection.** No Gemini-down, Postgres-down, or network-partition scenarios.
+- **[MAJOR] Coverage is not enforced.** No threshold gate in CI; no badge; no per-PR coverage delta.
+- **[MAJOR] No security tests.** No OWASP Top 10 fuzzing, no dependency audit, no auth-bypass regression tests.
+- **[MAJOR] Postgres path untested in CI.** Tests default to SQLite; production runs Postgres → divergence hides bugs.
+- **[MINOR] No property-based tests.** Hypothesis would catch JSON-parsing edge cases in `classifier._extract_json`.
+- **[MINOR] No hardware-in-loop.** Real OAK USB disconnects aren't simulated.
+
+**Remediation.** Add a `tests/e2e/` suite using `testcontainers-python` (spin Postgres + FastAPI + a mock Gemini). Run it in CI. Add a `locust` load scenario. Set `--cov-fail-under=70` and ratchet up. Enable CodeQL + `pip-audit`. Add a Postgres CI matrix job.
+
+**Effort.** 2–3 weeks.
+
+---
+
+### 4.8 Frontend / UX / Accessibility
+
+**What exists today.** Four Jinja2 templates (`dashboard.html`, `index.html`, `login.html`, `site.html`) and two stylesheets (`smartwaste/web_static/style.css`, `site.css`) plus `site.js`. Marketing site is genuinely good — glassmorphism, responsive, Leaflet map with Yerevan deployment pins, animated counters.
+
+**Gaps vs. enterprise.**
+- **[BLOCKER] Dashboard has three numeric KPIs and no charts.** `smartwaste/web_templates/dashboard.html:130-143` shows `Active Bins / Online Now / Total Classifications` and nothing else. No timeline, no heatmap, no filter, no date range, no drill-down, no export. Compology ships a chart the first time you open the page.
+- **[BLOCKER] No map in the operator dashboard.** Marketing site has one; operators do not.
+- **[MAJOR] No pagination.** The bins grid `innerHTML = ''` and re-renders every poll (`dashboard.html:173-179`) — browser will stall past ~200 bins.
+- **[MAJOR] No alerts UI.** No "bin full," "bin offline >1 h," "Gemini quota exhausted" notifications.
+- **[MAJOR] Accessibility fails WCAG 2.1 AA.** No `aria-live` on polled KPIs (`dashboard.html:132-142`), no `:focus-visible` rings, no `prefers-reduced-motion` guard, decorative SVGs missing `aria-hidden`, no skip-link.
+- **[MAJOR] Mobile is rough.** The per-bin table (`index.html:75-85`) truncates with `white-space: nowrap; max-width: 120px`; sidebar stacking below a video feed is unreadable on a phone.
+- **[MINOR] Inline `<style>` block** in `dashboard.html:8-114` duplicates `style.css` — defeats browser caching.
+- **[MINOR] No favicon, no Open Graph tags** on `site.html`.
+- **[MINOR] "Coming Soon" placeholders** in `site.html:265-288` read as unfinished to a buyer.
+- **[MINOR] No dark/light toggle.** Dark only.
+
+**Remediation.** Ship `Chart.js` or `ECharts`; add a time-range picker component; add a real Leaflet view to `/dashboard`; add a toast/alert drawer. Introduce a React or Svelte build step (`vite`) — vanilla DOM updates won't scale. Audit with `axe-core` in CI. Add a mobile-first card layout replacing the entries table below 768 px. Replace marketing placeholders with embedded Loom/YouTube or hide the section until ready.
+
+**Effort.** 4–6 weeks (a dashboard rewrite is the single largest frontend investment).
+
+---
+
+### 4.9 Internationalization & Localization
+
+**What exists today.** All UI copy is English. Armenian brand names are baked into the Gemini prompt (`smartwaste/prompt.py:22`). `site.html:321-323` lists a `+374` phone and `@smartbin.am` email on an English page.
+
+**Gaps vs. enterprise.**
+- **[BLOCKER for Armenian deployment] No Armenian or Russian UI.** The product is deployed in Yerevan (`CLAUDE.md`, `smartwaste/settings.py:49` → `location: "Yerevan"`) with an English-only operator UI. Staff training cost goes up, adoption goes down.
+- **[MAJOR] No locale-aware dates/numbers/units.** ISO timestamps rendered raw (`index.html:197`); no 24-hour / DD.MM.YYYY; no kg vs lb toggle.
+- **[MAJOR] Brand list hard-coded in prompt.** Every new market requires a code change and a Gemini cost evaluation.
+- **[MINOR] No RTL readiness** for future Arabic / Hebrew markets.
+
+**Remediation.** Extract all user-facing strings to `locale/<lang>.json`; integrate `babel` on the backend and `i18next` on any future SPA. Translate first to `hy-AM` and `ru-RU`. Move the brand list to `config/brands/<region>.yaml` loaded into the prompt at runtime.
+
+**Effort.** 2 weeks (strings + hy-AM) + ongoing translation cost.
+
+---
+
+### 4.10 Product, Business & Go-to-Market
+
+**What exists today.** A working demo, a marketing site, one deployed bin in Yerevan.
+
+**Gaps vs. enterprise.**
+- **[BLOCKER] No pricing model exposed anywhere.** Competitors publish per-bin-per-month or per-tonnage rates; SmartBin has none visible in `site.html` or docs.
+- **[BLOCKER] No customer portal / onboarding flow.** No "sign up → create org → add first bin → invite users" path. Sales teams cannot self-serve demos.
+- **[MAJOR] No mobile app.** Field ops live on phones. Bigbelly, Nordsense, Enevo all ship iOS + Android; a PWA would be the minimum credible answer.
+- **[MAJOR] No route-optimization module.** Enevo's entire business.
+- **[MAJOR] No ESG / carbon-credit reporting.** Municipal RFPs increasingly require it.
+- **[MAJOR] No municipal ERP / GIS integrations.** City CRMs (Salesforce Public Sector, Cityworks, ArcGIS).
+- **[MAJOR] No SLA tracking.** No per-bin uptime %, missed-pickup counts, service credits.
+- **[MAJOR] No SECURITY.md / compliance posture page.** Enterprise procurement sends a vendor-security-questionnaire as the first step; SmartBin cannot fill it out.
+- **[MINOR] No case studies / social proof** on `site.html`. "Deployed in Yerevan" with a map is the entire evidence.
+- **[MINOR] No developer docs** (`/docs`, SDK, webhook reference).
+
+**Remediation.** Publish a pricing page (even "Contact us" tiers). Build a tenant onboarding wizard. Pick **one** of {route optimization, ESG reporting, municipal ERP} as a first real differentiator — don't try to ship all three. Publish a `SECURITY.md`, `LICENSE`, `CONTRIBUTING.md`. Add a PWA wrapper over the operator dashboard for "mobile app in a week."
+
+**Effort.** Ongoing product work; 6–8 weeks to get the basics visible.
+
+---
+
+## 5. Top 10 Blockers (Prioritized)
+
+| # | Blocker | Severity | Fix window |
+|---|---|---|---|
+| 1 | Secrets committed in `INSTRUCTIONS.md`; rotate everything | BLOCKER | 1 day (rotate) + 1 week (remove + rewrite history) |
+| 2 | Admin password doubles as Bearer token (`smartwaste/web.py:96`) | BLOCKER | 1 day |
+| 3 | Default credentials + default session secret shipped | BLOCKER | 1 day |
+| 4 | No TLS on any endpoint | BLOCKER | 3 days (Caddy reverse proxy) |
+| 5 | No multi-tenancy (single admin, no org model) | BLOCKER | 3 weeks |
+| 6 | Simulated sensor data in analytics pipeline | BLOCKER | 2 weeks (remove + real sensors) |
+| 7 | Gemini single-vendor lock-in, no fallback | BLOCKER | 4 weeks |
+| 8 | No CSV/PDF export from dashboard | BLOCKER | 1 week |
+| 9 | No backups / PITR for Postgres | BLOCKER | 3 days |
+| 10 | Dashboard has zero charts | BLOCKER | 2 weeks |
+
+---
+
+## 6. 90-Day Remediation Roadmap
+
+### Phase 1 — Stop the bleeding (Days 1–14)
+- Rotate every committed secret; purge from git history (BFG / `git filter-repo`); add `SECURITY.md`.
+- Delete the admin-password-as-Bearer branch in `smartwaste/web.py:96`.
+- Force-generate `SECRET_KEY` on first boot if default is detected; refuse to start with default admin password outside dev.
+- Put Caddy in front of FastAPI; terminate TLS with internal CA or Let's Encrypt.
+- Add non-root `USER`, `HEALTHCHECK`, resource limits to `Dockerfile` / `docker-compose.yml`.
+- Enable Dependabot + CodeQL + `pip-audit` in CI.
+- Schedule nightly `pg_dump` to off-host S3-compatible store; test a restore.
+- Add `/health` + `/ready` endpoints.
+- Delete simulated sensor columns, or rename them `*_demo` and exclude from real dashboards.
+
+### Phase 2 — Parity with single-tenant competitors (Days 15–45)
+- Introduce Alembic migrations.
+- Schema: `organizations`, `users`, `roles`, `api_keys`, `device_groups`, `audit_log`; add `org_id` FKs; enable Postgres RLS.
+- Replace session auth with per-user Argon2 hashes + per-device API keys; add password reset + MFA (TOTP).
+- Add `/api/v1/` prefix; deprecate unversioned routes.
+- Rewrite dashboard: `vite` + React (or Svelte), Chart.js, time-range picker, map, alerts drawer, CSV + PDF export.
+- Add real fill-level: VL53L1X ToF + HX711 load cell on the Pi; populate `weight_g` / `fill_pct`; retire `random.uniform()` (`smartwaste/dataset.py:15-22`).
+- Ship i18n scaffolding; translate to `hy-AM` + `ru-RU`.
+- Add `slowapi` rate limits + CSRF tokens on state-changing forms.
+
+### Phase 3 — Competitive differentiation (Days 46–90)
+- Ship an on-device classifier (YOLOv8-n or fine-tuned MobileNet-SSD on the saved dataset) as a Gemini fallback.
+- Return `confidence` and `contamination_pct` in every result.
+- OTA: adopt balena / Mender; per-device X.509 certs; remote reboot + diagnostics endpoints.
+- Observability: Prometheus metrics via `starlette-prometheus`, Loki for logs, Alertmanager → Slack/PagerDuty, OpenTelemetry traces across edge→server.
+- Load tests in CI (`locust`, 100 virtual bins); coverage gate at 70 %.
+- Publish Helm chart + signed container images (cosign) to GHCR.
+- Pick one differentiator and ship an MVP: route optimization *or* ESG carbon reporting *or* municipal ERP connector.
+
+At day 90 SmartBin should be able to respond credibly to a municipal or hauler RFP.
+
+---
+
+## 7. Competitive Positioning Verdict
+
+**Where SmartBin wins today.** Open-source stack, commodity BOM (OAK-D + Raspberry Pi ~ $400 vs Bigbelly's ~ $4k), genuinely clever on-device sensor fusion (`smartwaste/oak_native.py`), and a brand/visual identity that looks more expensive than the product is. A university, a small hauler, or a single municipality pilot is a realistic sale **today**.
+
+**Where SmartBin loses today.** Every enterprise checklist item — SOC 2, multi-tenant RBAC, OTA, SLA, real fill sensors, on-prem option, mobile app, integrations, certifications. A city procurement officer who asks "can I get a CSV of last month's collections per district, broken down by contamination rate?" gets no for every clause.
+
+**Honest Series-A readiness.** The **narrative** is ready. The **product** is not. An investor who does thirty minutes of diligence (clones the repo, reads `INSTRUCTIONS.md`, greps for `random.uniform`) will flag items 1, 2, 3, and 6 above within a first meeting. Fix those four before the next pitch and the conversation changes entirely.
+
+**The single highest-leverage change.** **Add real weight + fill-level sensors.** Everything downstream — analytics, forecasting, route optimization, ESG reporting, municipal sales — is gated by having one real number that is not `random.uniform()`. Nothing else on this list buys as much credibility per week of engineering.
+
+---
+
+## 8. Appendix — File Map
+
+| File | Why it matters |
+|---|---|
+| `smartwaste/web.py` | FastAPI app, auth (`:89-98`), in-memory bin registry (`:113`), endpoints. |
+| `smartwaste/classifier.py` | Gemini client (`:27,58`), circuit breaker (`:67-100`), retries (`:132-142`). |
+| `smartwaste/prompt.py` | Hard-coded classification prompt + Armenian brand list (`:22`). |
+| `smartwaste/schemas.py` | `EdgeReport` (unused `weight`, `simulated_*`). |
+| `smartwaste/dataset.py` | `random.uniform()` env data (`:15-22`); blank `weight` on save (`:37`). |
+| `smartwaste/database.py` | Flat `waste_entries` schema (`:27-65`); Postgres pool `maxconn=5` (`:109-117`). |
+| `smartwaste/settings.py` | Defaults: `admin/password123` (`:105-106`), `secret_key` (`:107`), `db_password` (`:97`). |
+| `smartwaste/oak_native.py` | On-device sensor fusion — the real engineering differentiator. |
+| `smartwaste/edge_client.py` | Edge→server HTTP client + heartbeat. |
+| `docker-compose.yml` | Postgres + app + Grafana; Grafana default `admin/admin` (`:46`). |
+| `INSTRUCTIONS.md` | Leaks Pi SSH password (`:6`) and edge API key + admin creds (`:8, :80`). |
+| `smartwaste/web_templates/dashboard.html` | Operator dashboard — only 3 KPIs (`:130-143`), no charts. |
+| `smartwaste/web_templates/index.html` | Per-bin view; mobile-hostile table (`:75-85`). |
+| `smartwaste/web_templates/site.html` | Marketing site; placeholders (`:265-288`), contact (`:321-323`). |
+| `smartwaste/web_static/style.css` | Dashboard styles — no `:focus-visible`, no reduced-motion. |
+| `smartwaste/web_static/site.css` | Marketing styles — solid. |
+| `CLAUDE.md` | Project internal notes; brand palette (`:158-195`). |
+
+---
+
+*End of review. Next action recommended: execute Phase 1 of Section 6 this week.*

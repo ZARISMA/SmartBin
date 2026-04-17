@@ -167,6 +167,17 @@ def _active_count(detector: OAKOccupancyDetector) -> int:
     return 2 + int(detector.nn_available)  # presence + motion always on
 
 
+def _detect_headless() -> bool:
+    """True when no display is available — edge containers, SSH, etc."""
+    if os.environ.get("SMARTWASTE_HEADLESS", "").lower() in ("1", "true", "yes"):
+        return True
+    if os.environ.get("SMARTWASTE_EDGE_MODE", "").lower() in ("1", "true", "yes"):
+        return True
+    if sys.platform.startswith(("linux", "darwin")) and not os.environ.get("DISPLAY"):
+        return True
+    return False
+
+
 # ── State-machine tick (called at OAK_CHECK_INTERVAL) ─────────────────────────
 
 def _tick(
@@ -310,15 +321,21 @@ def main() -> None:
     display_h = DISPLAY_SIZE[1] if dual_mode else OAK_DISPLAY_H
     mode_title = "Dual OAK Native" if dual_mode else "OAK Native"
 
-    try:
-        cv2.namedWindow(OAK_WINDOW, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(OAK_WINDOW, display_w, display_h)
-    except cv2.error as exc:
-        raise RuntimeError(
-            f"Cannot open display window: {exc}\n"
-            "On Linux/Raspberry Pi: a monitor must be connected and a desktop "
-            "session active. If using SSH, run: export DISPLAY=:0"
-        ) from exc
+    headless = _detect_headless()
+    if headless:
+        logger.info("Headless mode — skipping OpenCV GUI (edge / no DISPLAY).")
+    else:
+        try:
+            cv2.namedWindow(OAK_WINDOW, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(OAK_WINDOW, display_w, display_h)
+        except cv2.error as exc:
+            raise RuntimeError(
+                f"Cannot open display window: {exc}\n"
+                "On Linux/Raspberry Pi: a monitor must be connected and a desktop "
+                "session active. If using SSH, run: export DISPLAY=:0\n"
+                "For headless edge deployments set SMARTWASTE_HEADLESS=1 "
+                "or SMARTWASTE_EDGE_MODE=true."
+            ) from exc
 
     app_state = AppState()
     app_state.set_status("Calibrating", "Warming up sensors…")
@@ -390,7 +407,7 @@ def main() -> None:
                     classify_frame = last_votes.rgb_frame
 
                 # ── Display ───────────────────────────────────────────────────
-                if classify_frame is not None:
+                if classify_frame is not None and not headless:
                     disp = cv2.resize(
                         classify_frame, (display_w, display_h),
                         interpolation=cv2.INTER_AREA,
@@ -410,16 +427,19 @@ def main() -> None:
                         classify_frame,
                     )
 
-                # ── Keyboard ──────────────────────────────────────────────────
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord("q"):
-                    logger.info("Quit.")
-                    break
-                if key != 0xFF:
-                    oak_state = _handle_key(
-                        key, oak_state, last_votes, app_state, detector,
-                        classify_frame,
-                    )
+                # ── Keyboard / loop pacing ────────────────────────────────────
+                if headless:
+                    time.sleep(0.01)
+                else:
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord("q"):
+                        logger.info("Quit.")
+                        break
+                    if key != 0xFF:
+                        oak_state = _handle_key(
+                            key, oak_state, last_votes, app_state, detector,
+                            classify_frame,
+                        )
 
         except KeyboardInterrupt:
             logger.info("Stopping (Ctrl+C)…")
@@ -430,8 +450,9 @@ def main() -> None:
                     cam2_pipeline.stop()
                 except Exception:
                     pass
-            cv2.destroyAllWindows()
-            cv2.waitKey(1)
+            if not headless:
+                cv2.destroyAllWindows()
+                cv2.waitKey(1)
             time.sleep(0.2)
             logger.info("Stopped cleanly.")
 

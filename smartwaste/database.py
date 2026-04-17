@@ -62,7 +62,6 @@ CREATE TABLE IF NOT EXISTS waste_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_waste_label ON waste_entries(label);
 CREATE INDEX IF NOT EXISTS idx_waste_ts ON waste_entries(timestamp);
-CREATE INDEX IF NOT EXISTS idx_waste_bin_id ON waste_entries(bin_id);
 """
 
 _INSERT_COLS = (
