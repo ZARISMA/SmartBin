@@ -13,26 +13,35 @@ Camera mode is selected via the SMARTWASTE_CAMERA_MODE env var:
   oak-native   — single OAK-D with depth/IMU/NN sensor fusion
 """
 
+import base64
 import contextlib
 import os
 import threading
 import time
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from datetime import datetime
 
 import cv2
 import numpy as np
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Form
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from .config import (
+    ADMIN_PASSWORD,
+    ADMIN_USERNAME,
     AUTO_INTERVAL,
+    BIN_ID,
     CAMERA_MODE,
     CROP_PERCENT,
+    DATASET_DIR,
     DISPLAY_SIZE,
+    EDGE_MODE,
     JPEG_QUALITY,
     MAX_DT,
     OAK_CHECK_INTERVAL,
@@ -41,10 +50,12 @@ from .config import (
     OAK_DISPLAY_W,
     OAK_EMPTY_CONFIRM_N,
     OAK_VOTES_NEEDED,
+    SECRET_KEY,
     WEB_HOST,
     WEB_PORT,
 )
-from .database import get_entries, get_entry_count, get_label_counts
+from .database import get_active_bins, get_entries, get_entry_count, get_label_counts, insert_entry
+from .schemas import BinHeartbeat, EdgeReport
 from .log_setup import get_logger
 from .state import AppState
 from .ui import draw_nn_detections, draw_overlay
@@ -58,12 +69,74 @@ _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     _start_camera_thread()
+    if EDGE_MODE:
+        from .edge_client import start_heartbeat_thread
+
+        start_heartbeat_thread()
     yield
 
 
 app = FastAPI(title="Smart Waste AI", lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 app.mount("/static", StaticFiles(directory=os.path.join(_MODULE_DIR, "web_static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(_MODULE_DIR, "web_templates"))
+
+
+# ── Auth helpers ─────────────────────────────────────────────────────────────
+
+
+def _is_authenticated(request: Request) -> bool:
+    """Check session cookie or Authorization Bearer token."""
+    if request.session.get("user"):
+        return True
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer ") and auth[7:] == ADMIN_PASSWORD:
+        return True
+    return False
+
+# ── Bin registry (in-memory, populated by edge heartbeats) ───────────────────
+
+
+@dataclass
+class BinInfo:
+    bin_id: str
+    status: str = "online"
+    last_seen: datetime = field(default_factory=datetime.now)
+    camera_mode: str = ""
+    uptime_seconds: float = 0.0
+
+
+_bin_registry: dict[str, BinInfo] = {}
+_bin_lock = threading.Lock()
+
+_BIN_ONLINE_TIMEOUT = 60  # seconds — bin considered offline after this
+
+
+def _update_bin(hb: BinHeartbeat) -> None:
+    with _bin_lock:
+        _bin_registry[hb.bin_id] = BinInfo(
+            bin_id=hb.bin_id,
+            status=hb.status,
+            last_seen=datetime.now(),
+            camera_mode=hb.camera_mode,
+            uptime_seconds=hb.uptime_seconds,
+        )
+
+
+def _get_bin_status() -> list[dict]:
+    now = datetime.now()
+    with _bin_lock:
+        return [
+            {
+                "bin_id": info.bin_id,
+                "status": "online" if (now - info.last_seen).total_seconds() < _BIN_ONLINE_TIMEOUT else "offline",
+                "last_seen": info.last_seen.isoformat(),
+                "camera_mode": info.camera_mode,
+                "uptime_seconds": info.uptime_seconds,
+            }
+            for info in _bin_registry.values()
+        ]
+
 
 # ── Shared state ──────────────────────────────────────────────────────────────
 
@@ -205,7 +278,7 @@ def _camera_loop_raspberry() -> None:
 
 
 def _camera_loop_oak_native() -> None:
-    """Capture frames from a single OAK-D with sensor fusion in a background thread."""
+    """Capture frames from a single OAK camera with sensor fusion in a background thread."""
     global _cameras_ok
 
     try:
@@ -218,7 +291,7 @@ def _camera_loop_oak_native() -> None:
 
     infos = dai.Device.getAllAvailableDevices()
     if not infos:
-        logger.warning("No OAK-D device found. Camera stream unavailable.")
+        logger.warning("No OAK device found. Camera stream unavailable.")
         return
 
     logger.info("Using OAK device: %s", infos[0].getDeviceId())
@@ -226,8 +299,8 @@ def _camera_loop_oak_native() -> None:
     with dai.Device(infos[0]) as device:
         detector = OAKOccupancyDetector(device)
         _cameras_ok = True
-        _state.set_status("Calibrating", "Warming up OAK-D sensors...")
-        logger.info("OAK-D Native camera thread started")
+        _state.set_status("Calibrating", "Warming up sensors...")
+        logger.info("OAK Native camera thread started")
 
         # State machine (mirrors mainoak.py)
         oak_state = "calibrating"
@@ -320,10 +393,13 @@ _CAMERA_LOOPS = {
 
 
 def _start_camera_thread() -> None:
+    if CAMERA_MODE == "none":
+        logger.info("Camera mode is 'none' — running as server-only (no camera thread)")
+        return
     loop_fn = _CAMERA_LOOPS.get(CAMERA_MODE)
     if loop_fn is None:
         logger.error(
-            "Unknown SMARTWASTE_CAMERA_MODE=%r. Valid: %s",
+            "Unknown SMARTWASTE_CAMERA_MODE=%r. Valid: %s, none",
             CAMERA_MODE,
             ", ".join(_CAMERA_LOOPS),
         )
@@ -366,12 +442,36 @@ def _generate_frames():
         time.sleep(0.033)  # ~30 FPS cap
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Routes: Auth ──────────────────────────────────────────────────────────────
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    if request.session.get("user"):
+        return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse(request=request, name="login.html", context={"error": None})
+
+
+@app.post("/login")
+def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        request.session["user"] = username
+        return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"error": "Invalid username or password"},
+        status_code=401,
+    )
+
+
+@app.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=302)
+
+
+# ── Routes: Public ────────────────────────────────────────────────────────────
 
 
 @app.get("/site", response_class=HTMLResponse)
@@ -379,16 +479,45 @@ def site(request: Request):
     return templates.TemplateResponse(request=request, name="site.html")
 
 
+# ── Routes: Protected dashboard ──────────────────────────────────────────────
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard(request: Request):
+    if not _is_authenticated(request):
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse(request=request, name="dashboard.html")
+
+
+@app.get("/bin/{bin_id}", response_class=HTMLResponse)
+def bin_detail(request: Request, bin_id: str):
+    if not _is_authenticated(request):
+        return RedirectResponse("/login", status_code=302)
+    has_local_camera = (bin_id == BIN_ID and CAMERA_MODE != "none" and _cameras_ok)
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"bin_id": bin_id, "has_local_camera": has_local_camera},
+    )
+
+
 @app.get("/stream")
-def video_feed():
+def video_feed(request: Request):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     return StreamingResponse(
         _generate_frames(),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
 
+# ── Routes: Protected API ────────────────────────────────────────────────────
+
+
 @app.post("/api/classify")
-def api_classify():
+def api_classify(request: Request):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     frame = _get_frame()
     if frame is None:
         return JSONResponse({"error": "No camera frame available"}, status_code=503)
@@ -400,13 +529,17 @@ def api_classify():
 
 
 @app.post("/api/toggle-auto")
-def api_toggle_auto():
+def api_toggle_auto(request: Request):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     new_state = _state.toggle_auto()
     return {"auto_classify": new_state}
 
 
 @app.get("/api/state")
-def api_state():
+def api_state(request: Request):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     label, detail, auto_on = _state.get_display()
     return {
         "label": label,
@@ -418,15 +551,110 @@ def api_state():
 
 
 @app.get("/api/entries")
-def api_entries(limit: int = 20, offset: int = 0):
-    return get_entries(limit=limit, offset=offset)
+def api_entries(request: Request, limit: int = 20, offset: int = 0, bin_id: str | None = None):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return get_entries(limit=limit, offset=offset, bin_id=bin_id)
 
 
 @app.get("/api/stats")
-def api_stats():
+def api_stats(request: Request, bin_id: str | None = None):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     return {
-        "total": get_entry_count(),
-        "by_category": get_label_counts(),
+        "total": get_entry_count(bin_id=bin_id),
+        "by_category": get_label_counts(bin_id=bin_id),
+    }
+
+
+@app.get("/api/bins")
+def api_bins(request: Request):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return get_active_bins()
+
+
+# ── Routes: Edge reporting (used by edge devices) ────────────────────────────
+
+
+@app.post("/api/report")
+def api_report(request: Request, report: EdgeReport):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    entry = {
+        "filename": "",
+        "label": report.label,
+        "description": report.description,
+        "brand_product": report.brand_product,
+        "location": report.location,
+        "weight": report.weight,
+        "timestamp": report.timestamp,
+        "bin_id": report.bin_id,
+    }
+    env = {
+        "simulated_temperature": report.simulated_temperature,
+        "simulated_humidity": report.simulated_humidity,
+        "simulated_vibration": report.simulated_vibration,
+        "simulated_air_pollution": report.simulated_air_pollution,
+        "simulated_smoke": report.simulated_smoke,
+    }
+
+    # Save image if provided
+    if report.image_b64:
+        try:
+            img_data = base64.b64decode(report.image_b64)
+            os.makedirs(DATASET_DIR, exist_ok=True)
+            ts = report.timestamp.replace(" ", "_").replace(":", "-")
+            filename = f"{report.label}_{report.bin_id}_{ts}.jpg"
+            filepath = os.path.join(DATASET_DIR, filename)
+            with open(filepath, "wb") as f:
+                f.write(img_data)
+            entry["filename"] = filepath
+        except Exception as e:
+            logger.warning("Failed to save edge image: %s", e)
+
+    row_id = insert_entry(entry, env)
+    return {"status": "ok", "id": row_id}
+
+
+@app.post("/api/heartbeat")
+def api_heartbeat(request: Request, hb: BinHeartbeat):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    _update_bin(hb)
+    return {"status": "ok"}
+
+
+@app.get("/api/dashboard")
+def api_dashboard(request: Request):
+    """Combined bin registry + database stats for the dashboard page."""
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    # Merge heartbeat registry with DB data
+    db_bins = {b["bin_id"]: b for b in get_active_bins()}
+    heartbeat_bins = {b["bin_id"]: b for b in _get_bin_status()}
+
+    all_bin_ids = set(db_bins.keys()) | set(heartbeat_bins.keys())
+    bins = []
+    for bid in sorted(all_bin_ids):
+        db = db_bins.get(bid, {})
+        hb = heartbeat_bins.get(bid, {})
+        bins.append({
+            "bin_id": bid,
+            "location": db.get("location", ""),
+            "status": hb.get("status", "offline"),
+            "last_seen": hb.get("last_seen", ""),
+            "last_timestamp": db.get("last_timestamp", ""),
+            "total_entries": db.get("total", 0),
+            "camera_mode": hb.get("camera_mode", ""),
+        })
+
+    return {
+        "bins": bins,
+        "total_bins": len(bins),
+        "total_entries": get_entry_count(),
     }
 
 

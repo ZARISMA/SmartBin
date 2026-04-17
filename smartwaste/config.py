@@ -32,6 +32,20 @@ WEB_HOST = settings.web_host
 WEB_PORT = settings.web_port
 CAMERA_MODE = settings.camera_mode
 
+# ── Authentication ────────────────────────────────────────────────────────────
+ADMIN_USERNAME = settings.admin_username
+ADMIN_PASSWORD = settings.admin_password
+SECRET_KEY = settings.secret_key
+
+# ── Bin identity ──────────────────────────────────────────────────────────────
+BIN_ID = settings.bin_id
+
+# ── Edge mode ─────────────────────────────────────────────────────────────────
+EDGE_MODE = settings.edge_mode
+SERVER_URL = settings.server_url
+EDGE_API_KEY = settings.edge_api_key
+HEARTBEAT_INTERVAL = settings.heartbeat_interval
+
 # ── Classification ─────────────────────────────────────────────────────────────
 MODEL_NAME = settings.model_name
 VALID_CLASSES = ["Plastic", "Glass", "Paper", "Organic", "Aluminum", "Other", "Empty"]
@@ -54,7 +68,7 @@ BG_WARMUP_FRAMES = settings.bg_warmup_frames
 CHECK_INTERVAL = settings.check_interval
 
 # ── OAK-D Native mode (mainoak.py) ────────────────────────────────────────────
-OAK_WINDOW = "Smart Waste AI (OAK-D Native)"
+OAK_WINDOW = "Smart Waste AI (OAK Native)"
 OAK_DISPLAY_W = settings.oak_display_w
 OAK_DISPLAY_H = settings.oak_display_h
 
@@ -75,3 +89,4 @@ OAK_VOTES_NEEDED = settings.oak_votes_needed
 OAK_DETECT_CONFIRM_N = settings.oak_detect_confirm_n
 OAK_EMPTY_CONFIRM_N = settings.oak_empty_confirm_n
 OAK_CHECK_INTERVAL = settings.oak_check_interval
+MOTION_SPIKE_FACTOR = settings.motion_spike_factor

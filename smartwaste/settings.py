@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     oak_detect_confirm_n: int = 3
     oak_empty_confirm_n: int = 5
     oak_check_interval: float = 0.4
+    motion_spike_factor: float = 3.0  # presence score jump multiplier for "drop" event
 
     # ── API retry / circuit breaker ────────────────────────────────────────────
     api_retry_attempts: int = 3  # max tenacity attempts per classify call
@@ -98,7 +99,21 @@ class Settings(BaseSettings):
     # ── Web UI ─────────────────────────────────────────────────────────────────
     web_host: str = "0.0.0.0"
     web_port: int = 8000
-    camera_mode: str = "oak"  # "oak", "raspberry", or "oak-native"
+    camera_mode: str = "oak"  # "oak", "raspberry", "oak-native", or "none"
+
+    # ── Authentication ─────────────────────────────────────────────────────────
+    admin_username: str = "admin"
+    admin_password: str = "password123"
+    secret_key: str = "smartwaste-session-secret-change-in-prod"
+
+    # ── Bin identity ───────────────────────────────────────────────────────────
+    bin_id: str = "bin-01"
+
+    # ── Edge mode ──────────────────────────────────────────────────────────────
+    edge_mode: bool = False
+    server_url: str = ""  # e.g. "http://192.168.1.100:8000"
+    edge_api_key: str = ""  # shared secret for authenticating to server
+    heartbeat_interval: int = 30  # seconds between heartbeats
 
 
 # Module-level singleton — imported by config.py and classifier.py

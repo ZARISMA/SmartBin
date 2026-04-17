@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Waste AI - Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .dash-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .dash-header h1 { margin: 0; }
+        .summary-bar {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+        .summary-item {
+            background: rgba(30, 40, 35, 0.55);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(45, 90, 66, 0.25);
+            border-radius: 14px;
+            padding: 20px 28px;
+            min-width: 160px;
+            flex: 1;
+        }
+        .summary-item .num {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #2D5A42, #1A4D6B);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .summary-item .lbl {
+            color: #8C8C8C;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+        .bins-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        .bin-card {
+            background: rgba(30, 40, 35, 0.55);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(45, 90, 66, 0.25);
+            border-radius: 16px;
+            padding: 24px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .bin-card:hover {
+            border-color: rgba(45, 90, 66, 0.6);
+            box-shadow: 0 4px 24px rgba(45, 90, 66, 0.15);
+        }
+        .bin-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .bin-card-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #F5F5F7;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.online {
+            background: #4CAF50;
+            box-shadow: 0 0 8px #4CAF50;
+        }
+        .status-dot.offline {
+            background: #C62828;
+            box-shadow: 0 0 8px #C62828;
+        }
+        .status-label {
+            font-size: 0.8rem;
+            margin-left: 6px;
+        }
+        .status-label.online { color: #4CAF50; }
+        .status-label.offline { color: #C62828; }
+        .bin-card-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 0.88rem;
+        }
+        .bin-card-row .key { color: #8C8C8C; }
+        .bin-card-row .val { color: #E0E0E0; }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #8C8C8C;
+        }
+        .empty-state h2 {
+            color: #E0E0E0;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particles"></canvas>
+
+    <header class="dash-header">
+        <h1>Smart Waste AI</h1>
+        <div style="display:flex;align-items:center;gap:12px">
+            <a href="/site" style="color:#40E0D0;font-size:0.85rem;text-decoration:none">Presentation</a>
+            <form method="POST" action="/logout" style="margin:0">
+                <button type="submit" style="background:rgba(198,40,40,0.25);border:1px solid rgba(198,40,40,0.4);color:#ef5350;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:0.8rem">Logout</button>
+            </form>
+        </div>
+    </header>
+
+    <main style="padding:24px 0">
+        <div class="summary-bar">
+            <div class="summary-item">
+                <div class="num" id="total-bins">0</div>
+                <div class="lbl">Active Bins</div>
+            </div>
+            <div class="summary-item">
+                <div class="num" id="online-bins">0</div>
+                <div class="lbl">Online Now</div>
+            </div>
+            <div class="summary-item">
+                <div class="num" id="total-classifications">0</div>
+                <div class="lbl">Total Classifications</div>
+            </div>
+        </div>
+
+        <h2 style="margin-bottom:16px;color:#E0E0E0">Trash Bins</h2>
+        <div class="bins-grid" id="bins-grid">
+            <div class="empty-state">
+                <h2>Loading...</h2>
+                <p>Fetching bin data</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const CAT_COLORS = {
+            Plastic: '#87CEEB', Glass: '#40E0D0', Paper: '#D2B48C',
+            Organic: '#1E4D2B', Aluminum: '#A9A9A9', Other: '#9370DB',
+            Empty: '#8C8C8C'
+        };
+
+        async function pollDashboard() {
+            try {
+                const res = await fetch('/api/dashboard');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                document.getElementById('total-bins').textContent = data.total_bins;
+                document.getElementById('total-classifications').textContent = data.total_entries;
+
+                const onlineCount = (data.bins || []).filter(b => b.status === 'online').length;
+                document.getElementById('online-bins').textContent = onlineCount;
+
+                const grid = document.getElementById('bins-grid');
+                if (!data.bins || data.bins.length === 0) {
+                    grid.innerHTML = '<div class="empty-state"><h2>No bins registered</h2><p>Start an edge device to see bins here</p></div>';
+                    return;
+                }
+
+                grid.innerHTML = '';
+                for (const bin of data.bins) {
+                    const isOnline = bin.status === 'online';
+                    const statusClass = isOnline ? 'online' : 'offline';
+                    const card = document.createElement('a');
+                    card.href = '/bin/' + encodeURIComponent(bin.bin_id);
+                    card.className = 'bin-card';
+                    card.innerHTML = `
+                        <div class="bin-card-header">
+                            <h3>${bin.bin_id}</h3>
+                            <div>
+                                <span class="status-dot ${statusClass}"></span>
+                                <span class="status-label ${statusClass}">${isOnline ? 'Online' : 'Offline'}</span>
+                            </div>
+                        </div>
+                        <div class="bin-card-row"><span class="key">Location</span><span class="val">${bin.location || 'N/A'}</span></div>
+                        <div class="bin-card-row"><span class="key">Camera</span><span class="val">${bin.camera_mode || 'N/A'}</span></div>
+                        <div class="bin-card-row"><span class="key">Classifications</span><span class="val">${bin.total_entries || 0}</span></div>
+                        <div class="bin-card-row"><span class="key">Last Activity</span><span class="val">${bin.last_timestamp ? bin.last_timestamp.substring(0, 19) : 'N/A'}</span></div>
+                    `;
+                    grid.appendChild(card);
+                }
+            } catch (e) { /* ignore transient errors */ }
+        }
+
+        /* Particle background */
+        (function initParticles() {
+            const canvas = document.getElementById('particles');
+            const ctx = canvas.getContext('2d');
+            let particles = [];
+            const COUNT = 25;
+            function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+            resize();
+            window.addEventListener('resize', resize);
+            for (let i = 0; i < COUNT; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+                    r: Math.random() * 1.5 + 0.5,
+                    dx: (Math.random() - 0.5) * 0.3, dy: (Math.random() - 0.5) * 0.3,
+                    alpha: Math.random() * 0.3 + 0.05,
+                });
+            }
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                for (const p of particles) {
+                    p.x += p.dx; p.y += p.dy;
+                    if (p.x < 0) p.x = canvas.width; if (p.x > canvas.width) p.x = 0;
+                    if (p.y < 0) p.y = canvas.height; if (p.y > canvas.height) p.y = 0;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(45, 90, 66, ${p.alpha})`; ctx.fill();
+                }
+                requestAnimationFrame(draw);
+            }
+            draw();
+        })();
+
+        setInterval(pollDashboard, 5000);
+        pollDashboard();
+    </script>
+</body>
+</html>

@@ -1,20 +1,20 @@
 """
-mainoak.py — Smart Waste AI (OAK-D Native Mode)
+mainoak.py — Smart Waste AI (OAK Native Mode)
 
-Supports 1 or 2 OAK-D cameras:
+Supports 1 or 2 OAK cameras:
 
   2 cameras → dual view (sensor fusion on camera 1, RGB from camera 2,
               frames concatenated side-by-side for Gemini)
   1 camera  → single view with sensor fusion only
 
-Uses three OAK-D hardware sensors on the primary camera to decide when the
+Uses three software/hardware sensors on the primary camera to decide when the
 bin is occupied, then fires one Gemini API call for waste classification:
 
-  Depth   — stereo IR measures distance change in bin ROI (lighting-independent)
-  IMU     — accelerometer detects the physical shock when an item is dropped
-  NN      — MobileNetSSD runs on the Myriad X VPU for on-device object detection
+  Presence — pixel-diff background model detects item in bin
+  Motion   — sudden score spike detects the moment an item is dropped
+  NN       — MobileNetSSD runs on the Myriad X VPU for on-device object detection
 
-All three sensors vote; Gemini is triggered when ≥ 2 agree the bin is occupied.
+All three sensors vote; Gemini is triggered when >= 2 agree the bin is occupied.
 
 State machine
 ─────────────
@@ -28,8 +28,7 @@ Controls
 
 CLI overrides (all also settable via env vars or .env):
   --model NAME              Gemini model  (SMARTWASTE_MODEL_NAME)
-  --depth-threshold MM      Depth change threshold  (SMARTWASTE_DEPTH_CHANGE_THRESHOLD)
-  --imu-threshold FLOAT     IMU shock threshold  (SMARTWASTE_IMU_SHOCK_THRESHOLD)
+  --threshold FLOAT         Presence motion threshold  (SMARTWASTE_MOTION_THRESHOLD)
   --votes N                 Sensor votes needed  (SMARTWASTE_OAK_VOTES_NEEDED)
   --location NAME           Deployment location tag  (SMARTWASTE_LOCATION)
 """
@@ -48,17 +47,14 @@ import time
 def _export_cli_overrides() -> None:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--model")
-    p.add_argument("--depth-threshold", type=int)
-    p.add_argument("--imu-threshold", type=float)
+    p.add_argument("--threshold", type=float)
     p.add_argument("--votes", type=int)
     p.add_argument("--location")
     known, _ = p.parse_known_args()
     if known.model:
         os.environ["SMARTWASTE_MODEL_NAME"] = known.model
-    if known.depth_threshold is not None:
-        os.environ["SMARTWASTE_DEPTH_CHANGE_THRESHOLD"] = str(known.depth_threshold)
-    if known.imu_threshold is not None:
-        os.environ["SMARTWASTE_IMU_SHOCK_THRESHOLD"] = str(known.imu_threshold)
+    if known.threshold is not None:
+        os.environ["SMARTWASTE_MOTION_THRESHOLD"] = str(known.threshold)
     if known.votes is not None:
         os.environ["SMARTWASTE_OAK_VOTES_NEEDED"] = str(known.votes)
     if known.location:
@@ -122,7 +118,7 @@ def _draw_overlay(
     detector: OAKOccupancyDetector,
     calib_pct: int,
     *,
-    title: str = "OAK-D Native",
+    title: str = "OAK Native",
 ) -> None:
     """Draw a three-line status bar onto *frame* (in-place)."""
     h, w = frame.shape[:2]
@@ -143,21 +139,21 @@ def _draw_overlay(
                 (14, 34), _FONT, 0.70, _WHITE, 1, cv2.LINE_AA)
 
     # Line 2 — votes + sensor availability
-    depth_s = "Depth"
-    imu_s   = "IMU" if detector.imu_available else "IMU(N/A)"
-    nn_s    = "NN"  if detector.nn_available  else "NN(N/A)"
-    voted   = []
-    if votes.depth_occupied: voted.append(depth_s)
-    if votes.drop_flag:      voted.append(imu_s)
-    if votes.nn_occupied:    voted.append(nn_s)
+    presence_s = "Presence"
+    motion_s   = "Motion"
+    nn_s       = "NN" if detector.nn_available else "NN(N/A)"
+    voted      = []
+    if votes.presence_occupied: voted.append(presence_s)
+    if votes.motion_spike:      voted.append(motion_s)
+    if votes.nn_occupied:       voted.append(nn_s)
     vote_str = f"Votes: {votes.votes}/{_active_count(detector)}  →  {', '.join(voted) or 'none'}"
     cv2.putText(frame, vote_str, (14, 72), _FONT, 0.60, _GREEN, 1, cv2.LINE_AA)
 
     # Line 3 — per-sensor readings
-    depth_val = f"{votes.depth_mm_delta:+.0f}mm"
-    imu_val   = "DROP" if votes.drop_flag else f"{votes.imu_delta:.2f}m/s²"
-    nn_val    = f"{votes.nn_count} obj"
-    reading_str = f"Depth: {depth_val}   |   IMU: {imu_val}   |   NN: {nn_val}"
+    presence_val = f"{votes.presence_score:.1f}"
+    motion_val   = "SPIKE" if votes.motion_spike else f"{votes.motion_delta:.1f}"
+    nn_val       = f"{votes.nn_count} obj"
+    reading_str  = f"Presence: {presence_val}   |   Motion: {motion_val}   |   NN: {nn_val}"
     cv2.putText(frame, reading_str, (14, 108), _FONT, 0.56, _YELLOW, 1, cv2.LINE_AA)
 
     # Line 4 — Gemini result when available
@@ -168,7 +164,7 @@ def _draw_overlay(
 
 def _active_count(detector: OAKOccupancyDetector) -> int:
     """Number of sensors that are actually available."""
-    return 1 + int(detector.imu_available) + int(detector.nn_available)
+    return 2 + int(detector.nn_available)  # presence + motion always on
 
 
 # ── State-machine tick (called at OAK_CHECK_INTERVAL) ─────────────────────────
@@ -276,14 +272,12 @@ def _handle_key(
 def main() -> None:
     # Full parser — for --help and validation only (values already in env vars)
     p = argparse.ArgumentParser(
-        description="SmartWaste AI — OAK-D Native mode (1 or 2 cameras)",
+        description="SmartWaste AI — OAK Native mode (1 or 2 cameras)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--model", metavar="NAME", help="Gemini model name")
-    p.add_argument("--depth-threshold", type=int, metavar="MM",
-                   help="Depth change (mm) to declare bin occupied")
-    p.add_argument("--imu-threshold", type=float, metavar="FLOAT",
-                   help="IMU acceleration delta (m/s²) to flag a drop event")
+    p.add_argument("--threshold", type=float, metavar="FLOAT",
+                   help="Presence motion threshold (pixel-diff score)")
     p.add_argument("--votes", type=int, metavar="N",
                    help="Sensor votes needed to trigger classification")
     p.add_argument("--location", metavar="NAME",
@@ -293,7 +287,7 @@ def main() -> None:
     # ── Device discovery ───────────────────────────────────────────────────────
     infos = dai.Device.getAllAvailableDevices()
     if not infos:
-        msg = "No OAK-D device found. Check USB3 connection."
+        msg = "No OAK device found. Check USB connection."
         if sys.platform != "win32":
             msg += (
                 "\nOn Linux/Raspberry Pi, udev rules may be missing. Run once:\n"
@@ -314,7 +308,7 @@ def main() -> None:
     # ── Display window ─────────────────────────────────────────────────────────
     display_w = DISPLAY_SIZE[0] * 2 if dual_mode else OAK_DISPLAY_W
     display_h = DISPLAY_SIZE[1] if dual_mode else OAK_DISPLAY_H
-    mode_title = "Dual OAK-D Native" if dual_mode else "OAK-D Native"
+    mode_title = "Dual OAK Native" if dual_mode else "OAK Native"
 
     try:
         cv2.namedWindow(OAK_WINDOW, cv2.WINDOW_NORMAL)
@@ -327,10 +321,10 @@ def main() -> None:
         ) from exc
 
     app_state = AppState()
-    app_state.set_status("Calibrating", "Warming up OAK-D sensors…")
+    app_state.set_status("Calibrating", "Warming up sensors…")
 
     with contextlib.ExitStack() as exit_stack:
-        # Primary camera — full sensor pipeline (depth, IMU, NN)
+        # Primary camera — presence + motion + NN pipeline
         device1 = exit_stack.enter_context(dai.Device(infos[0]))
         detector = OAKOccupancyDetector(device1)
 

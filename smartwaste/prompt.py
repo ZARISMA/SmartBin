@@ -6,6 +6,8 @@ You are given ONE image that contains TWO camera angles side-by-side:
 - LEFT half: Camera A
 - RIGHT half: Camera B
 
+Note: The camera has a transparent protective glass cover. Ignore it entirely — do not classify it as "Glass" or any other category. Any reflections or glare from the glass should also be ignored.
+
 Task:
 1) Identify what is inside the pipe, ignoring the pipe itself.
 2) The first frame may show an empty pipe — use it as background reference.

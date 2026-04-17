@@ -1,8 +1,8 @@
-# docker-compose.yml — Server mode (LAN dashboard)
-# Run on a laptop/server. No cameras needed.
-# Accessible from any device on the same network at http://<server-ip>:8000
+# docker-compose.edge-full.yml — Full stack on Raspberry Pi
+# Runs camera + web UI + DB + Grafana on the Pi itself.
+# View on Pi via http://localhost:8000 or from LAN via http://<pi-ip>:8000
 #
-# Usage:  docker compose up -d
+# Usage:  docker compose -f docker-compose.edge-full.yml up -d
 
 services:
   postgres:
@@ -29,13 +29,17 @@ services:
     environment:
       - SMARTWASTE_DB_BACKEND=postgresql
       - SMARTWASTE_DB_HOST=postgres
-      - SMARTWASTE_CAMERA_MODE=none
+      - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak-native}
+      - SMARTWASTE_BIN_ID=${SMARTWASTE_BIN_ID:-bin-01}
+      - SMARTWASTE_LOCATION=${SMARTWASTE_LOCATION:-Yerevan}
     ports:
       - "8000:8000"
+    privileged: true
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
+      - /dev/bus/usb:/dev/bus/usb
       - waste_images:/app/waste_dataset
       - ./smartwaste:/app/smartwaste
 

@@ -22,15 +22,39 @@ python main.py
 
 **Runtime controls (local mode):** `c` — classify, `a` — toggle auto-classify, `q` — quit
 
-## Docker Mode
+## Authentication
 
+Dashboard and API require login. Default credentials: `admin` / `password123`.
+Override via `SMARTWASTE_ADMIN_USERNAME` and `SMARTWASTE_ADMIN_PASSWORD` env vars.
+The presentation site at `/site` is public (no login required).
+
+## Docker Mode — Three Deployment Options
+
+### 1. Server mode (LAN dashboard, no cameras)
 ```bash
-docker-compose up -d        # starts app + PostgreSQL + Grafana
-docker-compose logs -f app
+docker compose up -d
 ```
+Runs FastAPI + PostgreSQL + Grafana. No cameras needed.
+Accessible from any device on the network at `http://<server-ip>:8000`.
+Edge devices POST results here via `/api/report`.
+
+### 2. Full stack on Raspberry Pi (cameras + dashboard)
+```bash
+docker compose -f docker-compose.edge-full.yml up -d
+```
+Runs everything on the Pi: cameras, web UI, database, Grafana.
+View locally at `http://localhost:8000` or from LAN.
+
+### 3. Lightweight edge (cameras only, reports to server)
+```bash
+SMARTWASTE_SERVER_URL=http://<server-ip>:8000 \
+SMARTWASTE_BIN_ID=bin-01 \
+docker compose -f docker-compose.edge.yml up -d
+```
+Runs camera + classifier on the Pi. No web UI. POSTs results to the central server.
 
 Services: Web UI `:8000`, Grafana `:3000` (admin/admin), PostgreSQL `:5432`.
-Requires Linux host with OAK-D cameras on USB.
+Full-stack and edge modes require Linux host with cameras on USB.
 
 ## Presentation Website
 
@@ -66,7 +90,14 @@ Migration: `python scripts/migrate_json_to_pg.py --source sqlite|json`
 | `MODEL_NAME` | `gemini-3-flash-preview` | Gemini model |
 | `JPEG_QUALITY` | 85 | Compression for API image uploads |
 | `DB_BACKEND` | `sqlite` | Database backend (`sqlite` or `postgresql`) |
-| `CAMERA_MODE` | `oak` | Camera backend for web UI (`oak`, `raspberry`, `oak-native`) |
+| `CAMERA_MODE` | `oak` | Camera backend for web UI (`oak`, `raspberry`, `oak-native`, `none`) |
+| `ADMIN_USERNAME` | `admin` | Dashboard login username |
+| `ADMIN_PASSWORD` | `password123` | Dashboard login password |
+| `BIN_ID` | `bin-01` | Unique identifier for this bin device |
+| `EDGE_MODE` | `false` | Enable edge mode (POST results to server) |
+| `SERVER_URL` | `` | Central server URL for edge reporting |
+| `EDGE_API_KEY` | `` | Shared secret for edge-to-server auth |
+| `HEARTBEAT_INTERVAL` | `30` | Seconds between edge heartbeats |
 
 All constants flow through `settings.py` (Pydantic BaseSettings) — override via env vars or `.env`.
 
@@ -96,21 +127,25 @@ smartwaste/
   cameraraspberry.py ← Raspberry Pi picamera2 setup
   classifier.py      ← Gemini API call, JSON parsing, retry logic
   config.py          ← all constants and paths
-  database.py        ← dual SQLite/PostgreSQL persistence layer
-  dataset.py         ← save images and database entries
+  database.py        ← dual SQLite/PostgreSQL persistence layer (with bin_id)
+  dataset.py         ← save images, database entries, and edge reporting
+  edge_client.py     ← HTTP client for edge→server reporting and heartbeats
   log_setup.py       ← logging configuration
   oak_native.py      ← OAK-D multi-sensor occupancy detector (depth + IMU + NN)
   presence.py        ← pixel-diff background model for bin-occupancy (no API calls)
   prompt.py          ← Gemini prompt string
+  schemas.py         ← Pydantic models for edge communication (EdgeReport, BinHeartbeat)
   settings.py        ← Pydantic BaseSettings (layered config, env-var overrides)
   state.py           ← thread-safe AppState class
   strategies.py      ← classification-trigger strategies (Manual, PresenceGate)
   ui.py              ← OpenCV overlay rendering
   utils.py           ← shared frame helpers
-  web.py             ← FastAPI web UI with MJPEG stream
+  web.py             ← FastAPI web UI with auth, multi-bin dashboard, edge endpoints
   web_templates/     ← Jinja2 HTML templates
-    index.html       ← operational dashboard (live stream, controls)
-    site.html        ← presentation/marketing website
+    dashboard.html   ← multi-bin overview (authenticated landing page)
+    index.html       ← per-bin detail view (live stream, controls, stats)
+    login.html       ← authentication page
+    site.html        ← presentation/marketing website (public)
   web_static/        ← CSS/JS static files
     style.css        ← dashboard styles
     site.css         ← presentation site styles

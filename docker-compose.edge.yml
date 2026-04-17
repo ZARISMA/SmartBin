@@ -1,0 +1,34 @@
+# docker-compose.edge.yml — Lightweight edge (report to server)
+# Runs on Raspberry Pi. No web UI. POSTs results to the central server.
+#
+# Usage:
+#   SMARTWASTE_SERVER_URL=http://<server-ip>:8000 \
+#   docker compose -f docker-compose.edge.yml up -d
+#
+# Override entry point via SMARTWASTE_EDGE_ENTRYPOINT:
+#   mainoak.py (default), main.py, mainauto.py, mainraspberry.py
+
+services:
+  edge:
+    build:
+      context: .
+      dockerfile: Dockerfile.edge
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - SMARTWASTE_EDGE_MODE=true
+      - SMARTWASTE_SERVER_URL=${SMARTWASTE_SERVER_URL:-http://192.168.1.100:8000}
+      - SMARTWASTE_EDGE_API_KEY=${SMARTWASTE_EDGE_API_KEY:-password123}
+      - SMARTWASTE_BIN_ID=${SMARTWASTE_BIN_ID:-bin-01}
+      - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak-native}
+      - SMARTWASTE_LOCATION=${SMARTWASTE_LOCATION:-Yerevan}
+    privileged: true
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - edge_images:/app/waste_dataset
+    restart: unless-stopped
+    command: ["python", "${SMARTWASTE_EDGE_ENTRYPOINT:-mainoak.py}"]
+
+volumes:
+  edge_images:

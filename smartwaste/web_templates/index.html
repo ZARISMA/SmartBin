@@ -3,23 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Waste AI</title>
+    <title>Smart Waste AI — {{ bin_id | default('Bin') }}</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <canvas id="particles"></canvas>
 
     <header>
-        <h1>Smart Waste AI</h1>
-        <div id="mode-badge" class="badge manual">MANUAL</div>
+        <div style="display:flex;align-items:center;gap:16px">
+            <a href="/" style="color:#40E0D0;text-decoration:none;font-size:0.9rem">&larr; Dashboard</a>
+            <h1>{{ bin_id | default('Smart Waste AI') }}</h1>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+            <div id="mode-badge" class="badge manual">MANUAL</div>
+            <form method="POST" action="/logout" style="margin:0">
+                <button type="submit" style="background:rgba(198,40,40,0.25);border:1px solid rgba(198,40,40,0.4);color:#ef5350;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:0.8rem">Logout</button>
+            </form>
+        </div>
     </header>
 
     <main>
+        {% if has_local_camera %}
         <section class="stream-panel">
             <div class="stream-container">
                 <img id="video-feed" src="/stream" alt="Live camera feed">
             </div>
         </section>
+        {% else %}
+        <section class="stream-panel">
+            <div class="stream-container" style="display:flex;align-items:center;justify-content:center;min-height:300px;background:rgba(20,28,24,0.6);border-radius:16px;border:1px solid rgba(45,90,66,0.2)">
+                <div style="text-align:center;color:#8C8C8C">
+                    <div style="font-size:2.5rem;margin-bottom:12px">&#128247;</div>
+                    <div style="font-size:1.1rem;color:#E0E0E0">Remote Bin</div>
+                    <div style="font-size:0.85rem;margin-top:4px">Live stream not available for remote bins</div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
 
         <aside class="info-panel">
             <div class="status-card">
@@ -31,10 +51,12 @@
                 <p id="detail" class="detail">Waiting for classification...</p>
             </div>
 
+            {% if has_local_camera %}
             <div class="controls">
                 <button id="btn-classify" onclick="classify(event)">Classify</button>
                 <button id="btn-auto" onclick="toggleAuto()">Toggle Auto</button>
             </div>
+            {% endif %}
 
             <div class="history-card">
                 <h2>Recent</h2>
@@ -66,6 +88,10 @@
     </main>
 
     <script>
+        const BIN_ID = '{{ bin_id | default("") }}';
+        const HAS_LOCAL_CAMERA = {{ 'true' if has_local_camera else 'false' }};
+        const BIN_QUERY = BIN_ID ? '?bin_id=' + encodeURIComponent(BIN_ID) : '';
+
         const CAT_COLORS = {
             Plastic: '#87CEEB', Glass: '#40E0D0', Paper: '#D2B48C',
             Organic: '#1E4D2B', Aluminum: '#A9A9A9', Other: '#9370DB',
@@ -79,7 +105,6 @@
         /* ── Classify with ripple ───────────────────────────────────────── */
         async function classify(e) {
             const btn = document.getElementById('btn-classify');
-            // Ripple effect
             if (e) {
                 const rect = btn.getBoundingClientRect();
                 const ripple = document.createElement('span');
@@ -114,8 +139,9 @@
             badge.className = 'badge ' + (auto ? 'auto' : 'manual');
         }
 
-        /* ── Poll State ─────────────────────────────────────────────────── */
+        /* ── Poll State (only for local camera bins) ───────────────────── */
         async function pollState() {
+            if (!HAS_LOCAL_CAMERA) return;
             try {
                 const res = await fetch('/api/state');
                 const s = res.ok ? await res.json() : null;
@@ -146,7 +172,7 @@
         /* ── Poll Stats with bars ───────────────────────────────────────── */
         async function pollStats() {
             try {
-                const res = await fetch('/api/stats');
+                const res = await fetch('/api/stats' + BIN_QUERY);
                 const s = res.ok ? await res.json() : null;
                 if (!s) return;
 
@@ -175,7 +201,7 @@
         /* ── Poll Entries ───────────────────────────────────────────────── */
         async function pollEntries() {
             try {
-                const res = await fetch('/api/entries?limit=10');
+                const res = await fetch('/api/entries?limit=10' + (BIN_ID ? '&bin_id=' + encodeURIComponent(BIN_ID) : ''));
                 const entries = res.ok ? await res.json() : [];
                 const tbody = document.getElementById('entries-tbody');
                 tbody.innerHTML = '';
@@ -232,10 +258,10 @@
         })();
 
         /* ── Start polling ──────────────────────────────────────────────── */
-        setInterval(pollState, 1000);
+        if (HAS_LOCAL_CAMERA) setInterval(pollState, 1000);
         setInterval(pollStats, 5000);
         setInterval(pollEntries, 5000);
-        pollState();
+        if (HAS_LOCAL_CAMERA) pollState();
         pollStats();
         pollEntries();
     </script>

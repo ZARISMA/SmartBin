@@ -4,7 +4,7 @@ from datetime import datetime
 
 import cv2
 
-from .config import DATASET_DIR, LOCATION
+from .config import BIN_ID, DATASET_DIR, EDGE_MODE, LOCATION, SERVER_URL
 from .database import insert_entry
 from .log_setup import get_logger
 
@@ -36,8 +36,20 @@ def save_entry(label: str, img, description: str, brand_product: str) -> None:
         "location": LOCATION,
         "weight": "",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "bin_id": BIN_ID,
     }
 
     logger.info("Saved dataset entry: %s", filename)
     env = _environment_data()
     insert_entry(entry, env)
+
+    # Report to central server when running as edge device
+    if EDGE_MODE and SERVER_URL:
+        try:
+            from .edge_client import report_classification
+
+            with open(filepath, "rb") as f:
+                img_bytes = f.read()
+            report_classification(entry, env, image_bytes=img_bytes)
+        except Exception as exc:
+            logger.warning("Edge report failed: %s", exc)

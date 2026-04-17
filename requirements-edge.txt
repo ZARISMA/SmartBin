@@ -1,0 +1,6 @@
+opencv-python-headless
+depthai
+google-genai
+blobconverter
+tenacity
+pydantic-settings>=2.0
