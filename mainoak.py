@@ -73,6 +73,7 @@ from smartwaste.cameraOak import crop_sides, make_pipeline
 from smartwaste.config import (
     CROP_PERCENT,
     DISPLAY_SIZE,
+    EDGE_MODE,
     MAX_DT,
     OAK_CHECK_INTERVAL,
     OAK_DETECT_CONFIRM_N,
@@ -294,6 +295,15 @@ def main() -> None:
     p.add_argument("--location", metavar="NAME",
                    help="Deployment location written to dataset")
     p.parse_args()   # triggers --help / validation; actual values are in env already
+
+    # ── Edge heartbeat (only when running as an edge device) ──────────────────
+    # Register this bin with the central server so it shows up on the dashboard
+    # immediately — otherwise the server has no record of the bin until the
+    # first classification is reported.
+    if EDGE_MODE:
+        from smartwaste.edge_client import start_heartbeat_thread
+
+        start_heartbeat_thread()
 
     # ── Device discovery ───────────────────────────────────────────────────────
     infos = dai.Device.getAllAvailableDevices()
