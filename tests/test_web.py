@@ -5,13 +5,22 @@ from unittest.mock import patch
 import pytest
 from starlette.testclient import TestClient
 
+from smartwaste.config import ADMIN_PASSWORD, ADMIN_USERNAME
+
 
 @pytest.fixture
 def client():
     # Prevent camera thread from starting during tests
     with patch("smartwaste.web._start_camera_thread"):
         from smartwaste.web import app
+
         with TestClient(app) as c:
+            # Authenticate so protected routes return real responses
+            c.post(
+                "/login",
+                data={"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD},
+                follow_redirects=False,
+            )
             yield c
 
 

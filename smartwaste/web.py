@@ -94,6 +94,7 @@ def _is_authenticated(request: Request) -> bool:
         return True
     return False
 
+
 # ── Bin registry (in-memory, populated by edge heartbeats) ───────────────────
 
 
@@ -129,7 +130,9 @@ def _get_bin_status() -> list[dict]:
         return [
             {
                 "bin_id": info.bin_id,
-                "status": "online" if (now - info.last_seen).total_seconds() < _BIN_ONLINE_TIMEOUT else "offline",
+                "status": "online"
+                if (now - info.last_seen).total_seconds() < _BIN_ONLINE_TIMEOUT
+                else "offline",
                 "last_seen": info.last_seen.isoformat(),
                 "camera_mode": info.camera_mode,
                 "uptime_seconds": info.uptime_seconds,
@@ -493,7 +496,7 @@ def dashboard(request: Request):
 def bin_detail(request: Request, bin_id: str):
     if not _is_authenticated(request):
         return RedirectResponse("/login", status_code=302)
-    has_local_camera = (bin_id == BIN_ID and CAMERA_MODE != "none" and _cameras_ok)
+    has_local_camera = bin_id == BIN_ID and CAMERA_MODE != "none" and _cameras_ok
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -641,15 +644,17 @@ def api_dashboard(request: Request):
     for bid in sorted(all_bin_ids):
         db = db_bins.get(bid, {})
         hb = heartbeat_bins.get(bid, {})
-        bins.append({
-            "bin_id": bid,
-            "location": db.get("location", ""),
-            "status": hb.get("status", "offline"),
-            "last_seen": hb.get("last_seen", ""),
-            "last_timestamp": db.get("last_timestamp", ""),
-            "total_entries": db.get("total", 0),
-            "camera_mode": hb.get("camera_mode", ""),
-        })
+        bins.append(
+            {
+                "bin_id": bid,
+                "location": db.get("location", ""),
+                "status": hb.get("status", "offline"),
+                "last_seen": hb.get("last_seen", ""),
+                "last_timestamp": db.get("last_timestamp", ""),
+                "total_entries": db.get("total", 0),
+                "camera_mode": hb.get("camera_mode", ""),
+            }
+        )
 
     return {
         "bins": bins,

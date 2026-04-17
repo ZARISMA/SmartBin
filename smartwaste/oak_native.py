@@ -45,6 +45,7 @@ logger = get_logger()
 
 class Detection(NamedTuple):
     """Single NN bounding-box detection (normalised 0-1 coordinates)."""
+
     xmin: float
     ymin: float
     xmax: float
@@ -216,7 +217,9 @@ class OAKOccupancyDetector:
             if score_jump > spike_threshold:
                 self._motion_spike = True
                 self._motion_spike_expiry = time.time() + DROP_FLAG_DURATION
-                logger.debug("Motion spike: jump=%.1f (threshold=%.1f)", score_jump, spike_threshold)
+                logger.debug(
+                    "Motion spike: jump=%.1f (threshold=%.1f)", score_jump, spike_threshold
+                )
 
         # Auto-expire motion spike
         if self._motion_spike and time.time() >= self._motion_spike_expiry:
@@ -289,8 +292,7 @@ class OAKOccupancyDetector:
             dets = self._nn_q.get().detections
             count = len(dets)
             detections = [
-                Detection(d.xmin, d.ymin, d.xmax, d.ymax, d.confidence, d.label)
-                for d in dets
+                Detection(d.xmin, d.ymin, d.xmax, d.ymax, d.confidence, d.label) for d in dets
             ]
 
         if count is not None:

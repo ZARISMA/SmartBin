@@ -200,9 +200,7 @@ def insert_entry(entry: dict, env: dict) -> int | None:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        cur.execute(
-                            _PG_INSERT.rstrip(";") + " RETURNING id;", row
-                        )
+                        cur.execute(_PG_INSERT.rstrip(";") + " RETURNING id;", row)
                         row_id: int | None = cur.fetchone()[0]
                 logger.info(
                     "DB entry saved (pg): id=%s label=%s ts=%s",

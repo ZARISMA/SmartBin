@@ -9,21 +9,21 @@ _AA = cv2.LINE_AA
 
 # ── Color palette (BGR) ───────────────────────────────────────────────────────
 _C_WHITE = (255, 255, 255)
-_C_GRAY = (140, 140, 140)       # Stone Gray #8C8C8C
-_C_DARK_PANEL = (20, 26, 11)    # Dark green-tinted panel
-_C_ACCENT = (66, 90, 45)        # Forest Green #2D5A42 (BGR)
-_C_MODE_AUTO = (80, 175, 76)    # Success #4CAF50 (BGR)
+_C_GRAY = (140, 140, 140)  # Stone Gray #8C8C8C
+_C_DARK_PANEL = (20, 26, 11)  # Dark green-tinted panel
+_C_ACCENT = (66, 90, 45)  # Forest Green #2D5A42 (BGR)
+_C_MODE_AUTO = (80, 175, 76)  # Success #4CAF50 (BGR)
 _C_MODE_MANUAL = (107, 77, 26)  # Deep Smart Blue #1A4D6B (BGR)
 
 # Per-category label colors (BGR) — brand modular system colors
 _CAT_COLOR: dict[str, tuple[int, int, int]] = {
-    "Plastic": (235, 206, 135),   # #87CEEB
-    "Glass": (208, 224, 64),      # #40E0D0
-    "Paper": (140, 180, 210),     # #D2B48C
-    "Organic": (43, 77, 30),      # #1E4D2B
+    "Plastic": (235, 206, 135),  # #87CEEB
+    "Glass": (208, 224, 64),  # #40E0D0
+    "Paper": (140, 180, 210),  # #D2B48C
+    "Organic": (43, 77, 30),  # #1E4D2B
     "Aluminum": (169, 169, 169),  # #A9A9A9
-    "Other": (219, 112, 147),     # #9370DB
-    "Empty": (140, 140, 140),     # #8C8C8C
+    "Other": (219, 112, 147),  # #9370DB
+    "Empty": (140, 140, 140),  # #8C8C8C
 }
 
 # ── Layout proportions (relative to frame dimensions) ─────────────────────────
@@ -124,10 +124,27 @@ def draw_overlay(
 
 # MobileNetSSD was trained on Pascal VOC (21 classes including background)
 _VOC_LABELS = [
-    "background", "aeroplane", "bicycle", "bird", "boat", "bottle",
-    "bus", "car", "cat", "chair", "cow", "diningtable", "dog",
-    "horse", "motorbike", "person", "pottedplant", "sheep", "sofa",
-    "train", "tvmonitor",
+    "background",
+    "aeroplane",
+    "bicycle",
+    "bird",
+    "boat",
+    "bottle",
+    "bus",
+    "car",
+    "cat",
+    "chair",
+    "cow",
+    "diningtable",
+    "dog",
+    "horse",
+    "motorbike",
+    "person",
+    "pottedplant",
+    "sheep",
+    "sofa",
+    "train",
+    "tvmonitor",
 ]
 
 _C_GREEN_BOX = (0, 255, 0)  # BGR
@@ -152,7 +169,11 @@ def draw_nn_detections(
         x2 = int(det.xmax * w)
         y2 = int(det.ymax * h)
 
-        label = _VOC_LABELS[det.label_idx] if det.label_idx < len(_VOC_LABELS) else f"id:{det.label_idx}"
+        label = (
+            _VOC_LABELS[det.label_idx]
+            if det.label_idx < len(_VOC_LABELS)
+            else f"id:{det.label_idx}"
+        )
         text = f"{label} {det.confidence:.0%}"
 
         # Green bounding box

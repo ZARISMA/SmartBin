@@ -49,9 +49,7 @@ def _post(path: str, payload: dict) -> bool:
         return False
 
 
-def report_classification(
-    entry: dict, env: dict, image_bytes: bytes | None = None
-) -> bool:
+def report_classification(entry: dict, env: dict, image_bytes: bytes | None = None) -> bool:
     """POST a classification result to the central server."""
     payload = {
         "bin_id": entry.get("bin_id", BIN_ID),
