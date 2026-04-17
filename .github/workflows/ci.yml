@@ -65,7 +65,7 @@ jobs:
       - name: Install dependencies
         # depthai and picamera2 are mocked in conftest.py so not needed here
         run: |
-          pip install opencv-python google-genai pydantic-settings fastapi "uvicorn[standard]" jinja2 httpx itsdangerous
+          pip install opencv-python google-genai pydantic-settings fastapi "uvicorn[standard]" jinja2 httpx itsdangerous python-multipart
           pip install -r requirements-test.txt
 
       - name: Run tests with coverage
