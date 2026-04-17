@@ -101,6 +101,16 @@ def build_oak_pipeline(device: dai.Device) -> tuple:
     """
     blob_path, nn_available = _try_get_blob()
 
+    # depthai >= 3.x renamed the legacy MobileNetDetectionNetwork node. If it
+    # isn't exposed, skip the NN branch entirely — otherwise cam_a.requestOutput
+    # below would leave a dangling camera output that pipeline.start() rejects.
+    if nn_available and not hasattr(dai.node, "MobileNetDetectionNetwork"):
+        logger.warning(
+            "depthai.node.MobileNetDetectionNetwork not available "
+            "(depthai >= 3.x API change); NN sensor disabled."
+        )
+        nn_available = False
+
     pipeline = dai.Pipeline(device)
 
     # ── RGB camera (CAM_A) ─────────────────────────────────────────────────────
@@ -113,13 +123,18 @@ def build_oak_pipeline(device: dai.Device) -> tuple:
     nn_q = None
     if nn_available and blob_path is not None:
         try:
-            # Resize RGB preview to 300×300 for MobileNetSSD input
-            nn_in = cam_a.requestOutput((300, 300), type=dai.ImgFrame.Type.BGR888p)
+            # Create the NN node first; only request the camera output once we
+            # know the NN can be built. Requesting the output before the node
+            # creation leaves a dangling output if creation fails, and
+            # pipeline.start() will then refuse to start.
             det_nn = pipeline.create(dai.node.MobileNetDetectionNetwork)
             det_nn.setConfidenceThreshold(NN_CONFIDENCE)
             det_nn.setBlobPath(blob_path)
             det_nn.setNumInferenceThreads(2)
             det_nn.input.setBlocking(False)
+
+            # Resize RGB preview to 300×300 for MobileNetSSD input
+            nn_in = cam_a.requestOutput((300, 300), type=dai.ImgFrame.Type.BGR888p)
             nn_in.link(det_nn.input)
             nn_q = det_nn.out.createOutputQueue(maxSize=4, blocking=False)
             logger.info("NN pipeline ready (MobileNetSSD).")
