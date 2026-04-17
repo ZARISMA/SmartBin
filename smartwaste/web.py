@@ -55,8 +55,8 @@ from .config import (
     WEB_PORT,
 )
 from .database import get_active_bins, get_entries, get_entry_count, get_label_counts, insert_entry
-from .schemas import BinHeartbeat, EdgeReport
 from .log_setup import get_logger
+from .schemas import BinHeartbeat, EdgeReport
 from .state import AppState
 from .ui import draw_nn_detections, draw_overlay
 from .utils import encode_frame, launch_classify

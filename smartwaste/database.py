@@ -203,7 +203,7 @@ def insert_entry(entry: dict, env: dict) -> int | None:
                         cur.execute(
                             _PG_INSERT.rstrip(";") + " RETURNING id;", row
                         )
-                        row_id = cur.fetchone()[0]
+                        row_id: int | None = cur.fetchone()[0]
                 logger.info(
                     "DB entry saved (pg): id=%s label=%s ts=%s",
                     row_id,
@@ -259,6 +259,7 @@ def get_entries(limit: int = 100, offset: int = 0, bin_id: str | None = None) ->
         else:
             with sqlite3.connect(DB_FILE) as conn:
                 conn.row_factory = sqlite3.Row
+                sql_params: tuple
                 if bin_id:
                     where = " WHERE bin_id = ?"
                     sql_params = (bin_id, limit, offset)
@@ -299,6 +300,7 @@ def get_label_counts(bin_id: str | None = None) -> dict[str, int]:
                 pool.putconn(conn)
         else:
             with sqlite3.connect(DB_FILE) as conn:
+                sql_params: tuple
                 if bin_id:
                     where = " WHERE bin_id = ?"
                     sql_params = (bin_id,)

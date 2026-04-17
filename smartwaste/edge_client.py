@@ -12,8 +12,8 @@ import base64
 import json
 import threading
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 
 from .config import BIN_ID, CAMERA_MODE, EDGE_API_KEY, HEARTBEAT_INTERVAL, SERVER_URL
 from .log_setup import get_logger
