@@ -8,26 +8,26 @@ from .warnings import WarningRegistry
 class AppState:
     """Thread-safe shared state between the main loop and classifier worker."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
         # Protected — written by classifier thread, read by main thread:
-        self._label = "Ready"
-        self._detail = "Press 'c' to classify. 'a' auto. 'q' quit."
-        self._is_classifying = False
+        self._label: str = "Ready"
+        self._detail: str = "Press 'c' to classify. 'a' auto. 'q' quit."
+        self._is_classifying: bool = False
         self._history: deque[tuple[str, str]] = deque(maxlen=5)
         # Main-thread only (no lock needed):
-        self.auto_classify = False
-        self.last_capture_time = 0.0
+        self.auto_classify: bool = False
+        self.last_capture_time: float = 0.0
 
         # ── Fleet control ────────────────────────────────────────────────
         # These fields drive the admin dashboard and edge /command handler.
-        self._active_strategy = "manual"  # "manual" | "auto" | "oak-native"
-        self._active_pipeline = "oak"  # "oak" | "oak-native"
-        self._running = True
-        self._shutdown_requested = False
-        self._restart_requested = False
+        self._active_strategy: str = "manual"  # "manual" | "auto" | "oak-native"
+        self._active_pipeline: str = "oak"  # "oak" | "oak-native"
+        self._running: bool = True
+        self._shutdown_requested: bool = False
+        self._restart_requested: bool = False
         self._strategy_swap_requested: str | None = None
-        self._camera_count = 0
+        self._camera_count: int = 0
         self.warnings = WarningRegistry()
 
     # ── read ──────────────────────────────────────────────────────────────

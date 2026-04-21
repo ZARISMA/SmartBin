@@ -46,7 +46,7 @@ def _parse_cli() -> argparse.Namespace:
 def _resolve_pipeline() -> str:
     args = _parse_cli()
     if args.pipeline:
-        return args.pipeline
+        return str(args.pipeline)
     env = os.environ.get("SMARTWASTE_CAMERA_MODE", "").strip().lower()
     if env in VALID_PIPELINES:
         return env
@@ -57,7 +57,7 @@ def _resolve_pipeline() -> str:
 def _resolve_strategy() -> str:
     args = _parse_cli()
     if args.strategy:
-        return args.strategy
+        return str(args.strategy)
     env = os.environ.get("SMARTWASTE_STRATEGY", "").strip().lower()
     if env in VALID_STRATEGIES:
         return env
