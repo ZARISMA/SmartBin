@@ -14,6 +14,7 @@ from smartwaste.utils import encode_frame, launch_classify
 # encode_frame
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestEncodeFrame:
     def test_returns_bytes_for_valid_bgr_frame(self):
         frame = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -55,6 +56,7 @@ class TestEncodeFrame:
         """Verify encode_frame uses the configured JPEG_QUALITY."""
         import cv2
         from smartwaste.config import JPEG_QUALITY
+
         frame = np.random.randint(0, 256, (200, 200, 3), dtype=np.uint8)
         result = encode_frame(frame)
         # Encode the same frame at quality 1 manually
@@ -67,6 +69,7 @@ class TestEncodeFrame:
 # ─────────────────────────────────────────────────────────────────────────────
 # launch_classify
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestLaunchClassify:
     def test_none_bytes_sets_error_label(self):
@@ -115,6 +118,7 @@ class TestLaunchClassify:
 
     def test_valid_bytes_targets_classify(self):
         from smartwaste.classifier import classify
+
         state = AppState()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         img_bytes = b"\xff\xd8\xff" + b"\x00" * 50

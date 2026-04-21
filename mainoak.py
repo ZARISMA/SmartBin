@@ -94,21 +94,22 @@ logger = get_logger()
 
 # ── State machine ──────────────────────────────────────────────────────────────
 
+
 class OakState(enum.Enum):
     CALIBRATING = "Calibrating"
-    READY       = "Ready"
-    DETECTED    = "Detected"
+    READY = "Ready"
+    DETECTED = "Detected"
     CLASSIFYING = "Classifying"
-    CLASSIFIED  = "Classified"
+    CLASSIFIED = "Classified"
 
 
 # ── Overlay ────────────────────────────────────────────────────────────────────
 
-_FONT      = cv2.FONT_HERSHEY_SIMPLEX
-_WHITE     = (255, 255, 255)
-_GREEN     = (0, 220, 0)
-_YELLOW    = (0, 220, 220)
-_BAR_H     = 150   # height of the status bar in pixels
+_FONT = cv2.FONT_HERSHEY_SIMPLEX
+_WHITE = (255, 255, 255)
+_GREEN = (0, 220, 0)
+_YELLOW = (0, 220, 220)
+_BAR_H = 150  # height of the status bar in pixels
 
 
 def _draw_overlay(
@@ -135,32 +136,41 @@ def _draw_overlay(
     state_str = oak_state.value
     if oak_state == OakState.CALIBRATING:
         state_str = f"Calibrating … {calib_pct}%"
-    cv2.putText(frame,
-                f"Smart Waste AI ({title})   |   {state_str}",
-                (14, 34), _FONT, 0.70, _WHITE, 1, cv2.LINE_AA)
+    cv2.putText(
+        frame,
+        f"Smart Waste AI ({title})   |   {state_str}",
+        (14, 34),
+        _FONT,
+        0.70,
+        _WHITE,
+        1,
+        cv2.LINE_AA,
+    )
 
     # Line 2 — votes + sensor availability
     presence_s = "Presence"
-    motion_s   = "Motion"
-    nn_s       = "NN" if detector.nn_available else "NN(N/A)"
-    voted      = []
-    if votes.presence_occupied: voted.append(presence_s)
-    if votes.motion_spike:      voted.append(motion_s)
-    if votes.nn_occupied:       voted.append(nn_s)
+    motion_s = "Motion"
+    nn_s = "NN" if detector.nn_available else "NN(N/A)"
+    voted = []
+    if votes.presence_occupied:
+        voted.append(presence_s)
+    if votes.motion_spike:
+        voted.append(motion_s)
+    if votes.nn_occupied:
+        voted.append(nn_s)
     vote_str = f"Votes: {votes.votes}/{_active_count(detector)}  →  {', '.join(voted) or 'none'}"
     cv2.putText(frame, vote_str, (14, 72), _FONT, 0.60, _GREEN, 1, cv2.LINE_AA)
 
     # Line 3 — per-sensor readings
     presence_val = f"{votes.presence_score:.1f}"
-    motion_val   = "SPIKE" if votes.motion_spike else f"{votes.motion_delta:.1f}"
-    nn_val       = f"{votes.nn_count} obj"
-    reading_str  = f"Presence: {presence_val}   |   Motion: {motion_val}   |   NN: {nn_val}"
+    motion_val = "SPIKE" if votes.motion_spike else f"{votes.motion_delta:.1f}"
+    nn_val = f"{votes.nn_count} obj"
+    reading_str = f"Presence: {presence_val}   |   Motion: {motion_val}   |   NN: {nn_val}"
     cv2.putText(frame, reading_str, (14, 108), _FONT, 0.56, _YELLOW, 1, cv2.LINE_AA)
 
     # Line 4 — Gemini result when available
     if label not in ("Ready", "Calibrating"):
-        cv2.putText(frame, f"{label}  {detail}", (14, 140),
-                    _FONT, 0.52, _WHITE, 1, cv2.LINE_AA)
+        cv2.putText(frame, f"{label}  {detail}", (14, 140), _FONT, 0.52, _WHITE, 1, cv2.LINE_AA)
 
 
 def _active_count(detector: OAKOccupancyDetector) -> int:
@@ -180,6 +190,7 @@ def _detect_headless() -> bool:
 
 
 # ── State-machine tick (called at OAK_CHECK_INTERVAL) ─────────────────────────
+
 
 def _tick(
     state: OakState,
@@ -249,6 +260,7 @@ def _tick(
 
 # ── Keyboard handler ───────────────────────────────────────────────────────────
 
+
 def _handle_key(
     key: int,
     oak_state: OakState,
@@ -281,6 +293,7 @@ def _handle_key(
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+
 def main(app_state: AppState | None = None) -> None:
     # Full parser — for --help and validation only (values already in env vars)
     p = argparse.ArgumentParser(
@@ -288,13 +301,17 @@ def main(app_state: AppState | None = None) -> None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--model", metavar="NAME", help="Gemini model name")
-    p.add_argument("--threshold", type=float, metavar="FLOAT",
-                   help="Presence motion threshold (pixel-diff score)")
-    p.add_argument("--votes", type=int, metavar="N",
-                   help="Sensor votes needed to trigger classification")
-    p.add_argument("--location", metavar="NAME",
-                   help="Deployment location written to dataset")
-    p.parse_args()   # triggers --help / validation; actual values are in env already
+    p.add_argument(
+        "--threshold",
+        type=float,
+        metavar="FLOAT",
+        help="Presence motion threshold (pixel-diff score)",
+    )
+    p.add_argument(
+        "--votes", type=int, metavar="N", help="Sensor votes needed to trigger classification"
+    )
+    p.add_argument("--location", metavar="NAME", help="Deployment location written to dataset")
+    p.parse_args()  # triggers --help / validation; actual values are in env already
 
     # ── Edge heartbeat + sidecar HTTP server (only when running as edge) ─────
     # Register this bin with the central server so it shows up on the dashboard
@@ -327,7 +344,7 @@ def main(app_state: AppState | None = None) -> None:
         if sys.platform != "win32":
             msg += (
                 "\nOn Linux/Raspberry Pi, udev rules may be missing. Run once:\n"
-                "  echo 'SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"03e7\", MODE=\"0666\"'"
+                '  echo \'SUBSYSTEM=="usb", ATTRS{idVendor}=="03e7", MODE="0666"\''
                 " | sudo tee /etc/udev/rules.d/80-movidius.rules\n"
                 "  sudo udevadm control --reload-rules && sudo udevadm trigger\n"
                 "Then reconnect the camera."
@@ -346,8 +363,9 @@ def main(app_state: AppState | None = None) -> None:
 
     dual_mode = len(infos) >= 2
     if dual_mode:
-        logger.info("Dual-camera mode: devices %s, %s",
-                     infos[0].getDeviceId(), infos[1].getDeviceId())
+        logger.info(
+            "Dual-camera mode: devices %s, %s", infos[0].getDeviceId(), infos[1].getDeviceId()
+        )
     else:
         logger.info("Single-camera mode: device %s", infos[0].getDeviceId())
 
@@ -384,20 +402,18 @@ def main(app_state: AppState | None = None) -> None:
             device2 = exit_stack.enter_context(dai.Device(infos[1]))
             cam2_pipeline, cam2_queue = make_pipeline(device2)
 
-        oak_state     = OakState.CALIBRATING
+        oak_state = OakState.CALIBRATING
         detect_streak = 0
-        empty_streak  = 0
-        last_check    = 0.0
-        calib_pct     = [0]         # mutable container so _tick can write to it
-        last_votes    = SensorVotes(
-            False, False, False, 0, None, 0.0, 0.0, 0, []
-        )
+        empty_streak = 0
+        last_check = 0.0
+        calib_pct = [0]  # mutable container so _tick can write to it
+        last_votes = SensorVotes(False, False, False, 0, None, 0.0, 0.0, 0, [])
 
         # Dual-mode frame state
-        last_cam1_ts      = 0.0
-        last_cam1_cropped = None    # cam1 frame after crop + resize
-        last_cam2_frame   = None
-        last_cam2_ts      = 0.0
+        last_cam1_ts = 0.0
+        last_cam1_cropped = None  # cam1 frame after crop + resize
+        last_cam2_frame = None
+        last_cam2_ts = 0.0
 
         logger.info("Starting Smart Waste AI (%s)", mode_title)
 
@@ -415,7 +431,8 @@ def main(app_state: AppState | None = None) -> None:
                     if dual_mode:
                         cropped = crop_sides(votes.rgb_frame, CROP_PERCENT)
                         last_cam1_cropped = cv2.resize(
-                            cropped, DISPLAY_SIZE,
+                            cropped,
+                            DISPLAY_SIZE,
                             interpolation=cv2.INTER_AREA,
                         )
 
@@ -425,7 +442,8 @@ def main(app_state: AppState | None = None) -> None:
                         raw2 = cam2_queue.get().getCvFrame()
                         raw2 = crop_sides(raw2, CROP_PERCENT)
                         last_cam2_frame = cv2.resize(
-                            raw2, DISPLAY_SIZE,
+                            raw2,
+                            DISPLAY_SIZE,
                             interpolation=cv2.INTER_AREA,
                         )
                         last_cam2_ts = time.time()
@@ -433,12 +451,12 @@ def main(app_state: AppState | None = None) -> None:
                 # ── Build classify frame ──────────────────────────────────────
                 classify_frame = None
                 if dual_mode:
-                    if (last_cam1_cropped is not None
-                            and last_cam2_frame is not None
-                            and abs(last_cam1_ts - last_cam2_ts) <= MAX_DT):
-                        classify_frame = cv2.hconcat(
-                            [last_cam1_cropped, last_cam2_frame]
-                        )
+                    if (
+                        last_cam1_cropped is not None
+                        and last_cam2_frame is not None
+                        and abs(last_cam1_ts - last_cam2_ts) <= MAX_DT
+                    ):
+                        classify_frame = cv2.hconcat([last_cam1_cropped, last_cam2_frame])
                 elif last_votes.rgb_frame is not None:
                     classify_frame = last_votes.rgb_frame
 
@@ -449,12 +467,20 @@ def main(app_state: AppState | None = None) -> None:
                 # ── Display ───────────────────────────────────────────────────
                 if classify_frame is not None and not headless:
                     disp = cv2.resize(
-                        classify_frame, (display_w, display_h),
+                        classify_frame,
+                        (display_w, display_h),
                         interpolation=cv2.INTER_AREA,
                     )
                     draw_nn_detections(disp, last_votes.nn_detections)
-                    _draw_overlay(disp, oak_state, last_votes, app_state,
-                                  detector, calib_pct[0], title=mode_title)
+                    _draw_overlay(
+                        disp,
+                        oak_state,
+                        last_votes,
+                        app_state,
+                        detector,
+                        calib_pct[0],
+                        title=mode_title,
+                    )
                     cv2.imshow(OAK_WINDOW, disp)
 
                 # ── State-machine tick at CHECK_INTERVAL ──────────────────────
@@ -462,8 +488,13 @@ def main(app_state: AppState | None = None) -> None:
                 if now - last_check >= OAK_CHECK_INTERVAL:
                     last_check = now
                     oak_state, detect_streak, empty_streak = _tick(
-                        oak_state, last_votes, app_state, detector,
-                        detect_streak, empty_streak, calib_pct,
+                        oak_state,
+                        last_votes,
+                        app_state,
+                        detector,
+                        detect_streak,
+                        empty_streak,
+                        calib_pct,
                         classify_frame,
                     )
 
@@ -477,7 +508,11 @@ def main(app_state: AppState | None = None) -> None:
                         break
                     if key != 0xFF:
                         oak_state = _handle_key(
-                            key, oak_state, last_votes, app_state, detector,
+                            key,
+                            oak_state,
+                            last_votes,
+                            app_state,
+                            detector,
                             classify_frame,
                         )
 

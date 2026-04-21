@@ -58,8 +58,16 @@ def test_appstate_camera_count_and_warnings():
 
 
 def test_bin_command_valid_actions():
-    for action in ("stop", "start", "restart", "set_strategy", "set_pipeline",
-                   "classify", "toggle_auto", "clear_warnings"):
+    for action in (
+        "stop",
+        "start",
+        "restart",
+        "set_strategy",
+        "set_pipeline",
+        "classify",
+        "toggle_auto",
+        "clear_warnings",
+    ):
         BinCommand(action=action)  # no exception
 
 

@@ -22,7 +22,7 @@ class AppState:
         # ── Fleet control ────────────────────────────────────────────────
         # These fields drive the admin dashboard and edge /command handler.
         self._active_strategy = "manual"  # "manual" | "auto" | "oak-native"
-        self._active_pipeline = "oak"     # "oak" | "oak-native"
+        self._active_pipeline = "oak"  # "oak" | "oak-native"
         self._running = True
         self._shutdown_requested = False
         self._restart_requested = False

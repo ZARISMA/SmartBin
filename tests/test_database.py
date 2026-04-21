@@ -7,29 +7,30 @@ import pytest
 
 def _entry():
     return {
-        "filename":      "/path/file.jpg",
-        "label":         "Plastic",
-        "description":   "A bottle",
+        "filename": "/path/file.jpg",
+        "label": "Plastic",
+        "description": "A bottle",
         "brand_product": "Coca-Cola",
-        "location":      "Yerevan",
-        "weight":        "",
-        "timestamp":     "2026-01-01 12:00:00",
+        "location": "Yerevan",
+        "weight": "",
+        "timestamp": "2026-01-01 12:00:00",
     }
 
 
 def _env():
     return {
-        "simulated_temperature":   22.5,
-        "simulated_humidity":      50.0,
-        "simulated_vibration":     0.05,
+        "simulated_temperature": 22.5,
+        "simulated_humidity": 50.0,
+        "simulated_vibration": 0.05,
         "simulated_air_pollution": 25.0,
-        "simulated_smoke":         0.1,
+        "simulated_smoke": 0.1,
     }
 
 
 def _setup_db(tmp_path, monkeypatch):
     """Set up a fresh SQLite database for testing."""
     import smartwaste.database as db
+
     db_path = str(tmp_path / "test.db")
     monkeypatch.setattr(db, "DB_FILE", db_path)
     monkeypatch.setattr(db, "_initialized", False)
@@ -43,6 +44,7 @@ def _setup_db(tmp_path, monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────────
 # init_db
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestInitDb:
     def test_creates_waste_entries_table(self, tmp_path, monkeypatch):
@@ -67,16 +69,29 @@ class TestInitDb:
         db, db_path = _setup_db(tmp_path, monkeypatch)
         with sqlite3.connect(db_path) as conn:
             cols = [r[1] for r in conn.execute("PRAGMA table_info(waste_entries)")]
-        for col in ("simulated_temperature", "simulated_humidity",
-                    "simulated_vibration", "simulated_air_pollution", "simulated_smoke"):
+        for col in (
+            "simulated_temperature",
+            "simulated_humidity",
+            "simulated_vibration",
+            "simulated_air_pollution",
+            "simulated_smoke",
+        ):
             assert col in cols
 
     def test_table_has_core_columns(self, tmp_path, monkeypatch):
         db, db_path = _setup_db(tmp_path, monkeypatch)
         with sqlite3.connect(db_path) as conn:
             cols = [r[1] for r in conn.execute("PRAGMA table_info(waste_entries)")]
-        for col in ("id", "filename", "label", "description",
-                    "brand_product", "location", "weight", "timestamp"):
+        for col in (
+            "id",
+            "filename",
+            "label",
+            "description",
+            "brand_product",
+            "location",
+            "weight",
+            "timestamp",
+        ):
             assert col in cols
 
     def test_no_bare_sensor_columns(self, tmp_path, monkeypatch):
@@ -97,6 +112,7 @@ class TestInitDb:
 # ─────────────────────────────────────────────────────────────────────────────
 # insert_entry
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestInsertEntry:
     def test_inserts_one_row(self, tmp_path, monkeypatch):
@@ -190,6 +206,7 @@ class TestInsertEntry:
 # ─────────────────────────────────────────────────────────────────────────────
 # Query functions
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestGetEntries:
     def test_returns_empty_list_when_no_data(self, tmp_path, monkeypatch):

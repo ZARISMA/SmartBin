@@ -19,6 +19,7 @@ def _combined() -> np.ndarray:
 # ManualStrategy
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestManualStrategySetup:
     def test_setup_leaves_auto_classify_false(self):
         state = AppState()
@@ -44,8 +45,10 @@ class TestManualStrategyOnCombinedFrame:
         state = AppState()
         state.auto_classify = True
         state.last_capture_time = 0.0  # far in the past
-        with patch("smartwaste.strategies.launch_classify") as mock, \
-             patch("smartwaste.strategies.encode_frame", return_value=b"x"):
+        with (
+            patch("smartwaste.strategies.launch_classify") as mock,
+            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+        ):
             ManualStrategy().on_combined_frame(_combined(), state)
         assert mock.called
 
@@ -71,8 +74,10 @@ class TestManualStrategyOnCombinedFrame:
         state.auto_classify = True
         state.last_capture_time = 0.0
         before = time.time()
-        with patch("smartwaste.strategies.launch_classify"), \
-             patch("smartwaste.strategies.encode_frame", return_value=b"x"):
+        with (
+            patch("smartwaste.strategies.launch_classify"),
+            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+        ):
             ManualStrategy().on_combined_frame(_combined(), state)
         assert state.last_capture_time >= before
 
@@ -80,8 +85,10 @@ class TestManualStrategyOnCombinedFrame:
 class TestManualStrategyOnKey:
     def test_c_key_triggers_classify(self):
         state = AppState()
-        with patch("smartwaste.strategies.launch_classify") as mock, \
-             patch("smartwaste.strategies.encode_frame", return_value=b"x"):
+        with (
+            patch("smartwaste.strategies.launch_classify") as mock,
+            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+        ):
             ManualStrategy().on_key(ord("c"), _combined(), state)
         assert mock.called
 
@@ -128,6 +135,7 @@ class TestManualStrategyOnKey:
 # PresenceGateStrategy
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestPresenceGateStrategySetup:
     def test_setup_sets_auto_classify_true(self):
         state = AppState()
@@ -146,16 +154,20 @@ class TestPresenceGateStrategySetup:
 class TestPresenceGateStrategyOnKey:
     def test_c_key_triggers_classify(self):
         state = AppState()
-        with patch("smartwaste.strategies.launch_classify") as mock, \
-             patch("smartwaste.strategies.encode_frame", return_value=b"x"):
+        with (
+            patch("smartwaste.strategies.launch_classify") as mock,
+            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+        ):
             PresenceGateStrategy().on_key(ord("c"), _combined(), state)
         assert mock.called
 
     def test_c_key_sets_item_classified(self):
         state = AppState()
         s = PresenceGateStrategy()
-        with patch("smartwaste.strategies.launch_classify"), \
-             patch("smartwaste.strategies.encode_frame", return_value=b"x"):
+        with (
+            patch("smartwaste.strategies.launch_classify"),
+            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+        ):
             s.on_key(ord("c"), _combined(), state)
         assert s._item_classified is True
 
@@ -248,8 +260,11 @@ class TestPresenceGateStrategyOnCombinedFrame:
         bright = np.full((480, 1280, 3), 200, dtype=np.uint8)
 
         from smartwaste.config import DETECT_CONFIRM_N
-        with patch("smartwaste.strategies.launch_classify") as mock, \
-             patch("smartwaste.strategies.encode_frame", return_value=b"x"):
+
+        with (
+            patch("smartwaste.strategies.launch_classify") as mock,
+            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+        ):
             for _ in range(DETECT_CONFIRM_N + 1):
                 s._last_check_time = 0.0
                 s.on_combined_frame(bright, state)
@@ -266,10 +281,15 @@ class TestPresenceGateStrategyOnCombinedFrame:
         bright = np.full((480, 1280, 3), 200, dtype=np.uint8)
 
         from smartwaste.config import DETECT_CONFIRM_N
+
         call_count = []
-        with patch("smartwaste.strategies.launch_classify",
-                   side_effect=lambda *a, **kw: call_count.append(1)), \
-             patch("smartwaste.strategies.encode_frame", return_value=b"x"):
+        with (
+            patch(
+                "smartwaste.strategies.launch_classify",
+                side_effect=lambda *a, **kw: call_count.append(1),
+            ),
+            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+        ):
             for _ in range(DETECT_CONFIRM_N + 5):
                 s._last_check_time = 0.0
                 # Simulate finish_classify so start_classify can succeed again
@@ -282,7 +302,7 @@ class TestPresenceGateStrategyOnCombinedFrame:
         """After is_empty fires, bin_occupied and item_classified reset."""
         state = AppState()
         s = PresenceGateStrategy()
-        s._bin_occupied    = True
+        s._bin_occupied = True
         s._item_classified = True
         s._last_check_time = 0.0
 
@@ -290,12 +310,15 @@ class TestPresenceGateStrategyOnCombinedFrame:
         s._detector.reset(gray_seed)
 
         from smartwaste.config import EMPTY_CONFIRM_N
+
         black = np.zeros((480, 1280, 3), dtype=np.uint8)
-        with patch("smartwaste.strategies.launch_classify"), \
-             patch("smartwaste.strategies.encode_frame", return_value=b"x"):
+        with (
+            patch("smartwaste.strategies.launch_classify"),
+            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+        ):
             for _ in range(EMPTY_CONFIRM_N + 1):
                 s._last_check_time = 0.0
                 s.on_combined_frame(black, state)
 
-        assert s._bin_occupied    is False
+        assert s._bin_occupied is False
         assert s._item_classified is False

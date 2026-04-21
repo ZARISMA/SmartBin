@@ -23,12 +23,11 @@ def _parse() -> argparse.Namespace:
         description="SmartWaste AI — Manual mode (dual OAK cameras)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--model", metavar="NAME",
-                   help="Gemini model name")
-    p.add_argument("--auto-interval", type=int, metavar="SEC",
-                   help="Seconds between auto-classifications")
-    p.add_argument("--location", metavar="NAME",
-                   help="Deployment location written to dataset")
+    p.add_argument("--model", metavar="NAME", help="Gemini model name")
+    p.add_argument(
+        "--auto-interval", type=int, metavar="SEC", help="Seconds between auto-classifications"
+    )
+    p.add_argument("--location", metavar="NAME", help="Deployment location written to dataset")
     return p.parse_args()
 
 

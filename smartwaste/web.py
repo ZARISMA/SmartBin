@@ -713,9 +713,7 @@ def proxy_bin_command(request: Request, bin_id: str, cmd: BinCommand):
         return JSONResponse(
             {"error": "rate limited — wait a moment between commands"}, status_code=429
         )
-    status, data = _proxy_request(
-        info.host, "/command", method="POST", json_body=cmd.model_dump()
-    )
+    status, data = _proxy_request(info.host, "/command", method="POST", json_body=cmd.model_dump())
     with _command_lock:
         _command_audit.append(
             {

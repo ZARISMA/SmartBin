@@ -25,6 +25,7 @@ for _mod in ("depthai", "picamera2"):
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def blank_bgr():
     """480×640 black BGR frame."""
@@ -52,6 +53,7 @@ def white_gray():
 @pytest.fixture
 def app_state():
     from smartwaste.state import AppState
+
     return AppState()
 
 
@@ -61,6 +63,7 @@ def ready_detector():
     from smartwaste.presence import PresenceDetector
     from smartwaste.config import BG_WARMUP_FRAMES
     import numpy as np
+
     d = PresenceDetector()
     black = np.zeros((100, 100), dtype=np.uint8)
     for _ in range(BG_WARMUP_FRAMES):

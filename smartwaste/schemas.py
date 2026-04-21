@@ -47,8 +47,8 @@ class BinHeartbeat(BaseModel):
     host: str = ""  # "lan-ip:port" where the edge HTTP server is reachable
 
     # New in v2 — surfaced on the admin dashboard
-    strategy: str = ""          # "manual" | "auto" | "oak-native"
-    pipeline: str = ""          # "oak" | "oak-native"
+    strategy: str = ""  # "manual" | "auto" | "oak-native"
+    pipeline: str = ""  # "oak" | "oak-native"
     camera_count: int = 0
     running: bool = True
     auto_classify: bool = False

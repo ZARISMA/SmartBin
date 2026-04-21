@@ -57,13 +57,13 @@ class TestCropGeometry:
 
     def test_odd_width_floor_truncation(self):
         frame = np.zeros((10, 101, 3), dtype=np.uint8)
-        left  = int(101 * 0.20)   # 20
-        right = int(101 * 0.80)   # 80
+        left = int(101 * 0.20)  # 20
+        right = int(101 * 0.80)  # 80
         assert crop_sides(frame, 0.20).shape[1] == right - left
 
     def test_large_hd_frame(self):
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        left  = int(1920 * 0.20)
+        left = int(1920 * 0.20)
         right = int(1920 * 0.80)
         assert crop_sides(frame, 0.20).shape == (1080, right - left, 3)
 
@@ -71,7 +71,7 @@ class TestCropGeometry:
 class TestCropContent:
     def test_removes_left_columns(self):
         frame = np.zeros((10, 100, 3), dtype=np.uint8)
-        frame[:, :10] = 255   # leftmost 10 cols = white
+        frame[:, :10] = 255  # leftmost 10 cols = white
         result = crop_sides(frame, 0.10)
         assert result[:, 0].max() == 0  # first remaining col should be black
 
@@ -83,14 +83,14 @@ class TestCropContent:
 
     def test_preserves_center_content(self):
         frame = np.zeros((10, 100, 3), dtype=np.uint8)
-        frame[:, 50] = 128   # mark column 50 (center)
+        frame[:, 50] = 128  # mark column 50 (center)
         result = crop_sides(frame, 0.10)
         # col 50 is at index 40 in cropped result (50 - left=10)
         assert result[:, 40, 0].max() == 128
 
     def test_both_extremes_removed(self):
         frame = np.zeros((10, 100, 3), dtype=np.uint8)
-        frame[:, :10]  = 200  # left edge
+        frame[:, :10] = 200  # left edge
         frame[:, -10:] = 200  # right edge
         result = crop_sides(frame, 0.10)
         assert result.max() == 0

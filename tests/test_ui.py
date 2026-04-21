@@ -25,6 +25,7 @@ class TestDrawOverlayBasic:
 
     def test_does_not_raise_for_every_valid_category(self):
         from smartwaste.config import VALID_CLASSES
+
         for cat in VALID_CLASSES:
             draw_overlay(_img(), cat, "detail", False)
 
@@ -49,9 +50,9 @@ class TestDrawOverlayModifiesImage:
         assert img.dtype == np.uint8
 
     def test_auto_mode_produces_different_pixels_than_manual(self):
-        img_auto   = _img()
+        img_auto = _img()
         img_manual = _img()
-        draw_overlay(img_auto,   "Ready", "detail", True)
+        draw_overlay(img_auto, "Ready", "detail", True)
         draw_overlay(img_manual, "Ready", "detail", False)
         # Text differs ("AUTO" vs "MANUAL") so pixel sums should differ
         assert img_auto.sum() != img_manual.sum()
@@ -95,9 +96,9 @@ class TestDrawOverlayHistory:
         draw_overlay(_img(), "Aluminum", "can", False, history)
 
     def test_history_modifies_image(self):
-        img_with    = _img()
+        img_with = _img()
         img_without = _img()
         history = [("14:23", "Plastic")]
-        draw_overlay(img_with,    "Plastic", "detail", False, history)
+        draw_overlay(img_with, "Plastic", "detail", False, history)
         draw_overlay(img_without, "Plastic", "detail", False, None)
         assert img_with.sum() != img_without.sum()

@@ -18,6 +18,7 @@ class TestPromptStructure:
 class TestPromptCategories:
     def test_contains_all_valid_categories(self):
         from smartwaste.config import VALID_CLASSES
+
         for category in VALID_CLASSES:
             assert category in PROMPT, f"Missing category '{category}' in prompt"
 

@@ -69,8 +69,11 @@ CREATE INDEX IF NOT EXISTS idx_waste_ts ON waste_entries(timestamp);
 
 def get_pg_conn():
     return psycopg2.connect(
-        host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
-        user=DB_USER, password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
     )
 
 
@@ -129,7 +132,9 @@ def migrate_json(conn):
 def main():
     parser = argparse.ArgumentParser(description="Migrate data to PostgreSQL")
     parser.add_argument(
-        "--source", choices=["sqlite", "json", "both"], default="sqlite",
+        "--source",
+        choices=["sqlite", "json", "both"],
+        default="sqlite",
         help="Data source to migrate from (default: sqlite)",
     )
     args = parser.parse_args()

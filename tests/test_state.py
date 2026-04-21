@@ -203,8 +203,9 @@ class TestConcurrency:
                 except Exception as e:
                     errors.append(e)
 
-        threads = ([threading.Thread(target=writer)] +
-                   [threading.Thread(target=reader) for _ in range(4)])
+        threads = [threading.Thread(target=writer)] + [
+            threading.Thread(target=reader) for _ in range(4)
+        ]
         for t in threads:
             t.start()
         for t in threads:

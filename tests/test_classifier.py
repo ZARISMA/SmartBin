@@ -20,6 +20,7 @@ from smartwaste.state import AppState
 # _extract_json
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestExtractJsonCleanInput:
     def test_plain_json_object(self):
         t = '{"category": "Plastic", "description": "bottle", "brand_product": "Coca-Cola"}'
@@ -150,6 +151,7 @@ class TestExtractJsonErrors:
 # classify() — mocked Gemini client
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _mock_response(json_text: str) -> MagicMock:
     r = MagicMock()
     r.text = json_text
@@ -165,38 +167,51 @@ def _run_classify(response_text: str, state=None):
         state.start_classify()
 
     frame = np.zeros((10, 10, 3), dtype=np.uint8)
-    with patch.object(clf, "client") as mock_client, \
-         patch("smartwaste.classifier.save_entry") as mock_save:
+    with (
+        patch.object(clf, "client") as mock_client,
+        patch("smartwaste.classifier.save_entry") as mock_save,
+    ):
         mock_client.models.generate_content.return_value = _mock_response(response_text)
         from smartwaste.classifier import classify
+
         classify(b"fake_bytes", frame, state)
         return state, mock_save
 
 
 class TestClassifyHappyPath:
     def test_valid_category_sets_label(self):
-        state, _ = _run_classify('{"category": "Plastic", "description": "bottle", "brand_product": "Coke"}')
+        state, _ = _run_classify(
+            '{"category": "Plastic", "description": "bottle", "brand_product": "Coke"}'
+        )
         label, _, _ = state.get_display()
         assert label == "Plastic"
 
     def test_detail_contains_brand_and_description(self):
-        state, _ = _run_classify('{"category": "Glass", "description": "jar", "brand_product": "Jermuk"}')
+        state, _ = _run_classify(
+            '{"category": "Glass", "description": "jar", "brand_product": "Jermuk"}'
+        )
         _, detail, _ = state.get_display()
         assert "Jermuk" in detail
         assert "jar" in detail
 
     def test_save_entry_called_for_non_empty(self):
-        _, mock_save = _run_classify('{"category": "Plastic", "description": "x", "brand_product": "y"}')
+        _, mock_save = _run_classify(
+            '{"category": "Plastic", "description": "x", "brand_product": "y"}'
+        )
         assert mock_save.called
 
     def test_save_entry_not_called_for_empty(self):
-        _, mock_save = _run_classify('{"category": "Empty", "description": "N/A", "brand_product": "Unknown"}')
+        _, mock_save = _run_classify(
+            '{"category": "Empty", "description": "N/A", "brand_product": "Unknown"}'
+        )
         assert not mock_save.called
 
     def test_finish_classify_called_on_success(self):
         state = AppState()
         state.start_classify()
-        _run_classify('{"category": "Paper", "description": "d", "brand_product": "b"}', state=state)
+        _run_classify(
+            '{"category": "Paper", "description": "d", "brand_product": "b"}', state=state
+        )
         # After classify(), finish_classify() was called, so start_classify should succeed again
         assert state.start_classify() is True
 
@@ -212,17 +227,23 @@ class TestClassifyHappyPath:
 
 class TestClassifyCategoryNormalization:
     def test_lowercase_category_capitalised(self):
-        state, _ = _run_classify('{"category": "plastic", "description": "x", "brand_product": "y"}')
+        state, _ = _run_classify(
+            '{"category": "plastic", "description": "x", "brand_product": "y"}'
+        )
         label, _, _ = state.get_display()
         assert label == "Plastic"
 
     def test_invalid_category_becomes_other(self):
-        state, _ = _run_classify('{"category": "Garbage", "description": "x", "brand_product": "y"}')
+        state, _ = _run_classify(
+            '{"category": "Garbage", "description": "x", "brand_product": "y"}'
+        )
         label, _, _ = state.get_display()
         assert label == "Other"
 
     def test_unknown_category_becomes_other(self):
-        state, _ = _run_classify('{"category": "Unicorn", "description": "x", "brand_product": "y"}')
+        state, _ = _run_classify(
+            '{"category": "Unicorn", "description": "x", "brand_product": "y"}'
+        )
         label, _, _ = state.get_display()
         assert label == "Other"
 
@@ -235,6 +256,7 @@ class TestClassifyCategoryNormalization:
 class TestClassifyErrorHandling:
     def test_quota_error_sets_quota_label(self):
         import smartwaste.classifier as clf
+
         state = AppState()
         state.start_classify()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
@@ -242,6 +264,7 @@ class TestClassifyErrorHandling:
         with patch.object(clf, "client") as mock_client:
             mock_client.models.generate_content.side_effect = Exception("429 RESOURCE_EXHAUSTED")
             from smartwaste.classifier import classify
+
             classify(b"bytes", frame, state)
 
         label, _, _ = state.get_display()
@@ -249,6 +272,7 @@ class TestClassifyErrorHandling:
 
     def test_generic_error_sets_error_label(self):
         import smartwaste.classifier as clf
+
         state = AppState()
         state.start_classify()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
@@ -256,6 +280,7 @@ class TestClassifyErrorHandling:
         with patch.object(clf, "client") as mock_client:
             mock_client.models.generate_content.side_effect = Exception("Network timeout")
             from smartwaste.classifier import classify
+
             classify(b"bytes", frame, state)
 
         label, _, _ = state.get_display()
@@ -263,6 +288,7 @@ class TestClassifyErrorHandling:
 
     def test_finish_classify_called_on_error(self):
         import smartwaste.classifier as clf
+
         state = AppState()
         state.start_classify()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
@@ -270,20 +296,22 @@ class TestClassifyErrorHandling:
         with patch.object(clf, "client") as mock_client:
             mock_client.models.generate_content.side_effect = Exception("boom")
             from smartwaste.classifier import classify
+
             classify(b"bytes", frame, state)
 
         assert state.start_classify() is True  # finish_classify was called
 
     def test_bad_json_response_does_not_crash(self):
         import smartwaste.classifier as clf
+
         state = AppState()
         state.start_classify()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
 
-        with patch.object(clf, "client") as mock_client, \
-             patch("smartwaste.classifier.save_entry"):
+        with patch.object(clf, "client") as mock_client, patch("smartwaste.classifier.save_entry"):
             mock_client.models.generate_content.return_value = _mock_response("not json at all")
             from smartwaste.classifier import classify
+
             classify(b"bytes", frame, state)
 
         # Should either set Error status or handle gracefully

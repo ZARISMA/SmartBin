@@ -49,8 +49,7 @@ class FrameBuffer:
 
 def _placeholder_frame(msg: str = "Waiting for camera…") -> bytes:
     img = np.zeros((240, 640, 3), dtype=np.uint8)
-    cv2.putText(img, msg, (30, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
-                (160, 160, 160), 2, cv2.LINE_AA)
+    cv2.putText(img, msg, (30, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (160, 160, 160), 2, cv2.LINE_AA)
     ok, jpeg = cv2.imencode(".jpg", img)
     return jpeg.tobytes() if ok else b""
 
@@ -180,8 +179,10 @@ def _build_app(state: AppState, buf: FrameBuffer):
             # the admin must use set_pipeline to change to the dual pipeline.
             if state.get_pipeline() != "oak":
                 return JSONResponse(
-                    {"status": "error",
-                     "message": "strategy swap only supported on the dual-OAK pipeline"},
+                    {
+                        "status": "error",
+                        "message": "strategy swap only supported on the dual-OAK pipeline",
+                    },
                     status_code=409,
                 )
             state.request_strategy_swap(value)
@@ -197,6 +198,7 @@ def _build_app(state: AppState, buf: FrameBuffer):
             # Pipeline change requires a process restart. Persist the new
             # mode to env so control.py picks it up on respawn.
             import os as _os
+
             _os.environ["SMARTWASTE_CAMERA_MODE"] = value
             logger.info("Admin command: set_pipeline=%s (restart required)", value)
             state.request_restart()

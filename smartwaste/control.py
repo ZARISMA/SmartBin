@@ -30,10 +30,16 @@ def _parse_cli() -> argparse.Namespace:
         description="SmartWaste AI — unified edge runner",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--pipeline", choices=VALID_PIPELINES,
-                   help="Camera pipeline (overrides SMARTWASTE_CAMERA_MODE)")
-    p.add_argument("--strategy", choices=VALID_STRATEGIES,
-                   help="Strategy for dual-OAK pipeline (overrides SMARTWASTE_STRATEGY)")
+    p.add_argument(
+        "--pipeline",
+        choices=VALID_PIPELINES,
+        help="Camera pipeline (overrides SMARTWASTE_CAMERA_MODE)",
+    )
+    p.add_argument(
+        "--strategy",
+        choices=VALID_STRATEGIES,
+        help="Strategy for dual-OAK pipeline (overrides SMARTWASTE_STRATEGY)",
+    )
     return p.parse_known_args()[0]
 
 
@@ -69,6 +75,7 @@ def main() -> None:
     try:
         if pipeline == "oak-native":
             from mainoak import main as oak_main
+
             oak_main(app_state=state)
         else:
             from .app import run_loop

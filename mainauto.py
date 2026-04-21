@@ -28,16 +28,20 @@ def _parse() -> argparse.Namespace:
         description="SmartWaste AI — Auto-gate mode (dual OAK cameras)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--model", metavar="NAME",
-                   help="Gemini model name")
-    p.add_argument("--threshold", type=float, metavar="FLOAT",
-                   help="Pixel-diff motion threshold (0–255)")
-    p.add_argument("--detect-n", type=int, metavar="N",
-                   help="Consecutive detections required to confirm presence")
-    p.add_argument("--empty-n", type=int, metavar="N",
-                   help="Consecutive empty checks required to clear state")
-    p.add_argument("--location", metavar="NAME",
-                   help="Deployment location written to dataset")
+    p.add_argument("--model", metavar="NAME", help="Gemini model name")
+    p.add_argument(
+        "--threshold", type=float, metavar="FLOAT", help="Pixel-diff motion threshold (0–255)"
+    )
+    p.add_argument(
+        "--detect-n",
+        type=int,
+        metavar="N",
+        help="Consecutive detections required to confirm presence",
+    )
+    p.add_argument(
+        "--empty-n", type=int, metavar="N", help="Consecutive empty checks required to clear state"
+    )
+    p.add_argument("--location", metavar="NAME", help="Deployment location written to dataset")
     return p.parse_args()
 
 
