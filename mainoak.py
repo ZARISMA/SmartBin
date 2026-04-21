@@ -281,7 +281,7 @@ def _handle_key(
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-def main() -> None:
+def main(app_state: AppState | None = None) -> None:
     # Full parser — for --help and validation only (values already in env vars)
     p = argparse.ArgumentParser(
         description="SmartWaste AI — OAK Native mode (1 or 2 cameras)",
@@ -296,18 +296,33 @@ def main() -> None:
                    help="Deployment location written to dataset")
     p.parse_args()   # triggers --help / validation; actual values are in env already
 
-    # ── Edge heartbeat (only when running as an edge device) ──────────────────
+    # ── Edge heartbeat + sidecar HTTP server (only when running as edge) ─────
     # Register this bin with the central server so it shows up on the dashboard
-    # immediately — otherwise the server has no record of the bin until the
-    # first classification is reported.
+    # and expose /stream + control routes so the laptop dashboard can proxy them.
+    frame_buf = None
+    if app_state is None:
+        app_state = AppState()
+    app_state.set_pipeline("oak-native")
+    app_state.set_strategy("oak-native")
+    app_state.set_status("Calibrating", "Warming up sensors…")
+
     if EDGE_MODE:
         from smartwaste.edge_client import start_heartbeat_thread
+        from smartwaste.edge_server import FrameBuffer, start_edge_server
 
-        start_heartbeat_thread()
+        start_heartbeat_thread(app_state)
+        frame_buf = FrameBuffer()
+        start_edge_server(app_state, frame_buf)
 
     # ── Device discovery ───────────────────────────────────────────────────────
     infos = dai.Device.getAllAvailableDevices()
+    app_state.set_camera_count(len(infos))
     if not infos:
+        app_state.warnings.add(
+            "CAMERA_MISSING",
+            "No OAK device detected — check USB connection.",
+            severity="error",
+        )
         msg = "No OAK device found. Check USB connection."
         if sys.platform != "win32":
             msg += (
@@ -318,6 +333,16 @@ def main() -> None:
                 "Then reconnect the camera."
             )
         raise RuntimeError(msg)
+
+    app_state.warnings.clear("CAMERA_MISSING")
+    if len(infos) < 2:
+        app_state.warnings.add(
+            "CAMERA_COUNT_LOW",
+            "Only 1 OAK device detected — running single-camera mode (dual recommended).",
+            severity="warning",
+        )
+    else:
+        app_state.warnings.clear("CAMERA_COUNT_LOW")
 
     dual_mode = len(infos) >= 2
     if dual_mode:
@@ -346,9 +371,6 @@ def main() -> None:
                 "For headless edge deployments set SMARTWASTE_HEADLESS=1 "
                 "or SMARTWASTE_EDGE_MODE=true."
             ) from exc
-
-    app_state = AppState()
-    app_state.set_status("Calibrating", "Warming up sensors…")
 
     with contextlib.ExitStack() as exit_stack:
         # Primary camera — presence + motion + NN pipeline
@@ -381,6 +403,10 @@ def main() -> None:
 
         try:
             while True:
+                if app_state.shutdown_requested:
+                    logger.info("Shutdown requested via admin — stopping OAK loop.")
+                    break
+
                 # ── Drain all sensor queues (camera 1) ────────────────────────
                 votes = detector.update()
                 if votes.rgb_frame is not None:
@@ -415,6 +441,10 @@ def main() -> None:
                         )
                 elif last_votes.rgb_frame is not None:
                     classify_frame = last_votes.rgb_frame
+
+                # ── Push latest frame to edge server buffer ───────────────────
+                if classify_frame is not None and frame_buf is not None:
+                    frame_buf.set(classify_frame)
 
                 # ── Display ───────────────────────────────────────────────────
                 if classify_frame is not None and not headless:

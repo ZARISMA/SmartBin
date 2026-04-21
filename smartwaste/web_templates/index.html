@@ -26,7 +26,7 @@
         {% if has_local_camera %}
         <section class="stream-panel">
             <div class="stream-container">
-                <img id="video-feed" src="/stream" alt="Live camera feed">
+                <img id="video-feed" src="{{ stream_url }}" alt="Live camera feed">
             </div>
         </section>
         {% else %}
@@ -90,6 +90,9 @@
     <script>
         const BIN_ID = '{{ bin_id | default("") }}';
         const HAS_LOCAL_CAMERA = {{ 'true' if has_local_camera else 'false' }};
+        const CLASSIFY_URL = '{{ classify_url | default("/api/classify") }}';
+        const TOGGLE_URL = '{{ toggle_url | default("/api/toggle-auto") }}';
+        const STATE_URL = '{{ state_url | default("/api/state") }}';
         const BIN_QUERY = BIN_ID ? '?bin_id=' + encodeURIComponent(BIN_ID) : '';
 
         const CAT_COLORS = {
@@ -118,7 +121,7 @@
             }
             btn.disabled = true;
             try {
-                const res = await fetch('/api/classify', { method: 'POST' });
+                const res = await fetch(CLASSIFY_URL, { method: 'POST' });
                 const data = await res.json();
                 if (data.error) btn.textContent = data.error;
             } catch (e) {
@@ -128,7 +131,7 @@
         }
 
         async function toggleAuto() {
-            const res = await fetch('/api/toggle-auto', { method: 'POST' });
+            const res = await fetch(TOGGLE_URL, { method: 'POST' });
             const data = await res.json();
             updateModeBadge(data.auto_classify);
         }
@@ -143,7 +146,7 @@
         async function pollState() {
             if (!HAS_LOCAL_CAMERA) return;
             try {
-                const res = await fetch('/api/state');
+                const res = await fetch(STATE_URL);
                 const s = res.ok ? await res.json() : null;
                 if (!s) return;
 

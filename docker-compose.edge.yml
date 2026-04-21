@@ -1,12 +1,15 @@
 # docker-compose.edge.yml — Lightweight edge (report to server)
-# Runs on Raspberry Pi. No web UI. POSTs results to the central server.
+# Runs on a Linux host with cameras on USB. No web UI. POSTs results and
+# heartbeats to the central server, and exposes a sidecar HTTP server so
+# the admin dashboard can proxy the live stream and send control commands.
 #
 # Usage:
 #   SMARTWASTE_SERVER_URL=http://<server-ip>:8000 \
 #   docker compose -f docker-compose.edge.yml up -d
 #
-# Override entry point via SMARTWASTE_EDGE_ENTRYPOINT:
-#   mainoak.py (default), main.py, mainauto.py, mainraspberry.py
+# Pipeline is selected via SMARTWASTE_CAMERA_MODE (oak | oak-native).
+# Strategy (manual / auto) only applies to the dual-OAK pipeline and can be
+# changed at runtime from the admin dashboard without a restart.
 
 services:
   edge:
@@ -22,13 +25,19 @@ services:
       - SMARTWASTE_EDGE_API_KEY=${SMARTWASTE_EDGE_API_KEY:-password123}
       - SMARTWASTE_BIN_ID=${SMARTWASTE_BIN_ID:-bin-01}
       - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak-native}
+      - SMARTWASTE_STRATEGY=${SMARTWASTE_STRATEGY:-manual}
       - SMARTWASTE_LOCATION=${SMARTWASTE_LOCATION:-Yerevan}
+      # LAN IP the laptop uses to reach this Pi (container IP is not routable).
+      # Required so the server-side proxy routes (/api/bin/{id}/stream) work.
+      - SMARTWASTE_EDGE_HOST=${SMARTWASTE_EDGE_HOST:-}
     privileged: true
+    ports:
+      - "${SMARTWASTE_EDGE_PORT:-8000}:8000"
     volumes:
       - /dev/bus/usb:/dev/bus/usb
       - edge_images:/app/waste_dataset
     restart: unless-stopped
-    command: ["python", "${SMARTWASTE_EDGE_ENTRYPOINT:-mainoak.py}"]
+    command: ["python", "-m", "smartwaste.control"]
 
 volumes:
   edge_images:

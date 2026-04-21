@@ -9,6 +9,7 @@ Usage::
 """
 
 import contextlib
+import os
 import sys
 import time
 from abc import ABC, abstractmethod
@@ -18,12 +19,23 @@ import depthai as dai
 import numpy as np
 
 from .cameraOak import crop_sides, make_pipeline
-from .config import CROP_PERCENT, DISPLAY_SIZE, MAX_DT, WINDOW
+from .config import CROP_PERCENT, DISPLAY_SIZE, EDGE_MODE, MAX_DT, WINDOW
 from .log_setup import get_logger
 from .state import AppState
 from .ui import draw_overlay
 
 logger = get_logger()
+
+
+def _is_headless() -> bool:
+    """True when no display is available — edge containers, SSH, etc."""
+    if os.environ.get("SMARTWASTE_HEADLESS", "").lower() in ("1", "true", "yes"):
+        return True
+    if EDGE_MODE:
+        return True
+    if sys.platform.startswith(("linux", "darwin")) and not os.environ.get("DISPLAY"):
+        return True
+    return False
 
 
 class Strategy(ABC):
@@ -51,31 +63,67 @@ class Strategy(ABC):
         """Handle a non-quit keypress. Default: no-op."""
 
 
-def run_loop(strategy: Strategy) -> None:
+def _set_strategy_name(state: AppState, strategy: "Strategy") -> None:
+    """Map a Strategy subclass to the canonical name stored in AppState."""
+    cls = type(strategy).__name__.lower()
+    if "presence" in cls or "auto" in cls:
+        state.set_strategy("auto")
+    else:
+        state.set_strategy("manual")
+
+
+def run_loop(strategy: Strategy, state: AppState | None = None) -> None:
     """
     Initialise dual OAK cameras and run the capture / display / classify loop.
 
     The *strategy* controls when classifications are triggered and which
     additional key bindings are active.  Only 'q' (quit) is handled here.
+    If ``state`` is None a fresh ``AppState`` is created.
     """
-    state = AppState()
+    if state is None:
+        state = AppState()
+    state.set_pipeline("oak")
     strategy.setup(state)
+
+    # Record the initial strategy so the dashboard knows what's active.
+    _set_strategy_name(state, strategy)
 
     logger.info("Starting Smart Waste AI (%s)", type(strategy).__name__)
 
-    try:
-        cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(WINDOW, 1600, 800)
-    except cv2.error as e:
-        raise RuntimeError(
-            f"Cannot open display window: {e}\n"
-            "On Linux/Raspberry Pi: a monitor must be connected and a desktop session active.\n"
-            "If using SSH, run: export DISPLAY=:0  before starting the app."
-        ) from e
+    headless = _is_headless()
+    frame_buf = None
+    if EDGE_MODE:
+        from .edge_client import start_heartbeat_thread
+        from .edge_server import FrameBuffer, start_edge_server
+
+        start_heartbeat_thread(state)
+        frame_buf = FrameBuffer()
+        start_edge_server(state, frame_buf)
+
+    if headless:
+        logger.info("Headless mode — skipping OpenCV GUI.")
+    else:
+        try:
+            cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(WINDOW, 1600, 800)
+        except cv2.error as e:
+            raise RuntimeError(
+                f"Cannot open display window: {e}\n"
+                "On Linux/Raspberry Pi: a monitor must be connected and a desktop session active.\n"
+                "If using SSH, run: export DISPLAY=:0  before starting the app.\n"
+                "For headless edge deployments set SMARTWASTE_HEADLESS=1 "
+                "or SMARTWASTE_EDGE_MODE=true."
+            ) from e
 
     with contextlib.ExitStack() as stack:
         infos = dai.Device.getAllAvailableDevices()
+        state.set_camera_count(len(infos))
         if len(infos) < 2:
+            state.warnings.add(
+                "CAMERA_COUNT_LOW",
+                f"Only {len(infos)} OAK device(s) detected — 2 required for dual-camera mode.",
+                severity="error",
+            )
             msg = f"Need 2 OAK devices connected. Found: {len(infos)}"
             if sys.platform != "win32":
                 msg += (
@@ -86,6 +134,7 @@ def run_loop(strategy: Strategy) -> None:
                     "Then reconnect the cameras."
                 )
             raise RuntimeError(msg)
+        state.warnings.clear("CAMERA_COUNT_LOW")
 
         logger.info("Using devices: %s", [i.getDeviceId() for i in infos[:2]])
         devices = [stack.enter_context(dai.Device(info)) for info in infos[:2]]
@@ -102,6 +151,21 @@ def run_loop(strategy: Strategy) -> None:
 
         try:
             while True:
+                # ── Admin shutdown / restart request ───────────────────────────
+                if state.shutdown_requested:
+                    logger.info("Shutdown requested via admin — stopping loop.")
+                    break
+
+                # ── Hot strategy swap (manual ↔ auto) ─────────────────────────
+                pending = state.take_pending_strategy_swap()
+                if pending:
+                    from .strategies import build_strategy  # local import to avoid cycle
+
+                    logger.info("Swapping strategy to %r", pending)
+                    strategy = build_strategy(pending)
+                    strategy.setup(state)
+                    _set_strategy_name(state, strategy)
+
                 # ── Capture ────────────────────────────────────────────────────
                 for i, q in enumerate(queues):
                     if q.has():
@@ -116,28 +180,35 @@ def run_loop(strategy: Strategy) -> None:
                 if last_frames[0] is not None and last_frames[1] is not None:
                     if abs(last_ts[0] - last_ts[1]) <= MAX_DT:
                         combined = cv2.hconcat([last_frames[0], last_frames[1]])
+                        if frame_buf is not None:
+                            frame_buf.set(combined)
                         label, detail, auto_on = state.get_display()
                         draw_overlay(combined, label, detail, auto_on, state.get_history())
-                        cv2.imshow(WINDOW, combined)
+                        if not headless:
+                            cv2.imshow(WINDOW, combined)
 
                 # ── Strategy logic ─────────────────────────────────────────────
                 if combined is not None:
                     strategy.on_combined_frame(combined, state)
 
-                # ── Keyboard ───────────────────────────────────────────────────
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord("q"):
-                    logger.info("Quit.")
-                    break
-                if key != 0xFF:
-                    strategy.on_key(key, combined, state)
+                # ── Keyboard / pacing ──────────────────────────────────────────
+                if headless:
+                    time.sleep(0.01)
+                else:
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord("q"):
+                        logger.info("Quit.")
+                        break
+                    if key != 0xFF:
+                        strategy.on_key(key, combined, state)
 
         except KeyboardInterrupt:
             logger.info("Stopping (Ctrl+C)...")
 
         finally:
-            cv2.destroyAllWindows()
-            cv2.waitKey(1)
+            if not headless:
+                cv2.destroyAllWindows()
+                cv2.waitKey(1)
             time.sleep(0.2)
             for p in pipelines:
                 try:

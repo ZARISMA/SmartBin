@@ -10,17 +10,71 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import socket
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
-from .config import BIN_ID, CAMERA_MODE, EDGE_API_KEY, HEARTBEAT_INTERVAL, SERVER_URL
+from .config import BIN_ID, CAMERA_MODE, EDGE_API_KEY, HEARTBEAT_INTERVAL, SERVER_URL, WEB_PORT
 from .log_setup import get_logger
+from .state import AppState
 
 logger = get_logger()
 
 _start_time = time.monotonic()
+_cached_host: str | None = None
+_state_ref: AppState | None = None
+
+
+def _detect_local_host() -> str:
+    """
+    Return "lan-ip:port" this edge is reachable on from the central server.
+
+    Opens a dummy UDP socket to the server to discover which local interface
+    will carry the traffic — this is the IP the server sees. Cached after the
+    first successful call.
+    """
+    global _cached_host
+    if _cached_host is not None:
+        return _cached_host
+
+    # Explicit override — required when running inside Docker (container IP
+    # is not reachable from the laptop; set this to the Pi host's LAN IP).
+    override = os.environ.get("SMARTWASTE_EDGE_HOST", "").strip()
+    if override:
+        _cached_host = override if ":" in override else f"{override}:{WEB_PORT}"
+        return _cached_host
+
+    server_host = ""
+    try:
+        parsed = urllib.parse.urlparse(SERVER_URL)
+        server_host = parsed.hostname or ""
+    except Exception:
+        pass
+
+    ip = ""
+    if server_host:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.settimeout(1.0)
+                s.connect((server_host, 80))
+                ip = s.getsockname()[0]
+        except Exception as exc:
+            logger.debug("LAN IP detection via server failed: %s", exc)
+
+    if not ip:
+        try:
+            ip = socket.gethostbyname(socket.gethostname())
+        except Exception:
+            ip = ""
+
+    if ip and not ip.startswith("127."):
+        _cached_host = f"{ip}:{WEB_PORT}"
+        return _cached_host
+    return ""
 
 
 def _headers() -> dict[str, str]:
@@ -74,13 +128,34 @@ def report_classification(entry: dict, env: dict, image_bytes: bytes | None = No
     return ok
 
 
+def _derive_status(state: AppState | None) -> str:
+    if state is None:
+        return "online"
+    if not state.running:
+        return "stopped"
+    warnings = state.warnings.list()
+    if any(w["severity"] == "error" for w in warnings):
+        return "degraded"
+    if any(w["severity"] == "warning" for w in warnings):
+        return "degraded"
+    return "online"
+
+
 def send_heartbeat() -> bool:
     """Send a single heartbeat to the server."""
+    state = _state_ref
     payload = {
         "bin_id": BIN_ID,
-        "status": "online",
+        "status": _derive_status(state),
         "camera_mode": CAMERA_MODE,
         "uptime_seconds": round(time.monotonic() - _start_time, 1),
+        "host": _detect_local_host(),
+        "strategy": state.get_strategy() if state else "",
+        "pipeline": state.get_pipeline() if state else CAMERA_MODE,
+        "camera_count": state.get_camera_count() if state else 0,
+        "running": bool(state.running) if state else True,
+        "auto_classify": bool(state.auto_classify) if state else False,
+        "warnings": state.warnings.list() if state else [],
     }
     return _post("/api/heartbeat", payload)
 
@@ -88,12 +163,22 @@ def send_heartbeat() -> bool:
 def _heartbeat_loop() -> None:
     """Background loop that sends heartbeats at HEARTBEAT_INTERVAL."""
     while True:
-        send_heartbeat()
+        try:
+            send_heartbeat()
+        except Exception as exc:
+            logger.warning("Heartbeat send failed: %s", exc)
         time.sleep(HEARTBEAT_INTERVAL)
 
 
-def start_heartbeat_thread() -> None:
-    """Start the heartbeat daemon thread."""
+def start_heartbeat_thread(state: AppState | None = None) -> None:
+    """Start the heartbeat daemon thread.
+
+    Pass the shared AppState so heartbeats can include live strategy /
+    warnings / camera_count for the admin dashboard.
+    """
+    global _state_ref
+    if state is not None:
+        _state_ref = state
     if not SERVER_URL:
         logger.warning("Edge: SERVER_URL not set, heartbeat disabled")
         return

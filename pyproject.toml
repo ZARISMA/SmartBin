@@ -25,6 +25,7 @@ dependencies = [
 smartwaste      = "main:main"
 smartwaste-auto = "mainauto:main"
 smartwaste-oak  = "mainoak:main"
+smartwaste-run  = "smartwaste.control:main"
 
 # ── Ruff (linting + formatting) ───────────────────────────────────────────────
 [tool.ruff]

@@ -6,8 +6,8 @@ Smart Waste AI — real-time waste classification using dual OAK-D USB3 depth ca
 - `python main.py` / `smartwaste` — manual mode, dual OAK cameras, OpenCV window
 - `python mainauto.py` / `smartwaste-auto` — auto gate mode with presence detection
 - `python mainoak.py` / `smartwaste-oak` — OAK-D Native mode (depth + IMU + NN voting)
-- `python mainraspberry.py` — Raspberry Pi dual cameras
-- `python -m smartwaste.web` — Docker/web UI (FastAPI + MJPEG stream)
+- `python -m smartwaste.control` / `smartwaste-run` — **unified edge runner** (used by Docker). Picks pipeline from `SMARTWASTE_CAMERA_MODE` and strategy from `SMARTWASTE_STRATEGY`. Supports hot strategy swaps and clean restarts triggered by the admin dashboard.
+- `python -m smartwaste.web` — Docker/web UI (FastAPI + MJPEG stream + fleet control)
 
 CLI entry points are defined in `pyproject.toml`.
 
@@ -71,6 +71,21 @@ Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketin
 
 **Contact placeholders:** Phone `+374 12 345 678`, email `info@smartbin.am` — update in `site.html` footer.
 
+## Fleet Control Dashboard
+
+The default admin landing page (`/`) is a fleet control surface. Each online bin is rendered as a card with a live thumbnail (MJPEG proxied from the edge), status pill (`online` / `degraded` / `offline` / `stopped`), structured warnings, and these controls:
+
+- **Start / Stop** — pause or resume classifications (in-process; no restart).
+- **Restart** — clean exit 0 so the container supervisor respawns with current env.
+- **Strategy dropdown** (Manual / Auto Gate) — hot-swaps inside the running dual-OAK process.
+- **Pipeline dropdown** (OAK Dual / OAK Native) — writes `SMARTWASTE_CAMERA_MODE` and triggers a restart.
+- **Classify** — force a single classification on the current frame.
+- **Auto toggle** — toggle the auto-classify flag.
+
+Commands flow: browser → `POST /api/bin/{id}/command` (server, auth-gated, per-bin rate-limit) → edge sidecar `/command` (Bearer `EDGE_API_KEY`) → mutates `AppState`. Heartbeats carry the live `strategy`, `pipeline`, `camera_count`, `running`, `auto_classify`, and `warnings[]` so the dashboard reflects edge state within ~5 seconds.
+
+Warnings are structured (`code`, `severity`, `message`) and deduped by code in `smartwaste/warnings.py`. Known codes today: `CAMERA_COUNT_LOW`, `CAMERA_MISSING`.
+
 ## Database Backend
 
 Set via `SMARTWASTE_DB_BACKEND`:
@@ -119,12 +134,13 @@ All constants flow through `settings.py` (Pydantic BaseSettings) — override vi
 main.py              ← manual OAK mode (OpenCV window)
 mainauto.py          ← auto gate mode (presence-gated classifications)
 mainoak.py           ← OAK-D Native mode (depth + IMU + NN sensor fusion)
-mainraspberry.py     ← Raspberry Pi dual camera mode
 smartwaste/
   app.py             ← shared OAK-camera run loop
   camera.py          ← OAK camera pipeline helper (single device)
   cameraOak.py       ← dual OAK pipeline setup and frame cropping
-  cameraraspberry.py ← Raspberry Pi picamera2 setup
+  cameraraspberry.py ← legacy Raspberry Pi picamera2 setup (kept for web.py)
+  control.py         ← unified edge runner (docker entry point)
+  warnings.py        ← structured runtime warnings surfaced on the dashboard
   classifier.py      ← Gemini API call, JSON parsing, retry logic
   config.py          ← all constants and paths
   database.py        ← dual SQLite/PostgreSQL persistence layer (with bin_id)

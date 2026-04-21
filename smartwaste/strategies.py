@@ -126,3 +126,18 @@ class PresenceGateStrategy(Strategy):
             self._item_classified = False
             state.set_status("Ready", "Background reset from current frame.")
             logger.info("Background manually reset.")
+
+
+# ── Strategy factory ─────────────────────────────────────────────────────────
+
+STRATEGY_MANUAL = "manual"
+STRATEGY_AUTO = "auto"
+VALID_STRATEGIES = (STRATEGY_MANUAL, STRATEGY_AUTO)
+
+
+def build_strategy(name: str) -> Strategy:
+    """Return a fresh Strategy instance for the given name. Defaults to manual."""
+    key = (name or "").strip().lower()
+    if key == STRATEGY_AUTO:
+        return PresenceGateStrategy()
+    return ManualStrategy()

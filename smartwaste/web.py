@@ -18,6 +18,8 @@ import contextlib
 import os
 import threading
 import time
+import urllib.error
+import urllib.request
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -57,7 +59,7 @@ from .config import (
 )
 from .database import get_active_bins, get_entries, get_entry_count, get_label_counts, insert_entry
 from .log_setup import get_logger
-from .schemas import BinHeartbeat, EdgeReport
+from .schemas import BinCommand, BinHeartbeat, EdgeReport
 from .state import AppState
 from .ui import draw_nn_detections, draw_overlay
 from .utils import encode_frame, launch_classify
@@ -108,6 +110,13 @@ class BinInfo:
     last_seen: datetime = field(default_factory=datetime.now)
     camera_mode: str = ""
     uptime_seconds: float = 0.0
+    host: str = ""  # "ip:port" advertised by the edge for proxy routes
+    strategy: str = ""
+    pipeline: str = ""
+    camera_count: int = 0
+    running: bool = True
+    auto_classify: bool = False
+    warnings: list[dict] = field(default_factory=list)
 
 
 _bin_registry: dict[str, BinInfo] = {}
@@ -124,24 +133,50 @@ def _update_bin(hb: BinHeartbeat) -> None:
             last_seen=datetime.now(),
             camera_mode=hb.camera_mode,
             uptime_seconds=hb.uptime_seconds,
+            host=hb.host,
+            strategy=hb.strategy,
+            pipeline=hb.pipeline or hb.camera_mode,
+            camera_count=hb.camera_count,
+            running=hb.running,
+            auto_classify=hb.auto_classify,
+            warnings=[w.model_dump() for w in hb.warnings],
         )
+
+
+def _get_bin_info(bin_id: str) -> BinInfo | None:
+    with _bin_lock:
+        return _bin_registry.get(bin_id)
 
 
 def _get_bin_status() -> list[dict]:
     now = datetime.now()
     with _bin_lock:
-        return [
-            {
-                "bin_id": info.bin_id,
-                "status": "online"
-                if (now - info.last_seen).total_seconds() < _BIN_ONLINE_TIMEOUT
-                else "offline",
-                "last_seen": info.last_seen.isoformat(),
-                "camera_mode": info.camera_mode,
-                "uptime_seconds": info.uptime_seconds,
-            }
-            for info in _bin_registry.values()
-        ]
+        out: list[dict] = []
+        for info in _bin_registry.values():
+            stale = (now - info.last_seen).total_seconds() >= _BIN_ONLINE_TIMEOUT
+            if stale:
+                live_status = "offline"
+            elif not info.running:
+                live_status = "stopped"
+            else:
+                live_status = info.status or "online"
+            out.append(
+                {
+                    "bin_id": info.bin_id,
+                    "status": live_status,
+                    "last_seen": info.last_seen.isoformat(),
+                    "camera_mode": info.camera_mode,
+                    "uptime_seconds": info.uptime_seconds,
+                    "host": info.host,
+                    "strategy": info.strategy,
+                    "pipeline": info.pipeline,
+                    "camera_count": info.camera_count,
+                    "running": info.running,
+                    "auto_classify": info.auto_classify,
+                    "warnings": list(info.warnings),
+                }
+            )
+        return out
 
 
 # ── Shared state ──────────────────────────────────────────────────────────────
@@ -499,12 +534,210 @@ def dashboard(request: Request):
 def bin_detail(request: Request, bin_id: str):
     if not _is_authenticated(request):
         return RedirectResponse("/login", status_code=302)
-    has_local_camera = bin_id == BIN_ID and CAMERA_MODE != "none" and _cameras_ok
+
+    is_local = bin_id == BIN_ID and CAMERA_MODE != "none" and _cameras_ok
+    info = _get_bin_info(bin_id)
+    remote_online = (
+        info is not None
+        and bool(info.host)
+        and (datetime.now() - info.last_seen).total_seconds() < _BIN_ONLINE_TIMEOUT
+    )
+
+    if is_local:
+        stream_url = "/stream"
+        classify_url = "/api/classify"
+        toggle_url = "/api/toggle-auto"
+        state_url = "/api/state"
+        has_camera = True
+    elif remote_online:
+        stream_url = f"/api/bin/{bin_id}/stream"
+        classify_url = f"/api/bin/{bin_id}/classify"
+        toggle_url = f"/api/bin/{bin_id}/toggle-auto"
+        state_url = f"/api/bin/{bin_id}/state"
+        has_camera = True
+    else:
+        stream_url = classify_url = toggle_url = state_url = ""
+        has_camera = False
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"bin_id": bin_id, "has_local_camera": has_local_camera},
+        context={
+            "bin_id": bin_id,
+            "has_local_camera": has_camera,
+            "stream_url": stream_url,
+            "classify_url": classify_url,
+            "toggle_url": toggle_url,
+            "state_url": state_url,
+        },
     )
+
+
+# ── Routes: Proxy to edge bins ────────────────────────────────────────────────
+
+
+def _edge_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {EDGE_API_KEY}"} if EDGE_API_KEY else {}
+
+
+def _proxy_stream(host: str):
+    """Generator that yields chunks from the edge's MJPEG stream."""
+    url = f"http://{host}/stream"
+    req = urllib.request.Request(url, headers=_edge_headers())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            while True:
+                chunk = resp.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+    except Exception as exc:
+        logger.warning("Proxy stream from %s failed: %s", host, exc)
+        return
+
+
+def _proxy_request(
+    host: str, path: str, method: str = "GET", json_body: dict | None = None
+) -> tuple[int, dict]:
+    import json as _json
+
+    url = f"http://{host}{path}"
+    headers = _edge_headers()
+    data: bytes | None = None
+    if json_body is not None:
+        headers["Content-Type"] = "application/json"
+        data = _json.dumps(json_body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            try:
+                payload = _json.loads(body) if body else {}
+            except Exception:
+                payload = {"raw": body}
+            return resp.status, payload
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8", errors="replace")
+            payload = _json.loads(err_body) if err_body else {}
+        except Exception:
+            payload = {"error": f"edge returned {e.code}"}
+        return e.code, payload
+    except Exception as e:
+        return 502, {"error": f"edge unreachable: {e}"}
+
+
+@app.get("/api/bin/{bin_id}/stream")
+def proxy_bin_stream(request: Request, bin_id: str):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    info = _get_bin_info(bin_id)
+    if info is None or not info.host:
+        return JSONResponse({"error": "bin not registered"}, status_code=404)
+    return StreamingResponse(
+        _proxy_stream(info.host),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@app.post("/api/bin/{bin_id}/classify")
+def proxy_bin_classify(request: Request, bin_id: str):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    info = _get_bin_info(bin_id)
+    if info is None or not info.host:
+        return JSONResponse({"error": "bin not registered"}, status_code=404)
+    status, data = _proxy_request(info.host, "/classify", method="POST")
+    return JSONResponse(data, status_code=status)
+
+
+@app.post("/api/bin/{bin_id}/toggle-auto")
+def proxy_bin_toggle(request: Request, bin_id: str):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    info = _get_bin_info(bin_id)
+    if info is None or not info.host:
+        return JSONResponse({"error": "bin not registered"}, status_code=404)
+    status, data = _proxy_request(info.host, "/toggle-auto", method="POST")
+    return JSONResponse(data, status_code=status)
+
+
+@app.get("/api/bin/{bin_id}/state")
+def proxy_bin_state(request: Request, bin_id: str):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    info = _get_bin_info(bin_id)
+    if info is None or not info.host:
+        return JSONResponse({"error": "bin not registered"}, status_code=404)
+    status, data = _proxy_request(info.host, "/state", method="GET")
+    return JSONResponse(data, status_code=status)
+
+
+@app.get("/api/bin/{bin_id}/diagnostics")
+def proxy_bin_diagnostics(request: Request, bin_id: str):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    info = _get_bin_info(bin_id)
+    if info is None or not info.host:
+        return JSONResponse({"error": "bin not registered"}, status_code=404)
+    status, data = _proxy_request(info.host, "/diagnostics", method="GET")
+    return JSONResponse(data, status_code=status)
+
+
+# ── Command proxy with simple per-bin rate limiting ──────────────────────────
+
+_command_audit: list[dict] = []
+_command_last_ts: dict[str, float] = {}
+_COMMAND_MIN_INTERVAL = 1.0  # seconds between commands per bin
+_command_lock = threading.Lock()
+
+
+def _rate_limited(bin_id: str) -> bool:
+    now = time.monotonic()
+    with _command_lock:
+        last = _command_last_ts.get(bin_id, 0.0)
+        if now - last < _COMMAND_MIN_INTERVAL:
+            return True
+        _command_last_ts[bin_id] = now
+        return False
+
+
+@app.post("/api/bin/{bin_id}/command")
+def proxy_bin_command(request: Request, bin_id: str, cmd: BinCommand):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    info = _get_bin_info(bin_id)
+    if info is None or not info.host:
+        return JSONResponse({"error": "bin not registered"}, status_code=404)
+    if _rate_limited(bin_id):
+        return JSONResponse(
+            {"error": "rate limited — wait a moment between commands"}, status_code=429
+        )
+    status, data = _proxy_request(
+        info.host, "/command", method="POST", json_body=cmd.model_dump()
+    )
+    with _command_lock:
+        _command_audit.append(
+            {
+                "bin_id": bin_id,
+                "action": cmd.action,
+                "value": cmd.value,
+                "user": request.session.get("user", "api"),
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "status": status,
+            }
+        )
+        if len(_command_audit) > 200:
+            del _command_audit[:-200]
+    return JSONResponse(data, status_code=status)
+
+
+@app.get("/api/audit")
+def api_audit(request: Request):
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    with _command_lock:
+        return list(reversed(_command_audit))
 
 
 @app.get("/stream")
@@ -656,13 +889,27 @@ def api_dashboard(request: Request):
                 "last_timestamp": db.get("last_timestamp", ""),
                 "total_entries": db.get("total", 0),
                 "camera_mode": hb.get("camera_mode", ""),
+                "strategy": hb.get("strategy", ""),
+                "pipeline": hb.get("pipeline", hb.get("camera_mode", "")),
+                "camera_count": hb.get("camera_count", 0),
+                "running": hb.get("running", True),
+                "auto_classify": hb.get("auto_classify", False),
+                "warnings": hb.get("warnings", []),
+                "has_host": bool(hb.get("host", "")),
             }
         )
+
+    online = sum(1 for b in bins if b["status"] == "online")
+    degraded = sum(1 for b in bins if b["status"] == "degraded")
+    offline = sum(1 for b in bins if b["status"] == "offline")
 
     return {
         "bins": bins,
         "total_bins": len(bins),
         "total_entries": get_entry_count(),
+        "online": online,
+        "degraded": degraded,
+        "offline": offline,
     }
 
 
