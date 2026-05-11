@@ -24,6 +24,11 @@ class TestNoCrop:
         np.testing.assert_array_equal(crop_sides(frame, -1.0), frame)
 
 
+    def test_0_percent_returns_original_frame(self):
+        frame = np.zeros((10, 100, 3), dtype=np.uint8)
+        result = crop_sides(frame, 0)
+        np.testing.assert_array_equal(result, frame)
+
 class TestCropGeometry:
     def test_20_percent_width(self):
         frame = np.zeros((100, 200, 3), dtype=np.uint8)
@@ -48,6 +53,11 @@ class TestCropGeometry:
         frame = np.zeros((10, 200, 3), dtype=np.uint8)
         result = crop_sides(frame, 0.25)
         assert result.shape[1] == 100
+
+    def test_100_percent_returns_empty_array(self):
+        frame = np.zeros((10, 100, 3), dtype=np.uint8)
+        result = crop_sides(frame, 100)
+        assert result.shape[1] == 0
 
     def test_50_percent_yields_zero_width(self):
         frame = np.zeros((10, 100, 3), dtype=np.uint8)
