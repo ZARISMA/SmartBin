@@ -161,9 +161,7 @@ def _migrate_add_bin_id() -> None:
     else:
         try:
             with sqlite3.connect(DB_FILE) as conn:
-                conn.execute(
-                    "ALTER TABLE waste_entries ADD COLUMN bin_id TEXT DEFAULT 'bin-01'"
-                )
+                conn.execute("ALTER TABLE waste_entries ADD COLUMN bin_id TEXT DEFAULT 'bin-01'")
         except sqlite3.OperationalError:
             pass  # column already exists
 
@@ -242,9 +240,7 @@ def insert_entry(entry: dict, env: dict) -> int | None:
         return None
 
 
-def get_entries(
-    limit: int = 100, offset: int = 0, bin_id: str | None = None
-) -> list[dict]:
+def get_entries(limit: int = 100, offset: int = 0, bin_id: str | None = None) -> list[dict]:
     """Return recent classification entries, newest first, optionally filtered by bin."""
     _ensure_init()
     cols = list(_INSERT_COLS) + ["id"]
@@ -356,9 +352,7 @@ def get_entry_count(bin_id: str | None = None) -> int:
         else:
             with sqlite3.connect(DB_FILE) as conn:
                 return int(
-                    conn.execute(
-                        f"SELECT COUNT(*) FROM waste_entries{where}", params
-                    ).fetchone()[0]
+                    conn.execute(f"SELECT COUNT(*) FROM waste_entries{where}", params).fetchone()[0]
                 )
     except Exception as e:
         logger.error("DB query failed: %s", e)
@@ -375,7 +369,7 @@ def get_label_counts_by_bin(bin_id: str) -> dict[str, int]:
     return get_label_counts(bin_id=bin_id)
 
 
-_active_bins_cache = []
+_active_bins_cache: list[dict] = []
 _active_bins_cache_time = 0.0
 _active_bins_lock = threading.Lock()
 _ACTIVE_BINS_CACHE_TTL = 2.0  # seconds
