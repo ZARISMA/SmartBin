@@ -8,8 +8,18 @@ SQLite is the default for local development; PostgreSQL is used in Docker.
 import os
 import sqlite3
 import threading
+import time
 
-from .config import BIN_ID, DB_BACKEND, DB_FILE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
+from .config import (
+    BIN_ID,
+    DB_BACKEND,
+    DB_FILE,
+    DB_HOST,
+    DB_NAME,
+    DB_PASSWORD,
+    DB_PORT,
+    DB_USER,
+)
 from .log_setup import get_logger
 
 logger = get_logger()
@@ -151,7 +161,9 @@ def _migrate_add_bin_id() -> None:
     else:
         try:
             with sqlite3.connect(DB_FILE) as conn:
-                conn.execute("ALTER TABLE waste_entries ADD COLUMN bin_id TEXT DEFAULT 'bin-01'")
+                conn.execute(
+                    "ALTER TABLE waste_entries ADD COLUMN bin_id TEXT DEFAULT 'bin-01'"
+                )
         except sqlite3.OperationalError:
             pass  # column already exists
 
@@ -167,7 +179,11 @@ def init_db() -> None:
                 with conn.cursor() as cur:
                     cur.execute(_PG_CREATE)
             logger.info(
-                "PostgreSQL database ready: %s@%s:%s/%s", DB_USER, DB_HOST, DB_PORT, DB_NAME
+                "PostgreSQL database ready: %s@%s:%s/%s",
+                DB_USER,
+                DB_HOST,
+                DB_PORT,
+                DB_NAME,
             )
         finally:
             pool.putconn(conn)
@@ -226,7 +242,9 @@ def insert_entry(entry: dict, env: dict) -> int | None:
         return None
 
 
-def get_entries(limit: int = 100, offset: int = 0, bin_id: str | None = None) -> list[dict]:
+def get_entries(
+    limit: int = 100, offset: int = 0, bin_id: str | None = None
+) -> list[dict]:
     """Return recent classification entries, newest first, optionally filtered by bin."""
     _ensure_init()
     cols = list(_INSERT_COLS) + ["id"]
@@ -338,7 +356,9 @@ def get_entry_count(bin_id: str | None = None) -> int:
         else:
             with sqlite3.connect(DB_FILE) as conn:
                 return int(
-                    conn.execute(f"SELECT COUNT(*) FROM waste_entries{where}", params).fetchone()[0]
+                    conn.execute(
+                        f"SELECT COUNT(*) FROM waste_entries{where}", params
+                    ).fetchone()[0]
                 )
     except Exception as e:
         logger.error("DB query failed: %s", e)
@@ -355,8 +375,20 @@ def get_label_counts_by_bin(bin_id: str) -> dict[str, int]:
     return get_label_counts(bin_id=bin_id)
 
 
+_active_bins_cache = []
+_active_bins_cache_time = 0.0
+_active_bins_lock = threading.Lock()
+_ACTIVE_BINS_CACHE_TTL = 2.0  # seconds
+
+
 def get_active_bins() -> list[dict]:
     """Return distinct bin_ids with their last timestamp and entry count."""
+    global _active_bins_cache, _active_bins_cache_time
+
+    with _active_bins_lock:
+        if time.time() - _active_bins_cache_time < _ACTIVE_BINS_CACHE_TTL:
+            return _active_bins_cache
+
     _ensure_init()
     sql = (
         "SELECT bin_id, COUNT(*) AS total, MAX(timestamp) AS last_ts "
@@ -364,14 +396,19 @@ def get_active_bins() -> list[dict]:
         "GROUP BY bin_id ORDER BY last_ts DESC"
     )
     try:
+        result = []
         if _use_pg():
             pool = _get_pg_pool()
             conn = pool.getconn()
             try:
                 with conn.cursor() as cur:
                     cur.execute(sql)
-                    return [
-                        {"bin_id": r[0], "total": r[1], "last_timestamp": str(r[2]) if r[2] else ""}
+                    result = [
+                        {
+                            "bin_id": r[0],
+                            "total": r[1],
+                            "last_timestamp": str(r[2]) if r[2] else "",
+                        }
                         for r in cur.fetchall()
                     ]
             finally:
@@ -379,10 +416,16 @@ def get_active_bins() -> list[dict]:
         else:
             with sqlite3.connect(DB_FILE) as conn:
                 cur = conn.execute(sql)
-                return [
+                result = [
                     {"bin_id": r[0], "total": r[1], "last_timestamp": r[2] or ""}
                     for r in cur.fetchall()
                 ]
+
+        with _active_bins_lock:
+            _active_bins_cache = result
+            _active_bins_cache_time = time.time()
+
+        return result
     except Exception as e:
         logger.error("DB query failed: %s", e)
         return []
