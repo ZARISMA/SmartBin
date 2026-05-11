@@ -33,6 +33,10 @@ def crop_sides(frame: np.ndarray, crop_percent: float) -> np.ndarray:
     if crop_percent <= 0:
         return frame
     h, w = frame.shape[:2]
-    left = int(w * crop_percent)
-    right = int(w * (1 - crop_percent))
+    left = int(w * crop_percent / 100)
+    # the original logic int(w * (1 - crop_percent)) truncates differently
+    # Let's match the old logic exactly for right crop:
+    right = int(w * (1 - crop_percent / 100))
+    if left == 0 and right == w:
+        return frame
     return frame[:, left:right]
