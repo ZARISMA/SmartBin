@@ -16,6 +16,7 @@ import pytest
 os.environ.setdefault("GEMINI_API_KEY", "test-key-for-pytest")
 
 # ── 1b. Default to SQLite for tests (no PostgreSQL required) ─────────────────
+os.environ.setdefault("SMARTWASTE_SECRET_KEY", "test-secret-key-for-pytest")
 os.environ.setdefault("SMARTWASTE_DB_BACKEND", "sqlite")
 
 # ── 2. Mock hardware-specific packages that may not be installed ──────────────
