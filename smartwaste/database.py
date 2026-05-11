@@ -10,7 +10,6 @@ import sqlite3
 import threading
 
 from .config import BIN_ID, DB_BACKEND, DB_FILE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
-from cachetools import TTLCache, cached
 from .log_setup import get_logger
 
 logger = get_logger()
@@ -356,7 +355,6 @@ def get_label_counts_by_bin(bin_id: str) -> dict[str, int]:
     return get_label_counts(bin_id=bin_id)
 
 
-@cached(cache=TTLCache(maxsize=1, ttl=5))
 def get_active_bins() -> list[dict]:
     """Return distinct bin_ids with their last timestamp and entry count."""
     _ensure_init()
