@@ -136,7 +136,6 @@ mainauto.py          ← auto gate mode (presence-gated classifications)
 mainoak.py           ← OAK-D Native mode (depth + IMU + NN sensor fusion)
 smartwaste/
   app.py             ← shared OAK-camera run loop
-  camera.py          ← OAK camera pipeline helper (single device)
   cameraOak.py       ← dual OAK pipeline setup and frame cropping
   cameraraspberry.py ← legacy Raspberry Pi picamera2 setup (kept for web.py)
   control.py         ← unified edge runner (docker entry point)
