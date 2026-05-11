@@ -1,7 +1,6 @@
 """Tests for crop_sides() in smartwaste/cameraOak.py."""
 
 import numpy as np
-import pytest
 
 from smartwaste.cameraOak import crop_sides
 

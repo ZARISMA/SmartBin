@@ -18,6 +18,10 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key-for-pytest")
 # ── 1b. Default to SQLite for tests (no PostgreSQL required) ─────────────────
 os.environ.setdefault("SMARTWASTE_DB_BACKEND", "sqlite")
 
+# ── 1c. Provide mock values for required security settings ───────────────────
+os.environ.setdefault("SMARTWASTE_ADMIN_PASSWORD", "test-password")
+os.environ.setdefault("SMARTWASTE_SECRET_KEY", "test-secret-key")
+
 # ── 2. Mock hardware-specific packages that may not be installed ──────────────
 for _mod in ("depthai", "picamera2"):
     sys.modules.setdefault(_mod, MagicMock())
@@ -60,9 +64,10 @@ def app_state():
 @pytest.fixture
 def ready_detector():
     """PresenceDetector that has completed warmup on a black frame."""
-    from smartwaste.presence import PresenceDetector
-    from smartwaste.config import BG_WARMUP_FRAMES
     import numpy as np
+
+    from smartwaste.config import BG_WARMUP_FRAMES
+    from smartwaste.presence import PresenceDetector
 
     d = PresenceDetector()
     black = np.zeros((100, 100), dtype=np.uint8)

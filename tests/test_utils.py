@@ -1,14 +1,11 @@
 """Tests for smartwaste/utils.py — encode_frame() and launch_classify()."""
 
-import threading
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 
 from smartwaste.state import AppState
 from smartwaste.utils import encode_frame, launch_classify
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # encode_frame
@@ -55,6 +52,7 @@ class TestEncodeFrame:
     def test_higher_quality_produces_larger_output(self):
         """Verify encode_frame uses the configured JPEG_QUALITY."""
         import cv2
+
         from smartwaste.config import JPEG_QUALITY
 
         frame = np.random.randint(0, 256, (200, 200, 3), dtype=np.uint8)
@@ -96,7 +94,6 @@ class TestLaunchClassify:
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         img_bytes = b"\xff\xd8\xff" + b"\x00" * 50
 
-        started = []
         with patch("smartwaste.utils.threading.Thread") as mock_thread_cls:
             mock_instance = MagicMock()
             mock_thread_cls.return_value = mock_instance
