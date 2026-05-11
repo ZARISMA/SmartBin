@@ -1,7 +1,6 @@
 """Tests for smartwaste/config.py — validate constant types and ranges."""
 
 import os
-import pytest
 
 from smartwaste.config import (
     AUTO_INTERVAL,

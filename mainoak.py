@@ -69,7 +69,7 @@ import cv2
 import depthai as dai
 import numpy as np
 
-from smartwaste.cameraOak import crop_sides, make_pipeline
+from smartwaste.cameraOak import make_pipeline
 from smartwaste.config import (
     CROP_PERCENT,
     DISPLAY_SIZE,
@@ -87,7 +87,7 @@ from smartwaste.log_setup import get_logger
 from smartwaste.oak_native import OAKOccupancyDetector, SensorVotes
 from smartwaste.state import AppState
 from smartwaste.ui import draw_nn_detections
-from smartwaste.utils import encode_frame, launch_classify
+from smartwaste.utils import crop_sides, encode_frame, launch_classify
 
 logger = get_logger()
 

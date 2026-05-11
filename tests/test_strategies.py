@@ -1,10 +1,9 @@
 """Tests for smartwaste/strategies.py — ManualStrategy and PresenceGateStrategy."""
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
-import pytest
 
 from smartwaste.state import AppState
 from smartwaste.strategies import ManualStrategy, PresenceGateStrategy
