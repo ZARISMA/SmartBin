@@ -863,12 +863,12 @@ def api_heartbeat(request: Request, hb: BinHeartbeat):
     return {"status": "ok"}
 
 
-
 _cached_active_bins = None
 _cached_active_bins_ts = 0.0
+_cached_active_bins_lock = threading.Lock()
+
 
 @app.get("/api/dashboard")
-
 def api_dashboard(request: Request):
     """Combined bin registry + database stats for the dashboard page."""
     if not _is_authenticated(request):
@@ -876,11 +876,13 @@ def api_dashboard(request: Request):
 
     # Merge heartbeat registry with DB data
     global _cached_active_bins, _cached_active_bins_ts
-    if _cached_active_bins is None or time.time() - _cached_active_bins_ts > 5.0:
-        _cached_active_bins = get_active_bins()
-        _cached_active_bins_ts = time.time()
+    with _cached_active_bins_lock:
+        if _cached_active_bins is None or time.monotonic() - _cached_active_bins_ts > 5.0:
+            _cached_active_bins = [dict(b) for b in get_active_bins()]
+            _cached_active_bins_ts = time.monotonic()
 
-    db_bins = {b["bin_id"]: b for b in _cached_active_bins}
+    # Reconstruct dict mapping to prevent downstream mutation of shared state
+    db_bins = {b["bin_id"]: dict(b) for b in _cached_active_bins}
     heartbeat_bins = {b["bin_id"]: b for b in _get_bin_status()}
 
     all_bin_ids = set(db_bins.keys()) | set(heartbeat_bins.keys())
