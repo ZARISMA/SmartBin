@@ -139,8 +139,9 @@ class TestDatabaseSettings:
     def test_db_user_nonempty(self):
         assert isinstance(DB_USER, str) and len(DB_USER) > 0
 
-    def test_db_password_nonempty(self):
-        assert isinstance(DB_PASSWORD, str) and len(DB_PASSWORD) > 0
+    def test_db_password_is_string(self):
+        # Default is now empty string for security, but it must be a string
+        assert isinstance(DB_PASSWORD, str)
 
 
 class TestWebSettings:

@@ -370,7 +370,7 @@ The `Settings` class uses `pydantic_settings.BaseSettings` with:
 | `db_port` | `SMARTWASTE_DB_PORT` | int | `5432` | PostgreSQL port |
 | `db_name` | `SMARTWASTE_DB_NAME` | str | `"smartwaste"` | PostgreSQL database name |
 | `db_user` | `SMARTWASTE_DB_USER` | str | `"smartwaste"` | PostgreSQL username |
-| `db_password` | `SMARTWASTE_DB_PASSWORD` | str | `"smartwaste"` | PostgreSQL password |
+| `db_password` | `SMARTWASTE_DB_PASSWORD` | str | `""` | PostgreSQL password |
 
 #### Web UI
 
@@ -385,8 +385,8 @@ The `Settings` class uses `pydantic_settings.BaseSettings` with:
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
 | `admin_username` | `SMARTWASTE_ADMIN_USERNAME` | str | `"admin"` | Dashboard login username |
-| `admin_password` | `SMARTWASTE_ADMIN_PASSWORD` | str | `"password123"` | Dashboard login password |
-| `secret_key` | `SMARTWASTE_SECRET_KEY` | str | `"smartwaste-session-secret-change-in-prod"` | Session cookie signing secret |
+| `admin_password` | `SMARTWASTE_ADMIN_PASSWORD` | str | `""` | Dashboard login password |
+| `secret_key` | `SMARTWASTE_SECRET_KEY` | str | `""` | Session cookie signing secret |
 
 #### Bin Identity
 
@@ -446,7 +446,7 @@ SMARTWASTE_DB_HOST=localhost
 SMARTWASTE_DB_PORT=5432
 SMARTWASTE_DB_NAME=smartwaste
 SMARTWASTE_DB_USER=smartwaste
-SMARTWASTE_DB_PASSWORD=smartwaste
+SMARTWASTE_DB_PASSWORD=your_password_here
 SMARTWASTE_WEB_HOST=0.0.0.0
 SMARTWASTE_WEB_PORT=8000
 ```
@@ -1646,10 +1646,10 @@ CMD ["python", "mainoak.py"]
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Web Dashboard | `http://<host>:8000` | admin / password123 |
+| Web Dashboard | `http://<host>:8000` | admin / (as set in .env) |
 | Presentation Site | `http://<host>:8000/site` | No login required |
 | Grafana | `http://<host>:3000` | admin / admin |
-| PostgreSQL | `<host>:5432` | smartwaste / smartwaste |
+| PostgreSQL | `<host>:5432` | smartwaste / (as set in .env) |
 
 ---
 

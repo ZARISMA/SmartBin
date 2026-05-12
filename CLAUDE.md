@@ -24,8 +24,8 @@ python main.py
 
 ## Authentication
 
-Dashboard and API require login. Default credentials: `admin` / `password123`.
-Override via `SMARTWASTE_ADMIN_USERNAME` and `SMARTWASTE_ADMIN_PASSWORD` env vars.
+Dashboard and API require login. Default username is `admin`.
+Passwords must be set via `SMARTWASTE_ADMIN_PASSWORD` and `SMARTWASTE_SECRET_KEY` env vars or `.env` file.
 The presentation site at `/site` is public (no login required).
 
 ## Docker Mode — Three Deployment Options
@@ -107,7 +107,7 @@ Migration: `python scripts/migrate_json_to_pg.py --source sqlite|json`
 | `DB_BACKEND` | `sqlite` | Database backend (`sqlite` or `postgresql`) |
 | `CAMERA_MODE` | `oak` | Camera backend for web UI (`oak`, `raspberry`, `oak-native`, `none`) |
 | `ADMIN_USERNAME` | `admin` | Dashboard login username |
-| `ADMIN_PASSWORD` | `password123` | Dashboard login password |
+| `ADMIN_PASSWORD` | `` | Dashboard login password |
 | `BIN_ID` | `bin-01` | Unique identifier for this bin device |
 | `EDGE_MODE` | `false` | Enable edge mode (POST results to server) |
 | `SERVER_URL` | `` | Central server URL for edge reporting |
