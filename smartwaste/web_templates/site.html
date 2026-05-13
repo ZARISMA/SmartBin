@@ -4,17 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartBin — AI-Powered Waste Classification for Smart Cities</title>
-    <meta name="description" content="SmartBin integrates IoT-driven Smart City technology with biophilic design to transform urban waste management into a high-tech cultural experience.">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta name="description" content="SmartBin pairs dual OAK-D depth cameras with Google Gemini vision to classify urban waste in real time — turning sorting into a civic ritual.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="/static/brand.css">
     <link rel="stylesheet" href="/static/site.css">
+    <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 </head>
-<body>
+<body class="site-body">
 
-<!-- ── Navbar ──────────────────────────────────────────────────────────────── -->
-<nav class="navbar">
+<!-- ── Nav ──────────────────────────────────────────────────────────── -->
+<nav class="site-nav">
     <a href="#hero" class="nav-brand">
-        <div class="nav-logo">SB</div>
+        <span class="nav-logo" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none">
+                <path d="M32 4 L57 18 L57 46 L32 60 L7 46 L7 18 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                <path d="M32 4 L48 13 L48 25 L32 34 L16 25 L16 13 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.85"/>
+                <path d="M7 18 L16 13 M57 18 L48 13 M16 25 L7 18 M48 25 L57 18 M32 34 L32 60" stroke="currentColor" stroke-width="1" stroke-linejoin="round" opacity="0.55"/>
+            </svg>
+        </span>
         <span class="nav-title">SmartBin</span>
+        <span class="nav-badge">v1.0 · YEREVAN</span>
     </a>
     <ul class="nav-links">
         <li><a href="#about">About</a></li>
@@ -22,310 +34,383 @@
         <li><a href="#statistics">Statistics</a></li>
         <li><a href="#map">Map</a></li>
         <li><a href="#media">Media</a></li>
-        <li><a href="#contact">Contact</a></li>
     </ul>
-    <div class="nav-hamburger" aria-label="Toggle navigation">
-        <span></span><span></span><span></span>
+    <div class="nav-cta">
+        <a href="/login" class="nav-signin">Sign in</a>
+        <a href="/" class="sb-btn sb-btn-primary nav-open">Open dashboard →</a>
     </div>
 </nav>
 
-<!-- ── Hero ────────────────────────────────────────────────────────────────── -->
+<!-- ── Hero ─────────────────────────────────────────────────────────── -->
 <section class="hero" id="hero">
-    <div class="hero-orb hero-orb-1"></div>
-    <div class="hero-orb hero-orb-2"></div>
-    <div class="hero-content">
-        <div class="hero-badge fade-in">
-            <span class="hero-badge-dot"></span>
-            Smart City IoT + Biophilic Design
-        </div>
-        <h1 class="fade-in delay-1">SmartBin</h1>
-        <p class="hero-tagline fade-in delay-2">
-            AI-powered waste classification that transforms the act of sorting
-            into a high-tech cultural experience. Where nature-inspired design
-            meets future-city technology.
-        </p>
-        <a href="#about" class="hero-cta fade-in delay-3">
-            Discover More
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-                <polyline points="12 5 19 12 12 19"></polyline>
-            </svg>
-        </a>
-    </div>
-</section>
-
-<!-- ── About ───────────────────────────────────────────────────────────────── -->
-<section class="section" id="about">
-    <div class="about-grid">
-        <div class="about-text">
-            <span class="section-label fade-in">About the Project</span>
-            <h2 class="section-title fade-in delay-1">Redefining Urban<br>Waste Management</h2>
-            <p class="fade-in delay-2">
-                <strong>SmartBin</strong> is a revolutionary urban waste management system that integrates
-                IoT-driven Smart City technology with biophilic, nature-inspired design. Our mission is to
-                transform the act of waste sorting from a mundane chore into a high-tech cultural experience.
+    <div class="hero-grid-lines" aria-hidden="true"></div>
+    <div class="hero-wrap">
+        <div class="hero-copy">
+            <div class="hero-badge">
+                <span class="hero-badge-dot"></span>
+                Live · 8 bins deployed
+            </div>
+            <h1 class="hero-title">
+                Waste, <em>recognised</em>.<br>
+                Sorted in <span class="hero-underline">under two seconds</span>.
+            </h1>
+            <p class="hero-lede">
+                SmartBin pairs dual OAK-D depth cameras with Google Gemini vision to classify urban waste into seven categories in real time — turning the act of sorting into a high-tech cultural ritual.
             </p>
-            <p class="fade-in delay-3">
-                We aim to change the mindset of the modern citizen, fostering a new culture of environmental
-                responsibility by blending the organic beauty of nature with the sleek efficiency of
-                future-city technology. Deploying first in <strong>Yerevan, Armenia</strong>, SmartBin uses
-                dual OAK-D depth cameras and Google Gemini AI to classify waste in real time into six
-                distinct categories with over 95% accuracy.
-            </p>
-            <p class="fade-in delay-4">
-                Our bins act as <strong>"Living Landmarks"</strong> in the smart city — using visual cues
-                to reward users and signal that they are participating in a global movement of sustainability.
-                By using materials and colors that feel both biological and digital, we bridge the gap for
-                citizens who are currently unmotivated to sort.
-            </p>
-            <div class="about-stats-row fade-in delay-5">
-                <div class="about-stat">
-                    <div class="about-stat-num">7</div>
-                    <div class="about-stat-label">AI Categories</div>
-                </div>
-                <div class="about-stat">
-                    <div class="about-stat-num">2</div>
-                    <div class="about-stat-label">Depth Cameras</div>
-                </div>
-                <div class="about-stat">
-                    <div class="about-stat-num">&lt;2s</div>
-                    <div class="about-stat-label">Classification</div>
-                </div>
-                <div class="about-stat">
-                    <div class="about-stat-num">24/7</div>
-                    <div class="about-stat-label">Operation</div>
-                </div>
-            </div>
-        </div>
-        <div class="about-visual fade-in delay-2">
-            <div class="about-visual-icon">
-                <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="rgba(74,138,106,0.4)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 6h18l-1.5 13.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.5L3 6z"/>
-                    <path d="M1 6h22"/>
-                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                    <path d="M12 10v8"/>
-                    <path d="M8.5 10l.5 8"/>
-                    <path d="M15.5 10l-.5 8"/>
-                </svg>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- ── Modules ─────────────────────────────────────────────────────────────── -->
-<section class="section" id="modules">
-    <div style="text-align:center; max-width:1200px; margin:0 auto; width:100%;">
-        <span class="section-label fade-in">The Modular System</span>
-        <h2 class="section-title fade-in delay-1" style="margin-left:auto; margin-right:auto;">Six Intelligent Sorting Modules</h2>
-        <p class="section-subtitle fade-in delay-2" style="margin-left:auto; margin-right:auto;">
-            Each module is designed to be visually intuitive yet architecturally sophisticated —
-            elevated, professional tones reflecting a premium urban environment.
-        </p>
-    </div>
-    <div class="modules-grid">
-        <!-- Paper -->
-        <div class="glass-card module-card fade-in delay-1">
-            <div class="module-card-accent" style="background:#D2B48C;"></div>
-            <div class="module-icon" style="background:rgba(210,180,140,0.12); color:#D2B48C;">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="8" y1="13" x2="16" y2="13"/>
-                    <line x1="8" y1="17" x2="16" y2="17"/>
-                </svg>
-            </div>
-            <div class="module-name">Paper</div>
-            <div class="module-desc">A sophisticated take on traditional fiber and cellulose. Newspapers, cardboard, office paper, and packaging materials — all recognized and sorted with precision.</div>
-        </div>
-        <!-- Aluminum -->
-        <div class="glass-card module-card fade-in delay-2">
-            <div class="module-card-accent" style="background:#A9A9A9;"></div>
-            <div class="module-icon" style="background:rgba(169,169,169,0.12); color:#A9A9A9;">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M12 6v12"/>
-                    <path d="M6 12h12"/>
-                </svg>
-            </div>
-            <div class="module-name">Aluminum</div>
-            <div class="module-desc">A metallic, high-tech finish representing industrial circularity. Beverage cans, foil wraps, and metal containers — detected by depth sensors and AI vision.</div>
-        </div>
-        <!-- Organic -->
-        <div class="glass-card module-card fade-in delay-3">
-            <div class="module-card-accent" style="background:#1E4D2B;"></div>
-            <div class="module-icon" style="background:rgba(30,77,43,0.15); color:#4a8a6a;">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 22c4-4 8-7.5 8-12A8 8 0 0 0 4 10c0 4.5 4 8 8 12z"/>
-                    <path d="M12 10v6"/>
-                    <path d="M9 13l3-3 3 3"/>
-                </svg>
-            </div>
-            <div class="module-name">Organic</div>
-            <div class="module-desc">A deep, biophilic green representing the bridge to nature. Food scraps, biodegradable packaging, and garden waste — composted for circular sustainability.</div>
-        </div>
-        <!-- Glass -->
-        <div class="glass-card module-card fade-in delay-1">
-            <div class="module-card-accent" style="background:#40E0D0;"></div>
-            <div class="module-icon" style="background:rgba(64,224,208,0.1); color:#40E0D0;">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M8 2h8l-1.5 8H9.5L8 2z"/>
-                    <path d="M9.5 10h5v8a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-8z"/>
-                    <line x1="12" y1="20" x2="12" y2="22"/>
-                    <line x1="9" y1="22" x2="15" y2="22"/>
-                </svg>
-            </div>
-            <div class="module-name">Glass</div>
-            <div class="module-desc">A translucent, crystalline-inspired tone representing clarity. Bottles, jars, and glass containers — identified by their unique transparency signatures.</div>
-        </div>
-        <!-- Plastic -->
-        <div class="glass-card module-card fade-in delay-2">
-            <div class="module-card-accent" style="background:#87CEEB;"></div>
-            <div class="module-icon" style="background:rgba(135,206,235,0.1); color:#87CEEB;">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M8 3h8v4a4 4 0 0 1-8 0V3z"/>
-                    <path d="M10 7v10a2 2 0 0 0 4 0V7"/>
-                    <path d="M8 21h8"/>
-                    <line x1="12" y1="17" x2="12" y2="21"/>
-                </svg>
-            </div>
-            <div class="module-name">Plastic</div>
-            <div class="module-desc">A modern, synthetic-yet-clean hue representing polymer recovery. PET, HDPE, and film plastics — classified by brand-aware AI trained on local products.</div>
-        </div>
-        <!-- Other -->
-        <div class="glass-card module-card fade-in delay-3">
-            <div class="module-card-accent" style="background:linear-gradient(90deg, #9370DB, #1E90FF);"></div>
-            <div class="module-icon" style="background:linear-gradient(135deg, rgba(147,112,219,0.12), rgba(30,144,255,0.12)); color:#9370DB;">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M12 1v4"/>
-                    <path d="M12 19v4"/>
-                    <path d="M4.22 4.22l2.83 2.83"/>
-                    <path d="M16.95 16.95l2.83 2.83"/>
-                    <path d="M1 12h4"/>
-                    <path d="M19 12h4"/>
-                    <path d="M4.22 19.78l2.83-2.83"/>
-                    <path d="M16.95 7.05l2.83-2.83"/>
-                </svg>
-            </div>
-            <div class="module-name">Other</div>
-            <div class="module-desc">The "brain" of the system. Its dynamic, gradient-driven identity adapts based on city-wide data, special collection needs, or real-time system status signals.</div>
-        </div>
-    </div>
-</section>
-
-<!-- ── Statistics ───────────────────────────────────────────────────────────── -->
-<section class="section stats-section" id="statistics">
-    <span class="section-label fade-in">Live Data</span>
-    <h2 class="section-title fade-in delay-1" style="margin-left:auto; margin-right:auto;">Items Sorted in Real Time</h2>
-    <p class="section-subtitle fade-in delay-2" style="margin-left:auto; margin-right:auto;">
-        Every classification is logged to our database — here is the live count from our deployed units.
-    </p>
-    <div class="stats-total-wrap fade-in delay-3">
-        <div class="stats-total-num" id="stats-total" data-target="0">0</div>
-        <div class="stats-total-label">Total Items Classified</div>
-    </div>
-    <div class="stats-bars fade-in delay-4" id="stats-bars">
-        <p class="stats-zero-state">Loading statistics...</p>
-    </div>
-</section>
-
-<!-- ── Map ──────────────────────────────────────────────────────────────────── -->
-<section class="section" id="map">
-    <div style="text-align:center; max-width:1200px; margin:0 auto; width:100%;">
-        <span class="section-label fade-in">Deployment Map</span>
-        <h2 class="section-title fade-in delay-1" style="margin-left:auto; margin-right:auto;">Future SmartBin Locations</h2>
-        <p class="section-subtitle fade-in delay-2" style="margin-left:auto; margin-right:auto;">
-            Our first deployment targets key landmarks and high-traffic areas across Yerevan, Armenia.
-        </p>
-    </div>
-    <div class="map-container fade-in delay-3">
-        <div id="smartbin-map"></div>
-    </div>
-    <div class="map-legend fade-in delay-4">
-        <div class="map-legend-item">
-            <div class="map-legend-dot"></div>
-            Planned SmartBin Location
-        </div>
-        <div class="map-legend-item">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-            Deployment: 2026
-        </div>
-    </div>
-</section>
-
-<!-- ── Media / Video ───────────────────────────────────────────────────────── -->
-<section class="section" id="media">
-    <div style="text-align:center; max-width:1200px; margin:0 auto; width:100%;">
-        <span class="section-label fade-in">Media</span>
-        <h2 class="section-title fade-in delay-1" style="margin-left:auto; margin-right:auto;">See SmartBin in Action</h2>
-        <p class="section-subtitle fade-in delay-2" style="margin-left:auto; margin-right:auto;">
-            Explore our product through 3D renders, real-life deployment footage, and AI classification demos.
-        </p>
-    </div>
-    <div class="media-grid">
-        <div class="glass-card media-card fade-in delay-1">
-            <div class="media-play-icon">
-                <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
-            </div>
-            <div class="media-card-title">3D Product Render</div>
-            <div class="media-card-badge">Coming Soon</div>
-        </div>
-        <div class="glass-card media-card fade-in delay-2">
-            <div class="media-play-icon">
-                <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
-            </div>
-            <div class="media-card-title">Real-Life Deployment</div>
-            <div class="media-card-badge">Coming Soon</div>
-        </div>
-        <div class="glass-card media-card fade-in delay-3">
-            <div class="media-play-icon">
-                <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
-            </div>
-            <div class="media-card-title">AI Classification Demo</div>
-            <div class="media-card-badge">Coming Soon</div>
-        </div>
-    </div>
-</section>
-
-<!-- ── Contact / Footer ────────────────────────────────────────────────────── -->
-<footer class="footer" id="contact">
-    <div class="footer-grid">
-        <div class="footer-brand">
-            <h3>SmartBin</h3>
-            <p>
-                Transforming urban waste management through AI-powered classification
-                and biophilic design. Making every city a smarter, cleaner place to live.
-            </p>
-            <div class="footer-social">
-                <a href="#" aria-label="LinkedIn">
-                    <svg viewBox="0 0 24 24"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
-                </a>
-                <a href="#" aria-label="Twitter / X">
-                    <svg viewBox="0 0 24 24"><path d="M4 4l11.7 16h4.3L8.3 4H4zm2.3 0L18 20M20 4l-8 8"/></svg>
-                </a>
-                <a href="#" aria-label="Instagram">
-                    <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5"/></svg>
+            <div class="hero-actions">
+                <a href="#about" class="sb-btn sb-btn-primary hero-cta">Discover the system <span aria-hidden="true">→</span></a>
+                <a href="#media" class="hero-secondary">
+                    <span class="play-dot" aria-hidden="true">▶</span>
+                    Watch demo · 2:14
                 </a>
             </div>
+            <div class="hero-stats">
+                <div class="hero-stat"><div class="n">7</div><div class="l">AI categories</div></div>
+                <div class="hero-stat"><div class="n">2</div><div class="l">OAK-D cameras</div></div>
+                <div class="hero-stat"><div class="n">&lt;2s</div><div class="l">Classification</div></div>
+                <div class="hero-stat"><div class="n">24/7</div><div class="l">Always on</div></div>
+            </div>
         </div>
-        <div class="footer-col">
-            <h4>Quick Links</h4>
-            <a href="#about">About</a>
-            <a href="#modules">Modules</a>
-            <a href="#statistics">Statistics</a>
-            <a href="#map">Map</a>
-            <a href="#media">Media</a>
-        </div>
-        <div class="footer-col">
-            <h4>Contact</h4>
-            <p>+374 12 345 678</p>
-            <p>info@smartbin.am</p>
-            <p>Yerevan, Armenia</p>
+
+        <div class="hero-visual" aria-hidden="true">
+            <div class="halo"></div>
+            <div class="watermark">
+                <svg viewBox="0 0 64 64" fill="none">
+                    <path d="M32 4 L57 18 L57 46 L32 60 L7 46 L7 18 Z" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round"/>
+                    <path d="M32 4 L48 13 L48 25 L32 34 L16 25 L16 13 Z" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round" opacity="0.85"/>
+                    <path d="M7 18 L16 13 M57 18 L48 13 M16 25 L7 18 M48 25 L57 18 M32 34 L32 60" stroke="currentColor" stroke-width="0.6" stroke-linejoin="round" opacity="0.55"/>
+                </svg>
+            </div>
+
+            <div class="bin-mock">
+                <div class="bin-mock-head">
+                    <span class="bin-mock-id">
+                        <span class="logo-tiny">
+                            <svg viewBox="0 0 64 64" fill="none">
+                                <path d="M32 4 L57 18 L57 46 L32 60 L7 46 L7 18 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                <path d="M32 4 L48 13 L48 25 L32 34 L16 25 L16 13 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" opacity="0.85"/>
+                            </svg>
+                        </span>
+                        BIN-04
+                    </span>
+                    <span class="bin-mock-status">
+                        <span class="bin-mock-dot"></span> ONLINE
+                    </span>
+                </div>
+                <div class="bin-mock-slats">
+                    <div class="slat" data-fill="5" style="background:#1E4D2B; color:#fff;"><span>ORGANIC</span><span class="bars b5"></span></div>
+                    <div class="slat" data-fill="4" style="background:#D2B48C;"><span>PAPER</span><span class="bars b4"></span></div>
+                    <div class="slat" data-fill="3" style="background:#87CEEB;"><span>PLASTIC</span><span class="bars b3"></span></div>
+                    <div class="slat" data-fill="2" style="background:#40E0D0;"><span>GLASS</span><span class="bars b2"></span></div>
+                    <div class="slat" data-fill="1" style="background:#A9A9A9;"><span>ALUMINUM</span><span class="bars b1"></span></div>
+                    <div class="slat" data-fill="0" style="background:#8C8C8C;"><span>EMPTY</span><span class="bars b0"></span></div>
+                </div>
+                <div class="bin-mock-coords">
+                    <span>40.1872°N</span>
+                    <span>44.5152°E</span>
+                </div>
+            </div>
+
+            <div class="float-chip float-chip-classify">
+                <div class="chip-swatch" style="background:#40E0D0;">GL</div>
+                <div>
+                    <div class="chip-kicker">JUST CLASSIFIED</div>
+                    <div class="chip-title">Glass bottle · Jermuk</div>
+                    <div class="chip-sub">97% confidence · 1.3s</div>
+                </div>
+            </div>
+            <div class="float-chip float-chip-today">
+                <div class="chip-kicker">TODAY</div>
+                <div class="chip-big" id="hero-today">1,284 items sorted</div>
+                <div class="chip-bars">
+                    <span style="width:30px; background:#1E4D2B;"></span>
+                    <span style="width:22px; background:#D2B48C;"></span>
+                    <span style="width:28px; background:#87CEEB;"></span>
+                    <span style="width:18px; background:#40E0D0;"></span>
+                    <span style="width:12px; background:#A9A9A9;"></span>
+                    <span style="width:8px;  background:#9370DB;"></span>
+                </div>
+            </div>
         </div>
     </div>
-    <div class="footer-bottom">
-        <span>&copy; 2026 SmartBin. All rights reserved.</span>
-        <span>AI-Powered Waste Classification</span>
+</section>
+
+<!-- ── About ────────────────────────────────────────────────────────── -->
+<section class="section section-light" id="about">
+    <div class="container about-grid">
+        <div class="about-headline">
+            <div class="kicker">§ 01 · The project</div>
+            <h2 class="display">
+                Living<br>landmarks<br><em>for the smart city.</em>
+            </h2>
+        </div>
+        <div class="about-body">
+            <p class="lede">SmartBin is a revolutionary urban waste system that fuses IoT-driven Smart City technology with biophilic, nature-inspired design — turning a mundane chore into a civic ritual.</p>
+            <p>Deploying first in <strong>Yerevan, Armenia</strong>, every unit uses dual OAK-D depth cameras and a Gemini-powered vision model to recognise items into six material streams plus an "Empty" state — with brand-aware accuracy on Armenian products like Jermuk and BOOM.</p>
+            <p>Our bins act as <em>visual landmarks</em> in the urban fabric — using colour, material and small rewards to signal that the user is participating in a global movement of sustainability. We bridge the gap for citizens currently unmotivated to sort.</p>
+            <div class="about-stat-grid">
+                <div class="about-stat-cell">
+                    <div class="cell-key">Classification accuracy</div>
+                    <div class="cell-num">95%</div>
+                    <div class="cell-note">on Armenian product set</div>
+                </div>
+                <div class="about-stat-cell">
+                    <div class="cell-key">Heartbeat interval</div>
+                    <div class="cell-num">30s</div>
+                    <div class="cell-note">edge → server</div>
+                </div>
+                <div class="about-stat-cell">
+                    <div class="cell-key">Sensor stack</div>
+                    <div class="cell-num">Depth + IMU + NN</div>
+                    <div class="cell-note">OAK-D native voting</div>
+                </div>
+                <div class="about-stat-cell">
+                    <div class="cell-key">Edge runtime</div>
+                    <div class="cell-num">Raspberry Pi</div>
+                    <div class="cell-note">Docker, restart-safe</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Modules ──────────────────────────────────────────────────────── -->
+<section class="section section-cream" id="modules">
+    <div class="container">
+        <div class="section-head">
+            <div>
+                <div class="kicker">§ 02 · The modular system</div>
+                <h2 class="display">
+                    Six material streams,<br>one <em>elevated</em> language of colour.
+                </h2>
+            </div>
+            <p class="section-aside">Each module is visually intuitive yet architecturally sophisticated — premium tones reflecting urban civic space, not the trash room.</p>
+        </div>
+
+        <div class="modules-grid">
+            <article class="module-card" style="--accent:#D2B48C;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">01 / 06</span>
+                    <span class="module-chip" style="background:#D2B48C;"></span>
+                </div>
+                <h3 class="module-name">Paper</h3>
+                <div class="module-tag">Warm Cellulose · #D2B48C</div>
+                <p>Newspapers, cardboard, office paper, packaging. Sophisticated take on traditional fiber.</p>
+            </article>
+            <article class="module-card" style="--accent:#A9A9A9;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">02 / 06</span>
+                    <span class="module-chip" style="background:#A9A9A9;"></span>
+                </div>
+                <h3 class="module-name">Aluminum</h3>
+                <div class="module-tag">Brushed Metal · #A9A9A9</div>
+                <p>Beverage cans, foil, metal containers. Industrial circularity, detected by depth + vision.</p>
+            </article>
+            <article class="module-card" style="--accent:#1E4D2B;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">03 / 06</span>
+                    <span class="module-chip" style="background:#1E4D2B;"></span>
+                </div>
+                <h3 class="module-name">Organic</h3>
+                <div class="module-tag">Deep Biophilic · #1E4D2B</div>
+                <p>Food scraps, biodegradable packaging, garden waste — composted for circular sustainability.</p>
+            </article>
+            <article class="module-card" style="--accent:#40E0D0;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">04 / 06</span>
+                    <span class="module-chip" style="background:#40E0D0;"></span>
+                </div>
+                <h3 class="module-name">Glass</h3>
+                <div class="module-tag">Crystal Teal · #40E0D0</div>
+                <p>Bottles, jars, glass containers — identified by their unique transparency signatures.</p>
+            </article>
+            <article class="module-card" style="--accent:#87CEEB;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">05 / 06</span>
+                    <span class="module-chip" style="background:#87CEEB;"></span>
+                </div>
+                <h3 class="module-name">Plastic</h3>
+                <div class="module-tag">Synthetic Tone · #87CEEB</div>
+                <p>PET, HDPE, films. Classified by brand-aware AI trained on local Armenian products.</p>
+            </article>
+            <article class="module-card module-card-other">
+                <div class="module-accent module-accent-gradient"></div>
+                <div class="module-head">
+                    <span class="module-no">06 / 06</span>
+                    <span class="module-chip module-chip-gradient"></span>
+                </div>
+                <h3 class="module-name">Other</h3>
+                <div class="module-tag">Dynamic Gradient · #9370DB → #1E90FF</div>
+                <p>The "brain" of the system. Adapts based on city-wide data, special collection, system signals.</p>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- ── Statistics ───────────────────────────────────────────────────── -->
+<section class="section section-dark" id="statistics">
+    <div class="dark-orb" aria-hidden="true"></div>
+    <div class="container">
+        <div class="kicker kicker-taupe">§ 03 · Live data</div>
+        <div class="stats-head">
+            <h2 class="display display-light">
+                <em id="stats-total" data-target="0">0</em><br>items sorted today.
+            </h2>
+            <p class="stats-aside">Every classification is logged to PostgreSQL and streamed back to the central server. These numbers update every five seconds across all deployed units.</p>
+        </div>
+
+        <div class="stats-bars" id="stats-bars">
+            <p class="stats-zero-state">Loading statistics…</p>
+        </div>
+
+        <div class="stats-kpis">
+            <div class="stats-kpi">
+                <div class="cell-key">Recycling diversion</div>
+                <div class="kpi-num">+34%</div>
+            </div>
+            <div class="stats-kpi">
+                <div class="cell-key">CO₂ avoided (est.)</div>
+                <div class="kpi-num">12.4 t</div>
+            </div>
+            <div class="stats-kpi">
+                <div class="cell-key">Active bins</div>
+                <div class="kpi-num" id="stats-active-bins">8 / 8</div>
+            </div>
+            <div class="stats-kpi">
+                <div class="cell-key">Mean latency</div>
+                <div class="kpi-num">1.4 s</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Map ──────────────────────────────────────────────────────────── -->
+<section class="section section-light" id="map">
+    <div class="container">
+        <div class="section-head">
+            <div>
+                <div class="kicker">§ 04 · Deployment map</div>
+                <h2 class="display">First eight landmarks in <em>Yerevan</em>.</h2>
+            </div>
+            <div class="map-legend-inline">
+                <span><span class="dot" style="background:var(--sb-forest);"></span> Planned location</span>
+                <span><span class="dot" style="background:var(--sb-taupe);"></span> 2026 wave</span>
+            </div>
+        </div>
+        <div class="map-wrap">
+            <div id="smartbin-map" aria-label="SmartBin deployment map"></div>
+            <div class="map-ribbon">YEREVAN · ARMENIA · 40.18°N 44.51°E</div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Media ────────────────────────────────────────────────────────── -->
+<section class="section section-cream" id="media">
+    <div class="container">
+        <div class="kicker">§ 05 · Media</div>
+        <h2 class="display">See SmartBin <em>in motion.</em></h2>
+
+        <div class="media-grid">
+            <article class="media-card media-card-large media-card-3d" style="background:#2D5A42;">
+                <model-viewer
+                    src="/static/models/smartbin.glb"
+                    alt="SmartBin 3D product model"
+                    camera-controls
+                    auto-rotate
+                    auto-rotate-delay="800"
+                    rotation-per-second="18deg"
+                    interaction-prompt="auto"
+                    interaction-prompt-style="basic"
+                    loading="lazy"
+                    reveal="auto"
+                    shadow-intensity="1"
+                    shadow-softness="0.7"
+                    exposure="1.1"
+                    environment-image="neutral"
+                    camera-orbit="35deg 75deg auto"
+                    min-camera-orbit="auto 0deg auto"
+                    max-camera-orbit="auto 180deg auto">
+                    <div slot="poster" class="model-poster">
+                        <div class="media-stripes"></div>
+                        <div class="model-poster-label">Loading 3D model…</div>
+                    </div>
+                </model-viewer>
+                <span class="media-tag"><span class="dot"></span>3D MODEL</span>
+                <div class="media-foot">
+                    <div class="media-placeholder">INTERACTIVE · GLB</div>
+                    <div class="media-title">3D product render</div>
+                    <div class="media-sub">Industrial design study · drag to orbit</div>
+                </div>
+            </article>
+            <article class="media-card" style="background:#1A4D6B;">
+                <div class="media-stripes"></div>
+                <span class="media-tag"><span class="dot"></span>FOOTAGE</span>
+                <div class="media-play">▶</div>
+                <div class="media-foot">
+                    <div class="media-placeholder">B-ROLL · 4K</div>
+                    <div class="media-title">Real-life deployment</div>
+                    <div class="media-sub">Yerevan pilot, Q3 2026</div>
+                </div>
+            </article>
+            <article class="media-card" style="background:#BDB76B;">
+                <div class="media-stripes"></div>
+                <span class="media-tag"><span class="dot"></span>DEMO</span>
+                <div class="media-play">▶</div>
+                <div class="media-foot">
+                    <div class="media-placeholder">SCREEN CAPTURE</div>
+                    <div class="media-title">AI classification</div>
+                    <div class="media-sub">Brand-aware vision in action</div>
+                </div>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- ── Footer ───────────────────────────────────────────────────────── -->
+<footer class="site-footer" id="contact">
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <div class="footer-brand-row">
+                    <span class="footer-logo" aria-hidden="true">
+                        <svg viewBox="0 0 64 64" fill="none">
+                            <path d="M32 4 L57 18 L57 46 L32 60 L7 46 L7 18 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                            <path d="M32 4 L48 13 L48 25 L32 34 L16 25 L16 13 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.85"/>
+                            <path d="M7 18 L16 13 M57 18 L48 13 M16 25 L7 18 M48 25 L57 18 M32 34 L32 60" stroke="currentColor" stroke-width="1" stroke-linejoin="round" opacity="0.55"/>
+                        </svg>
+                    </span>
+                    <span class="footer-name">SmartBin</span>
+                </div>
+                <p>AI-powered waste classification for the smart city. Built in Yerevan; designed for everywhere.</p>
+            </div>
+            <div class="footer-col">
+                <div class="footer-h">Product</div>
+                <a href="#about">About</a>
+                <a href="#modules">Modules</a>
+                <a href="#statistics">Statistics</a>
+                <a href="#map">Map</a>
+                <a href="#media">Media</a>
+            </div>
+            <div class="footer-col">
+                <div class="footer-h">Contact</div>
+                <p>+374 12 345 678</p>
+                <p>info@smartbin.am</p>
+                <p>Yerevan, Armenia</p>
+            </div>
+            <div class="footer-col">
+                <div class="footer-h">For Operators</div>
+                <a href="/" class="footer-cta">Open Control Center →</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <span>&copy; 2026 SmartBin. All rights reserved.</span>
+            <span>Forest Green · Deep Smart Blue · Yerevan</span>
+        </div>
     </div>
 </footer>
 

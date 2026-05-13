@@ -15,11 +15,16 @@ Camera mode is selected via the SMARTWASTE_CAMERA_MODE env var:
 
 import base64
 import contextlib
+import mimetypes
 import os
 import threading
 import time
 import urllib.error
 import urllib.request
+
+# Make StaticFiles return the correct Content-Type for 3D model assets.
+mimetypes.add_type("model/gltf-binary", ".glb")
+mimetypes.add_type("model/gltf+json", ".gltf")
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -527,7 +532,33 @@ def site(request: Request):
 def dashboard(request: Request):
     if not _is_authenticated(request):
         return RedirectResponse("/login", status_code=302)
-    return templates.TemplateResponse(request=request, name="dashboard.html")
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={"active": "fleet", "user": request.session.get("user", "admin")},
+    )
+
+
+@app.get("/map", response_class=HTMLResponse)
+def dashboard_map(request: Request):
+    if not _is_authenticated(request):
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard_map.html",
+        context={"active": "map", "user": request.session.get("user", "admin")},
+    )
+
+
+@app.get("/analytics", response_class=HTMLResponse)
+def dashboard_analytics(request: Request):
+    if not _is_authenticated(request):
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard_analytics.html",
+        context={"active": "analytics", "user": request.session.get("user", "admin")},
+    )
 
 
 @app.get("/bin/{bin_id}", response_class=HTMLResponse)

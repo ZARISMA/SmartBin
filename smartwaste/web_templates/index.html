@@ -3,83 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Waste AI — {{ bin_id | default('Bin') }}</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>{{ bin_id | default('Bin') }} · SmartBin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/brand.css">
+    <link rel="stylesheet" href="/static/dashboard.css">
+    <style>
+        .bin-detail-wrap { padding: 24px 32px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; max-width: 1400px; margin: 0 auto; }
+        .stream-card { background: var(--sb-white); border-radius: 14px; padding: 0; overflow: hidden; box-shadow: var(--sb-shadow-card); }
+        .stream-card img { width: 100%; display: block; background: #1a1a1a; }
+        .stream-card .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 360px; color: var(--sb-stone); gap: 8px; }
+        .stream-card .empty .icon { font-size: 36px; }
+        .stream-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid rgba(29,39,34,0.06); }
+        .stream-head .title { font-size: 16px; font-weight: 700; color: var(--sb-ink); letter-spacing: -0.01em; }
+        .panel-card { background: var(--sb-white); border-radius: 14px; padding: 20px; box-shadow: var(--sb-shadow-card); }
+        .panel-card h2 { font-family: var(--sb-font-display); font-size: 24px; font-weight: 400; color: var(--sb-ink); margin: 0 0 12px; letter-spacing: -0.02em; }
+        .panel-card + .panel-card { margin-top: 16px; }
+        .label-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+        .cat-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--sb-stone); display: inline-block; }
+        #label { font-family: var(--sb-font-display); font-size: 32px; color: var(--sb-ink); letter-spacing: -0.02em; }
+        .detail { color: var(--sb-stone); font-size: 13px; margin: 4px 0 0; }
+        .bin-controls-row { display: flex; gap: 8px; margin-top: 16px; }
+        .bin-controls-row .sb-btn { flex: 1; }
+        .history-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+        .history-list li { display: flex; gap: 12px; font-size: 13px; color: var(--sb-ink); padding: 6px 0; border-bottom: 1px solid rgba(29,39,34,0.05); }
+        .history-list li:last-child { border-bottom: none; }
+        .hist-time { color: var(--sb-stone); font-family: var(--sb-font-mono); font-size: 11px; min-width: 80px; }
+        .stat-total { font-family: var(--sb-font-display); font-size: 42px; color: var(--sb-ink); letter-spacing: -0.02em; }
+        .stat-total-label { font-size: 11px; color: var(--sb-stone); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .stat-item { display: grid; grid-template-columns: 80px 1fr 48px; gap: 10px; align-items: center; padding: 4px 0; font-size: 13px; }
+        .stat-label { color: var(--sb-ink); font-weight: 600; }
+        .stat-bar { height: 6px; background: var(--sb-cream); border-radius: 999px; overflow: hidden; }
+        .stat-bar-fill { height: 100%; border-radius: 999px; }
+        .stat-count { font-family: var(--sb-font-mono); color: var(--sb-stone); font-size: 12px; text-align: right; }
+        .entries-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .entries-table th, .entries-table td { padding: 8px 6px; text-align: left; border-bottom: 1px solid rgba(29,39,34,0.05); }
+        .entries-table th { font-size: 10px; color: var(--sb-stone); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+        .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
+        .badge.manual { background: rgba(140,140,140,0.14); color: var(--sb-stone); }
+        .badge.auto { background: rgba(76,175,80,0.14); color: var(--sb-success); }
+        .detail-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 32px; background: var(--sb-white); border-bottom: 1px solid rgba(29,39,34,0.06); }
+        .detail-header .back { color: var(--sb-forest); text-decoration: none; font-size: 13px; font-weight: 600; margin-right: 16px; }
+        .detail-header h1 { margin: 0; font-size: 22px; color: var(--sb-ink); letter-spacing: -0.01em; }
+        @media (max-width: 1100px) {
+            .bin-detail-wrap { grid-template-columns: 1fr; padding: 16px; }
+        }
+    </style>
 </head>
 <body>
-    <canvas id="particles"></canvas>
-
-    <header>
-        <div style="display:flex;align-items:center;gap:16px">
-            <a href="/" style="color:#40E0D0;text-decoration:none;font-size:0.9rem">&larr; Dashboard</a>
-            <h1>{{ bin_id | default('Smart Waste AI') }}</h1>
+    <header class="detail-header">
+        <div style="display:flex; align-items:center;">
+            <a href="/" class="back">← Fleet</a>
+            <h1>{{ bin_id | default('SmartBin') }}</h1>
         </div>
-        <div style="display:flex;align-items:center;gap:12px">
-            <div id="mode-badge" class="badge manual">MANUAL</div>
-            <form method="POST" action="/logout" style="margin:0">
-                <button type="submit" style="background:rgba(198,40,40,0.25);border:1px solid rgba(198,40,40,0.4);color:#ef5350;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:0.8rem">Logout</button>
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span id="mode-badge" class="badge manual">MANUAL</span>
+            <form method="POST" action="/logout" style="margin:0;">
+                <button type="submit" class="sb-btn sb-btn-secondary" style="padding:6px 14px; font-size:12px;">Logout</button>
             </form>
         </div>
     </header>
 
-    <main>
-        {% if has_local_camera %}
-        <section class="stream-panel">
-            <div class="stream-container">
+    <main class="bin-detail-wrap">
+        <section class="stream-card">
+            <div class="stream-head">
+                <span class="title">Live feed</span>
+                <span class="cc-mono cc-muted">{{ bin_id | default('') }}</span>
+            </div>
+            {% if has_local_camera %}
                 <img id="video-feed" src="{{ stream_url }}" alt="Live camera feed">
-            </div>
-        </section>
-        {% else %}
-        <section class="stream-panel">
-            <div class="stream-container" style="display:flex;align-items:center;justify-content:center;min-height:300px;background:rgba(20,28,24,0.6);border-radius:16px;border:1px solid rgba(45,90,66,0.2)">
-                <div style="text-align:center;color:#8C8C8C">
-                    <div style="font-size:2.5rem;margin-bottom:12px">&#128247;</div>
-                    <div style="font-size:1.1rem;color:#E0E0E0">Remote Bin</div>
-                    <div style="font-size:0.85rem;margin-top:4px">Live stream not available for remote bins</div>
+            {% else %}
+                <div class="empty">
+                    <div class="icon">📷</div>
+                    <div style="color: var(--sb-ink); font-weight: 600;">Remote Bin</div>
+                    <div style="font-size:12px;">Live stream not available for remote bins.</div>
                 </div>
-            </div>
+            {% endif %}
         </section>
-        {% endif %}
 
-        <aside class="info-panel">
-            <div class="status-card">
-                <h2>Current Classification</h2>
+        <aside>
+            <div class="panel-card">
+                <div class="cell-key">Current classification</div>
                 <div class="label-row">
                     <span id="cat-dot" class="cat-dot"></span>
                     <span id="label">Ready</span>
                 </div>
-                <p id="detail" class="detail">Waiting for classification...</p>
+                <p id="detail" class="detail">Waiting for classification…</p>
+                {% if has_local_camera %}
+                <div class="bin-controls-row">
+                    <button class="sb-btn sb-btn-primary" id="btn-classify" onclick="classify(event)">⊙ Classify</button>
+                    <button class="sb-btn sb-btn-secondary" id="btn-auto" onclick="toggleAuto()">Toggle Auto</button>
+                </div>
+                {% endif %}
             </div>
 
-            {% if has_local_camera %}
-            <div class="controls">
-                <button id="btn-classify" onclick="classify(event)">Classify</button>
-                <button id="btn-auto" onclick="toggleAuto()">Toggle Auto</button>
-            </div>
-            {% endif %}
-
-            <div class="history-card">
-                <h2>Recent</h2>
-                <ul id="history-list"></ul>
+            <div class="panel-card">
+                <div class="cell-key">Recent</div>
+                <ul class="history-list" id="history-list"></ul>
             </div>
 
-            <div class="stats-card">
-                <h2>Statistics</h2>
-                <div class="stat-total-label">Total Classifications</div>
+            <div class="panel-card">
+                <div class="cell-key">Statistics</div>
+                <div class="stat-total-label">Total classifications</div>
                 <div id="stat-total" class="stat-total">0</div>
-                <div id="stat-bars"></div>
+                <div id="stat-bars" style="margin-top: 8px;"></div>
             </div>
 
-            <div class="entries-card">
-                <h2>Latest Entries</h2>
-                <table>
+            <div class="panel-card">
+                <div class="cell-key">Latest entries</div>
+                <table class="entries-table">
                     <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Category</th>
-                            <th>Description</th>
-                            <th>Brand</th>
-                        </tr>
+                        <tr><th>Time</th><th>Category</th><th>Description</th><th>Brand</th></tr>
                     </thead>
                     <tbody id="entries-tbody"></tbody>
                 </table>
@@ -94,97 +129,66 @@
         const TOGGLE_URL = '{{ toggle_url | default("/api/toggle-auto") }}';
         const STATE_URL = '{{ state_url | default("/api/state") }}';
         const BIN_QUERY = BIN_ID ? '?bin_id=' + encodeURIComponent(BIN_ID) : '';
-
         const CAT_COLORS = {
             Plastic: '#87CEEB', Glass: '#40E0D0', Paper: '#D2B48C',
             Organic: '#1E4D2B', Aluminum: '#A9A9A9', Other: '#9370DB',
             Empty: '#8C8C8C'
         };
+        function catColor(label) { return CAT_COLORS[label] || '#8C8C8C'; }
 
-        function catColor(label) {
-            return CAT_COLORS[label] || '#ffffff';
-        }
-
-        /* ── Classify with ripple ───────────────────────────────────────── */
-        async function classify(e) {
+        async function classify() {
             const btn = document.getElementById('btn-classify');
-            if (e) {
-                const rect = btn.getBoundingClientRect();
-                const ripple = document.createElement('span');
-                ripple.className = 'ripple';
-                const size = Math.max(rect.width, rect.height);
-                ripple.style.width = ripple.style.height = size + 'px';
-                ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
-                ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
-                btn.appendChild(ripple);
-                setTimeout(() => ripple.remove(), 600);
-            }
             btn.disabled = true;
             try {
                 const res = await fetch(CLASSIFY_URL, { method: 'POST' });
-                const data = await res.json();
-                if (data.error) btn.textContent = data.error;
-            } catch (e) {
-                console.error(e);
-            }
-            setTimeout(() => { btn.disabled = false; btn.textContent = 'Classify'; }, 2000);
+                await res.json();
+            } catch (e) { /* ignore */ }
+            setTimeout(() => { btn.disabled = false; }, 2000);
         }
-
         async function toggleAuto() {
             const res = await fetch(TOGGLE_URL, { method: 'POST' });
             const data = await res.json();
             updateModeBadge(data.auto_classify);
         }
-
         function updateModeBadge(auto) {
             const badge = document.getElementById('mode-badge');
             badge.textContent = auto ? 'AUTO' : 'MANUAL';
             badge.className = 'badge ' + (auto ? 'auto' : 'manual');
         }
 
-        /* ── Poll State (only for local camera bins) ───────────────────── */
         async function pollState() {
             if (!HAS_LOCAL_CAMERA) return;
             try {
                 const res = await fetch(STATE_URL);
-                const s = res.ok ? await res.json() : null;
-                if (!s) return;
-
+                if (!res.ok) return;
+                const s = await res.json();
                 document.getElementById('label').textContent = s.label || 'Ready';
                 document.getElementById('detail').textContent = s.detail || '';
-
                 const dot = document.getElementById('cat-dot');
                 const c = catColor(s.label);
-                dot.style.backgroundColor = c;
-                dot.style.boxShadow = `0 0 12px ${c}`;
+                dot.style.background = c;
+                dot.style.boxShadow = `0 0 12px ${c}66`;
                 document.getElementById('label').style.color = c;
-
                 updateModeBadge(s.auto_on);
-
                 const ul = document.getElementById('history-list');
                 ul.innerHTML = '';
-                (s.history || []).forEach((h, i) => {
+                (s.history || []).forEach((h) => {
                     const li = document.createElement('li');
-                    li.style.animationDelay = (i * 0.06) + 's';
-                    li.innerHTML = `<span class="hist-time">${h.time}</span> <span style="color:${catColor(h.label)}">${h.label}</span>`;
+                    li.innerHTML = `<span class="hist-time">${h.time}</span> <span style="color:${catColor(h.label)}; font-weight: 600;">${h.label}</span>`;
                     ul.appendChild(li);
                 });
-            } catch (e) { /* ignore transient errors */ }
+            } catch (e) { /* ignore */ }
         }
 
-        /* ── Poll Stats with bars ───────────────────────────────────────── */
         async function pollStats() {
             try {
                 const res = await fetch('/api/stats' + BIN_QUERY);
-                const s = res.ok ? await res.json() : null;
-                if (!s) return;
-
-                document.getElementById('stat-total').textContent = s.total;
-
+                if (!res.ok) return;
+                const s = await res.json();
+                document.getElementById('stat-total').textContent = (s.total || 0).toLocaleString();
                 const container = document.getElementById('stat-bars');
                 const cats = s.by_category || {};
                 const max = Math.max(1, ...Object.values(cats));
-
                 container.innerHTML = '';
                 for (const [cat, count] of Object.entries(cats)) {
                     const pct = (count / max * 100).toFixed(1);
@@ -192,75 +196,28 @@
                     container.innerHTML += `
                         <div class="stat-item">
                             <span class="stat-label" style="color:${color}">${cat}</span>
-                            <div class="stat-bar">
-                                <div class="stat-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${color},${color}aa)"></div>
-                            </div>
+                            <div class="stat-bar"><div class="stat-bar-fill" style="width:${pct}%; background:${color};"></div></div>
                             <span class="stat-count">${count}</span>
                         </div>`;
                 }
             } catch (e) { /* ignore */ }
         }
 
-        /* ── Poll Entries ───────────────────────────────────────────────── */
         async function pollEntries() {
             try {
                 const res = await fetch('/api/entries?limit=10' + (BIN_ID ? '&bin_id=' + encodeURIComponent(BIN_ID) : ''));
-                const entries = res.ok ? await res.json() : [];
+                if (!res.ok) return;
+                const entries = await res.json();
                 const tbody = document.getElementById('entries-tbody');
                 tbody.innerHTML = '';
                 for (const e of entries) {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `<td>${e.timestamp || ''}</td><td style="color:${catColor(e.label)}">${e.label || ''}</td><td>${e.description || ''}</td><td>${e.brand_product || ''}</td>`;
+                    tr.innerHTML = `<td class="cc-mono" style="font-size:11px; color:var(--sb-stone);">${e.timestamp || ''}</td><td style="color:${catColor(e.label)}; font-weight: 600;">${e.label || ''}</td><td>${e.description || ''}</td><td style="color:var(--sb-stone);">${e.brand_product || ''}</td>`;
                     tbody.appendChild(tr);
                 }
             } catch (e) { /* ignore */ }
         }
 
-        /* ── Particle Background ────────────────────────────────────────── */
-        (function initParticles() {
-            const canvas = document.getElementById('particles');
-            const ctx = canvas.getContext('2d');
-            let particles = [];
-            const COUNT = 25;
-
-            function resize() {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            }
-            resize();
-            window.addEventListener('resize', resize);
-
-            for (let i = 0; i < COUNT; i++) {
-                particles.push({
-                    x: Math.random() * canvas.width,
-                    y: Math.random() * canvas.height,
-                    r: Math.random() * 1.5 + 0.5,
-                    dx: (Math.random() - 0.5) * 0.3,
-                    dy: (Math.random() - 0.5) * 0.3,
-                    alpha: Math.random() * 0.3 + 0.05,
-                });
-            }
-
-            function draw() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                for (const p of particles) {
-                    p.x += p.dx;
-                    p.y += p.dy;
-                    if (p.x < 0) p.x = canvas.width;
-                    if (p.x > canvas.width) p.x = 0;
-                    if (p.y < 0) p.y = canvas.height;
-                    if (p.y > canvas.height) p.y = 0;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(45, 90, 66, ${p.alpha})`;
-                    ctx.fill();
-                }
-                requestAnimationFrame(draw);
-            }
-            draw();
-        })();
-
-        /* ── Start polling ──────────────────────────────────────────────── */
         if (HAS_LOCAL_CAMERA) setInterval(pollState, 1000);
         setInterval(pollStats, 5000);
         setInterval(pollEntries, 5000);

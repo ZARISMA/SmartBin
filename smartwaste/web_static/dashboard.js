@@ -1,28 +1,26 @@
-/* Smart Waste AI — Fleet Control dashboard logic
- * Polls /api/dashboard, renders bin cards, and dispatches admin commands
- * to POST /api/bin/{id}/command with optimistic UI feedback.
+/* SmartBin Fleet Control dashboard
+ * Polls /api/dashboard, renders bin cards in the new editorial style,
+ * and dispatches admin commands to POST /api/bin/{id}/command.
  */
 (function () {
     'use strict';
 
-    const POLL_INTERVAL_MS = 4000;
+    const POLL_INTERVAL_MS = 5000;
     const grid = document.getElementById('bins-grid');
     const filterInput = document.getElementById('filter-input');
     const refreshBtn = document.getElementById('refresh-btn');
     const toastHost = document.getElementById('toast-host');
-
     const modal = document.getElementById('modal');
     const modalTitle = document.getElementById('modal-title');
     const modalBody = document.getElementById('modal-body');
     const modalOk = document.getElementById('modal-ok');
     const modalCancel = document.getElementById('modal-cancel');
+    const lastRefresh = document.getElementById('last-refresh');
+    const filterChips = document.querySelectorAll('.filter-chips .chip');
 
     let lastBins = [];
-    let filter = '';
-
-    // Preserve control state across re-renders so dropdowns don't reset while
-    // the user is interacting with them.
-    const pendingSelects = new Map();
+    let textFilter = '';
+    let statusFilter = 'all';
 
     function toast(message, kind) {
         const el = document.createElement('div');
@@ -72,15 +70,6 @@
         }
     }
 
-    function statusClass(status) {
-        switch (status) {
-            case 'online': return 'status-online';
-            case 'degraded': return 'status-degraded';
-            case 'stopped': return 'status-stopped';
-            default: return 'status-offline';
-        }
-    }
-
     function escapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
             { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -100,27 +89,27 @@
 
     function renderWarnings(warnings) {
         if (!warnings || !warnings.length) return '';
-        const icons = { info: 'i', warning: '!', error: '×' };
+        const icons = { info: 'i', warning: '⚠', error: '×' };
         return `<div class="bin-warnings">${warnings.map((w) => `
-            <div class="warning-item sev-${escapeHtml(w.severity || 'warning')}">
-                <span class="sev-icon">${icons[w.severity] || '!'}</span>
+            <div class="bin-warning sev-${escapeHtml(w.severity || 'warning')}">
+                <span class="sev">${icons[w.severity] || '⚠'}</span>
                 <span>${escapeHtml(w.message || w.code)}</span>
             </div>`).join('')}</div>`;
+    }
+
+    function pipelineLabel(p) {
+        if (p === 'oak') return 'OAK Dual';
+        if (p === 'oak-native') return 'OAK Native';
+        if (p === 'raspberry') return 'Raspberry';
+        return p || '—';
     }
 
     function renderCard(bin) {
         const isOnline = bin.status === 'online' || bin.status === 'degraded';
         const hasHost = !!bin.has_host;
         const running = !!bin.running;
-        const thumb = isOnline && hasHost
-            ? `<img alt="live stream for ${escapeHtml(bin.bin_id)}"
-                    src="/api/bin/${encodeURIComponent(bin.bin_id)}/stream" loading="lazy">
-               <span class="thumb-badge">LIVE</span>`
-            : `<div class="thumb-placeholder">${bin.status === 'offline' ? 'Offline — no stream' : 'Stream unavailable'}</div>`;
-
-        const cameraCount = bin.camera_count || 0;
-        const pipeline = bin.pipeline || bin.camera_mode || '—';
-        const strategy = bin.strategy || '—';
+        const pipeline = bin.pipeline || bin.camera_mode || 'oak';
+        const strategy = bin.strategy || 'manual';
         const pipelineOptions = ['oak', 'oak-native']
             .map((p) => `<option value="${p}" ${p === pipeline ? 'selected' : ''}>${p === 'oak' ? 'OAK Dual' : 'OAK Native'}</option>`)
             .join('');
@@ -129,88 +118,113 @@
             .join('');
         const strategyDisabled = pipeline !== 'oak';
 
+        const thumbInner = isOnline && hasHost
+            ? `<img alt="live stream for ${escapeHtml(bin.bin_id)}"
+                    src="/api/bin/${encodeURIComponent(bin.bin_id)}/stream" loading="lazy">
+               <div class="bin-thumb-stripes"></div>`
+            : (bin.status === 'offline'
+                ? `<div class="bin-thumb-placeholder"><div class="glyph">⏻</div>NO SIGNAL</div>`
+                : `<div class="bin-thumb-placeholder">STREAM UNAVAILABLE</div>`);
+
+        // Lifecycle button mirrors the design: Start (when stopped), Stop (when running+online), Restart otherwise.
         const lifecycleBtn = running
-            ? `<button class="btn-ghost" data-action="stop">⏸ Stop</button>`
-            : `<button class="btn-primary" data-action="start">▶ Start</button>`;
+            ? (bin.status === 'offline'
+                ? `<button class="sb-btn sb-btn-secondary" data-action="restart">↻ Restart</button>`
+                : `<button class="sb-btn sb-btn-secondary" data-action="stop">⏸ Stop</button>`)
+            : `<button class="sb-btn sb-btn-primary" data-action="start">▶ Start</button>`;
+
+        // Fill bar is hidden until backend exposes a real fill metric. We keep the markup but render a muted placeholder.
+        const fillRow = `
+            <div class="bin-fill">
+                <div class="bin-fill-head">
+                    <span>Fill level</span>
+                    <span class="bin-fill-unknown">—</span>
+                </div>
+                <div class="bin-fill-track"><div class="bin-fill-bar" style="width:0%;"></div></div>
+            </div>`;
 
         return `
-            <article class="bin-card ${statusClass(bin.status)}" data-bin="${escapeHtml(bin.bin_id)}">
-                <header class="bin-card-head">
-                    <div>
-                        <div class="bin-title">${escapeHtml(bin.bin_id)}</div>
-                        <div class="bin-subtitle">${escapeHtml(bin.location || 'Location not set')} · last seen ${escapeHtml(lastSeenLabel(bin.last_seen))}</div>
-                    </div>
-                    <span class="bin-status-pill ${statusClass(bin.status)}">${escapeHtml(bin.status)}</span>
-                </header>
-
-                <div class="bin-thumb">${thumb}</div>
-
-                <div class="bin-meta">
-                    <div class="meta-cell">
-                        <div class="meta-key">Pipeline</div>
-                        <div class="meta-val">${escapeHtml(pipeline)}</div>
-                    </div>
-                    <div class="meta-cell">
-                        <div class="meta-key">Strategy</div>
-                        <div class="meta-val">${escapeHtml(strategy)}</div>
-                    </div>
-                    <div class="meta-cell">
-                        <div class="meta-key">Cameras</div>
-                        <div class="meta-val">${cameraCount}</div>
-                    </div>
-                    <div class="meta-cell">
-                        <div class="meta-key">Classifications</div>
-                        <div class="meta-val">${bin.total_entries ?? 0}</div>
-                    </div>
-                    <div class="meta-cell">
-                        <div class="meta-key">Auto</div>
-                        <div class="meta-val">${bin.auto_classify ? 'ON' : 'OFF'}</div>
-                    </div>
-                    <div class="meta-cell">
-                        <div class="meta-key">Running</div>
-                        <div class="meta-val">${running ? 'YES' : 'NO'}</div>
+            <article class="bin-card" data-bin="${escapeHtml(bin.bin_id)}" data-status="${escapeHtml(bin.status)}">
+                <div class="bin-thumb ${bin.status === 'offline' ? 'offline' : ''}">
+                    ${thumbInner}
+                    <div class="bin-thumb-status"><span class="sb-pill ${escapeHtml(bin.status)}"><span class="dot"></span>${escapeHtml(bin.status)}</span></div>
+                    <div class="bin-thumb-foot">
+                        <span>● REC · ${escapeHtml(bin.bin_id.toUpperCase())}</span>
+                        <span>${escapeHtml(lastSeenLabel(bin.last_seen))}</span>
                     </div>
                 </div>
 
-                ${renderWarnings(bin.warnings)}
+                <div class="bin-body">
+                    <div class="bin-head">
+                        <div class="bin-head-text">
+                            <div class="bin-loc">${escapeHtml(bin.location || 'Location not set')}</div>
+                            <div class="bin-id">${escapeHtml(bin.bin_id)}${bin.lat && bin.lng ? ' · ' + bin.lat.toFixed(4) + ', ' + bin.lng.toFixed(4) : ''}</div>
+                        </div>
+                        <div class="bin-overflow">
+                            <button class="bin-overflow-btn" data-action="toggle-menu" aria-label="More options">⋯</button>
+                            <div class="bin-overflow-menu" data-menu>
+                                <div class="row">
+                                    <label>Strategy</label>
+                                    <select data-control="strategy" ${strategyDisabled ? 'disabled title="Only on OAK Dual"' : ''}>${strategyOptions}</select>
+                                </div>
+                                <div class="row">
+                                    <label>Pipeline</label>
+                                    <select data-control="pipeline">${pipelineOptions}</select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="bin-controls">
-                    <label class="select-wrap">
-                        <span class="lbl">Strategy</span>
-                        <select data-control="strategy" ${strategyDisabled ? 'disabled title="Only available on OAK-Dual pipeline"' : ''}>${strategyOptions}</select>
-                    </label>
-                    <label class="select-wrap">
-                        <span class="lbl">Pipeline</span>
-                        <select data-control="pipeline">${pipelineOptions}</select>
-                    </label>
-                    <div class="bin-actions">
+                    ${fillRow}
+
+                    <div class="bin-meta">
+                        <div class="bin-meta-cell">
+                            <div class="key">Today</div>
+                            <div class="val">${bin.total_entries ?? 0}</div>
+                        </div>
+                        <div class="bin-meta-cell">
+                            <div class="key">Mode</div>
+                            <div class="val ${bin.auto_classify ? '' : 'muted'}">${bin.auto_classify ? 'AUTO' : 'MANUAL'}</div>
+                        </div>
+                        <div class="bin-meta-cell">
+                            <div class="key">Pipeline</div>
+                            <div class="val">${escapeHtml(pipelineLabel(pipeline))}</div>
+                        </div>
+                    </div>
+
+                    ${renderWarnings(bin.warnings)}
+
+                    <div class="bin-controls">
                         ${lifecycleBtn}
-                        <button class="btn-secondary" data-action="restart">↻ Restart</button>
+                        <button class="sb-btn sb-btn-secondary" data-action="classify" ${(!running || !hasHost) ? 'disabled' : ''}>⊙ Classify</button>
+                        <a class="sb-btn sb-btn-outline" href="/bin/${encodeURIComponent(bin.bin_id)}">Open →</a>
                     </div>
-                    <div class="bin-actions">
-                        <button class="btn-primary" data-action="classify" ${!running || !hasHost ? 'disabled' : ''}>📸 Classify</button>
-                        <button class="btn-ghost" data-action="toggle_auto" ${!running || !hasHost ? 'disabled' : ''}>${bin.auto_classify ? 'Auto: ON' : 'Auto: OFF'}</button>
-                    </div>
-                    <a class="open-detail" href="/bin/${encodeURIComponent(bin.bin_id)}">Open detail view →</a>
                 </div>
             </article>
         `;
     }
 
-    function applyFilter(bins) {
-        if (!filter) return bins;
-        const q = filter.toLowerCase();
-        return bins.filter((b) =>
-            (b.bin_id || '').toLowerCase().includes(q) ||
-            (b.location || '').toLowerCase().includes(q)
-        );
+    function applyFilters(bins) {
+        let out = bins;
+        if (statusFilter !== 'all') {
+            out = out.filter((b) => (b.status || '') === statusFilter);
+        }
+        if (textFilter) {
+            const q = textFilter.toLowerCase();
+            out = out.filter((b) =>
+                (b.bin_id || '').toLowerCase().includes(q) ||
+                (b.location || '').toLowerCase().includes(q)
+            );
+        }
+        return out;
     }
 
     function render() {
-        const bins = applyFilter(lastBins);
+        const bins = applyFilters(lastBins);
         if (!bins.length) {
-            grid.innerHTML = `<div class="empty-state"><h2>${lastBins.length ? 'No matches' : 'No bins registered'}</h2>
-                <p>${lastBins.length ? 'Clear the filter to see all bins.' : 'Start an edge device to see it here.'}</p></div>`;
+            const msg = lastBins.length ? 'No matches' : 'No bins registered';
+            const sub = lastBins.length ? 'Adjust the filters above.' : 'Start an edge device to see it here.';
+            grid.innerHTML = `<div class="empty-state"><h2>${msg}</h2><p>${sub}</p></div>`;
             return;
         }
         grid.innerHTML = bins.map(renderCard).join('');
@@ -223,12 +237,12 @@
         if (action === 'restart' || action === 'stop') {
             const title = action === 'restart' ? 'Restart bin?' : 'Stop bin?';
             const body = action === 'restart'
-                ? `Process will exit and the container will restart. There will be 5–15 seconds of downtime on ${binId}.`
-                : `Bin ${binId} will stop accepting classifications until you press Start again.`;
+                ? `Process will exit and the container will restart. 5–15 seconds of downtime on ${binId}.`
+                : `${binId} will stop accepting classifications until you press Start again.`;
             const ok = await confirmModal(title, body);
             if (!ok) return;
         }
-        sendCommand(binId, action);
+        sendCommand(binId, action === 'toggle_auto' ? 'toggle_auto' : action);
     }
 
     async function onSelectChange(card, control, value) {
@@ -248,21 +262,43 @@
 
     function wireCardHandlers() {
         grid.querySelectorAll('.bin-card').forEach((card) => {
+            const menu = card.querySelector('[data-menu]');
             card.querySelectorAll('button[data-action]').forEach((btn) => {
                 btn.addEventListener('click', (ev) => {
                     ev.preventDefault();
+                    ev.stopPropagation();
                     const action = btn.dataset.action;
+                    if (action === 'toggle-menu') {
+                        menu.classList.toggle('open');
+                        return;
+                    }
                     btn.disabled = true;
                     onAction(card, action).finally(() => { btn.disabled = false; });
                 });
             });
             card.querySelectorAll('select[data-control]').forEach((sel) => {
-                sel.addEventListener('change', (ev) => {
-                    const control = sel.dataset.control;
-                    onSelectChange(card, control, sel.value);
+                sel.addEventListener('change', () => {
+                    onSelectChange(card, sel.dataset.control, sel.value);
                 });
             });
         });
+    }
+
+    // Close overflow menus when clicking outside
+    document.addEventListener('click', (ev) => {
+        document.querySelectorAll('.bin-overflow-menu.open').forEach((m) => {
+            if (!m.parentElement.contains(ev.target)) m.classList.remove('open');
+        });
+    });
+
+    function updateStats(d) {
+        const total = d.total_bins ?? 0;
+        document.getElementById('stat-online').textContent = d.online ?? 0;
+        document.getElementById('stat-degraded').textContent = d.degraded ?? 0;
+        document.getElementById('stat-offline').textContent = d.offline ?? 0;
+        document.getElementById('stat-total').textContent = (d.total_entries ?? 0).toLocaleString();
+        document.getElementById('stat-online-sub').textContent = `of ${total} total`;
+        document.getElementById('stat-degraded-sub').textContent = (d.degraded ?? 0) === 1 ? '1 warning' : `${d.degraded ?? 0} warnings`;
     }
 
     async function refresh() {
@@ -274,19 +310,32 @@
             }
             const data = await res.json();
             lastBins = data.bins || [];
-            document.getElementById('online-bins').textContent = data.online ?? 0;
-            document.getElementById('degraded-bins').textContent = data.degraded ?? 0;
-            document.getElementById('offline-bins').textContent = data.offline ?? 0;
-            document.getElementById('total-classifications').textContent = data.total_entries ?? 0;
+            updateStats(data);
+            const now = new Date();
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            if (lastRefresh) lastRefresh.textContent = `updated ${hh}:${mm}:${ss}`;
+            // Server host (sidebar foot) — best-effort from window.location
+            const hostEl = document.getElementById('cc-server-host');
+            if (hostEl) hostEl.textContent = window.location.host || '—';
             render();
-        } catch (e) { /* ignore transient errors */ }
+        } catch (e) { /* transient errors are non-fatal */ }
     }
 
-    filterInput.addEventListener('input', () => {
-        filter = filterInput.value.trim();
+    filterInput && filterInput.addEventListener('input', () => {
+        textFilter = filterInput.value.trim();
         render();
     });
-    refreshBtn.addEventListener('click', refresh);
+    refreshBtn && refreshBtn.addEventListener('click', refresh);
+    filterChips.forEach((c) => {
+        c.addEventListener('click', () => {
+            filterChips.forEach((x) => x.classList.remove('active'));
+            c.classList.add('active');
+            statusFilter = c.dataset.filter || 'all';
+            render();
+        });
+    });
 
     refresh();
     setInterval(refresh, POLL_INTERVAL_MS);

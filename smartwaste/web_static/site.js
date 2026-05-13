@@ -1,211 +1,147 @@
-/* ═══════════════════════════════════════════════════════════════════════════
-   SmartBin — Presentation Website JavaScript
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* SmartBin marketing site — Leaflet map + live stats + animated counter */
+(function () {
+    'use strict';
 
-const CAT_COLORS = {
-    Plastic:   '#87CEEB',
-    Glass:     '#40E0D0',
-    Paper:     '#D2B48C',
-    Organic:   '#1E4D2B',
-    Aluminum:  '#A9A9A9',
-    Other:     '#9370DB',
-    Empty:     '#8C8C8C',
-};
-
-const SMARTBIN_LOCATIONS = [
-    { name: 'Republic Square',       lat: 40.1777, lng: 44.5126, desc: 'Central transportation hub' },
-    { name: 'Cascade Complex',       lat: 40.1922, lng: 44.5155, desc: 'Cultural landmark & park' },
-    { name: 'Northern Avenue',       lat: 40.1850, lng: 44.5100, desc: 'Pedestrian shopping street' },
-    { name: 'Yerevan State University', lat: 40.1876, lng: 44.5148, desc: 'University campus' },
-    { name: 'Vernissage Market',     lat: 40.1748, lng: 44.5175, desc: 'Open-air market' },
-    { name: 'Tsitsernakaberd',       lat: 40.1853, lng: 44.4903, desc: 'Memorial park area' },
-    { name: 'Yerevan Mall',          lat: 40.2050, lng: 44.5080, desc: 'Shopping center' },
-    { name: 'Dalma Garden Mall',     lat: 40.1590, lng: 44.5260, desc: 'Southern shopping area' },
-];
-
-/* ── Scroll Animations ─────────────────────────────────────────────────────── */
-
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-        }
-    });
-}, { threshold: 0.1 });
-
-document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
-
-/* ── Navbar ────────────────────────────────────────────────────────────────── */
-
-const navbar = document.querySelector('.navbar');
-const hamburger = document.querySelector('.nav-hamburger');
-const navLinks = document.querySelector('.nav-links');
-
-window.addEventListener('scroll', () => {
-    navbar.classList.toggle('scrolled', window.scrollY > 50);
-});
-
-if (hamburger) {
-    hamburger.addEventListener('click', () => {
-        navLinks.classList.toggle('open');
-    });
-    /* Close menu on link click */
-    navLinks.querySelectorAll('a').forEach(a => {
-        a.addEventListener('click', () => navLinks.classList.remove('open'));
-    });
-}
-
-/* Active section highlighting */
-const sections = document.querySelectorAll('.section[id], .hero[id]');
-const navAnchors = document.querySelectorAll('.nav-links a');
-
-window.addEventListener('scroll', () => {
-    let current = '';
-    sections.forEach(s => {
-        const top = s.offsetTop - 120;
-        if (window.scrollY >= top) current = s.id;
-    });
-    navAnchors.forEach(a => {
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-    });
-});
-
-/* ── Animated Counter ──────────────────────────────────────────────────────── */
-
-function animateCounter(el, target, duration = 2000) {
-    const start = performance.now();
-    const update = (now) => {
-        const elapsed = now - start;
-        const progress = Math.min(elapsed / duration, 1);
-        /* Ease-out cubic */
-        const eased = 1 - Math.pow(1 - progress, 3);
-        el.textContent = Math.floor(eased * target).toLocaleString();
-        if (progress < 1) requestAnimationFrame(update);
+    // ── Palette (mirrors brand.css) ──────────────────────────────────
+    const COLORS = {
+        Plastic:  '#87CEEB',
+        Paper:    '#D2B48C',
+        Glass:    '#40E0D0',
+        Organic:  '#1E4D2B',
+        Aluminum: '#A9A9A9',
+        Other:    '#9370DB',
+        Empty:    '#8C8C8C',
     };
-    requestAnimationFrame(update);
-}
+    const LIGHT_TEXT = new Set(['Organic']); // bars where the serif number should be white
 
-/* ── Statistics ─────────────────────────────────────────────────────────────── */
+    // ── Yerevan landmark pins ─────────────────────────────────────────
+    const PINS = [
+        { lat: 40.1776, lng: 44.5126, name: 'Republic Square',     wave: 1 },
+        { lat: 40.1894, lng: 44.5183, name: 'Cascade Complex',     wave: 1 },
+        { lat: 40.1781, lng: 44.5142, name: 'Vernissage Market',   wave: 1 },
+        { lat: 40.1561, lng: 44.4837, name: 'Yerevan Mall',        wave: 1 },
+        { lat: 40.1820, lng: 44.5147, name: 'Northern Avenue',     wave: 1 },
+        { lat: 40.1858, lng: 44.5142, name: 'Opera House',         wave: 2 },
+        { lat: 40.1612, lng: 44.5067, name: 'Yerevan Station',     wave: 2 },
+        { lat: 40.1738, lng: 44.5236, name: "Children's Park",     wave: 2 },
+    ];
 
-let statsLoaded = false;
-
-async function loadStats() {
-    try {
-        const res = await fetch('/api/stats');
-        const data = await res.json();
-        const total = data.total || 0;
-        const cats = data.by_category || {};
-
-        /* Total counter */
-        const totalEl = document.getElementById('stats-total');
-        if (totalEl) {
-            totalEl.dataset.target = total;
-        }
-
-        /* Category bars */
-        const barsContainer = document.getElementById('stats-bars');
-        if (!barsContainer) return;
-
-        if (total === 0) {
-            barsContainer.innerHTML = '<p class="stats-zero-state">Deployment starting soon — statistics will appear here once SmartBins are active.</p>';
-            return;
-        }
-
-        const maxCount = Math.max(...Object.values(cats), 1);
-
-        barsContainer.innerHTML = Object.entries(cats)
-            .filter(([label]) => label !== 'Empty')
-            .sort((a, b) => b[1] - a[1])
-            .map(([label, count]) => {
-                const color = CAT_COLORS[label] || '#8C8C8C';
-                const pct = (count / maxCount) * 100;
-                return `
-                    <div class="stat-bar-card glass-card">
-                        <div class="stat-bar-header">
-                            <span class="stat-bar-label">${label}</span>
-                            <span class="stat-bar-count">${count.toLocaleString()}</span>
-                        </div>
-                        <div class="stat-bar-track">
-                            <div class="stat-bar-fill" style="background:${color}" data-width="${pct}%"></div>
-                        </div>
-                    </div>`;
-            }).join('');
-    } catch (e) {
-        console.warn('Could not load stats:', e);
-    }
-}
-
-/* Trigger counter and bars when stats section scrolls into view */
-const statsSection = document.getElementById('statistics');
-if (statsSection) {
-    const statsObs = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting && !statsLoaded) {
-                statsLoaded = true;
-
-                /* Animate total */
-                const totalEl = document.getElementById('stats-total');
-                if (totalEl) {
-                    const target = parseInt(totalEl.dataset.target) || 0;
-                    animateCounter(totalEl, target);
-                }
-
-                /* Animate bars */
-                setTimeout(() => {
-                    document.querySelectorAll('.stat-bar-fill').forEach(bar => {
-                        bar.style.width = bar.dataset.width;
-                    });
-                }, 300);
-            }
+    // ── Leaflet map ───────────────────────────────────────────────────
+    function initMap() {
+        const el = document.getElementById('smartbin-map');
+        if (!el || typeof L === 'undefined') return;
+        const map = L.map(el, {
+            center: [40.1792, 44.5152],
+            zoom: 13,
+            zoomControl: true,
+            scrollWheelZoom: false,
         });
-    }, { threshold: 0.2 });
-    statsObs.observe(statsSection);
-}
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            subdomains: 'abcd',
+            maxZoom: 19,
+        }).addTo(map);
 
-/* ── Leaflet Map ───────────────────────────────────────────────────────────── */
+        PINS.forEach((p) => {
+            const color = p.wave === 1 ? '#2D5A42' : '#BDB76B';
+            const icon = L.divIcon({
+                className: 'sb-leaflet-pin',
+                html: `<div class="sb-pin-wrap">
+                         <div class="sb-pin-label">${p.name}</div>
+                         <div class="sb-pin-dot" style="background:${color};"></div>
+                       </div>`,
+                iconSize: [120, 44],
+                iconAnchor: [60, 44],
+            });
+            L.marker([p.lat, p.lng], { icon }).addTo(map);
+        });
+    }
 
-function initMap() {
-    const mapEl = document.getElementById('smartbin-map');
-    if (!mapEl || typeof L === 'undefined') return;
+    // ── Stats ─────────────────────────────────────────────────────────
+    async function fetchStats() {
+        // /api/stats requires auth — fall back to a static "preview" demo when 401
+        try {
+            const res = await fetch('/api/stats', { cache: 'no-store' });
+            if (res.status === 401) return null;
+            if (!res.ok) return null;
+            return await res.json();
+        } catch (e) { return null; }
+    }
 
-    const map = L.map('smartbin-map', {
-        center: [40.1792, 44.4991],
-        zoom: 13,
-        scrollWheelZoom: false,
-        attributionControl: false,
+    function previewStats() {
+        return {
+            total: 1408,
+            by_category: {
+                Plastic: 482, Paper: 396, Glass: 211,
+                Organic: 178, Aluminum: 94, Other: 47,
+            },
+        };
+    }
+
+    function renderBars(stats) {
+        const host = document.getElementById('stats-bars');
+        if (!host) return;
+        const order = ['Plastic', 'Paper', 'Glass', 'Organic', 'Aluminum', 'Other'];
+        const data = order.map((name) => ({ name, value: stats.by_category[name] || 0 }));
+        const max = Math.max(1, ...data.map((d) => d.value));
+        const total = data.reduce((a, d) => a + d.value, 0) || 1;
+
+        host.innerHTML = data.map((d) => {
+            const pct = Math.max(8, Math.round((d.value / max) * 100));
+            const portion = Math.round((d.value / total) * 100);
+            const txtLight = LIGHT_TEXT.has(d.name) ? 'light' : '';
+            return `<div class="stat-bar">
+                <div class="stat-bar-fill" style="height:${pct}%; background:${COLORS[d.name]};">
+                    <span class="stat-bar-num ${txtLight}">${d.value}</span>
+                </div>
+                <div class="stat-bar-label">
+                    <span class="name">${d.name}</span>
+                    <span class="pct">${portion}%</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function animateNumber(el, target, duration = 1600) {
+        const start = parseInt(el.dataset.target || '0', 10) || 0;
+        const t0 = performance.now();
+        function tick(now) {
+            const p = Math.min(1, (now - t0) / duration);
+            const e = 1 - Math.pow(1 - p, 3); // easeOutCubic
+            el.textContent = Math.round(start + (target - start) * e).toLocaleString();
+            if (p < 1) requestAnimationFrame(tick);
+            else el.dataset.target = String(target);
+        }
+        requestAnimationFrame(tick);
+    }
+
+    async function bootStats() {
+        let stats = await fetchStats();
+        if (!stats || !stats.total) stats = previewStats();
+        renderBars(stats);
+        const totalEl = document.getElementById('stats-total');
+        if (totalEl) animateNumber(totalEl, stats.total);
+    }
+
+    // ── Reveal-on-scroll polish (no-op when reduced motion) ──────────
+    function initReveal() {
+        if (!('IntersectionObserver' in window)) return;
+        const els = document.querySelectorAll('.module-card, .about-stat-cell, .media-card');
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach((e) => {
+                if (e.isIntersecting) {
+                    e.target.style.animation = 'sbFadeIn 480ms ease-out both';
+                    io.unobserve(e.target);
+                }
+            });
+        }, { threshold: 0.15 });
+        els.forEach((el) => io.observe(el));
+    }
+
+    // ── Boot ──────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        initMap();
+        bootStats();
+        initReveal();
     });
-
-    L.control.attribution({ prefix: false }).addTo(map);
-
-    /* Dark-toned tile layer */
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-        maxZoom: 19,
-    }).addTo(map);
-
-    /* Custom SVG marker icon */
-    const smartBinIcon = L.divIcon({
-        className: 'smartbin-marker',
-        html: `<svg width="32" height="42" viewBox="0 0 32 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M16 0C7.16 0 0 7.16 0 16c0 12 16 26 16 26s16-14 16-26C32 7.16 24.84 0 16 0z" fill="#2D5A42"/>
-            <circle cx="16" cy="16" r="8" fill="#4a8a6a"/>
-            <path d="M13 12.5l6 3.5-6 3.5v-7z" fill="#fff"/>
-        </svg>`,
-        iconSize: [32, 42],
-        iconAnchor: [16, 42],
-        popupAnchor: [0, -44],
-    });
-
-    SMARTBIN_LOCATIONS.forEach(loc => {
-        L.marker([loc.lat, loc.lng], { icon: smartBinIcon })
-            .bindPopup(`<strong>${loc.name}</strong><br>${loc.desc}<br><span class="popup-status">Coming Soon</span>`)
-            .addTo(map);
-    });
-}
-
-/* ── Init ──────────────────────────────────────────────────────────────────── */
-
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadStats();
-    initMap();
-});
+})();

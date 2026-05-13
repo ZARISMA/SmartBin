@@ -1,0 +1,113 @@
+{% extends "_cc_base.html" %}
+{% block title %}Analytics · SmartBin Control Center{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+{% block kicker %}§ Insights{% endblock %}
+
+{% block topbar_actions %}
+    <div class="period-switch" role="tablist" aria-label="Period">
+        <button class="period-btn"        data-period="24h" role="tab">24h</button>
+        <button class="period-btn active" data-period="7d"  role="tab">7d</button>
+        <button class="period-btn"        data-period="30d" role="tab">30d</button>
+        <button class="period-btn"        data-period="90d" role="tab">90d</button>
+        <button class="period-btn"        data-period="ytd" role="tab">YTD</button>
+    </div>
+    <button class="sb-btn sb-btn-secondary" id="export-csv" type="button">Export CSV</button>
+{% endblock %}
+
+{% block content %}
+<section class="kpi-strip">
+    <article class="kpi-card">
+        <div class="cell-key">Total classifications</div>
+        <div class="kpi-row">
+            <div class="kpi-num-big" id="kpi-total">0</div>
+            <div class="kpi-delta">↗ +18.2%</div>
+        </div>
+        <div class="kpi-note">vs. previous 7 days</div>
+    </article>
+    <article class="kpi-card">
+        <div class="cell-key">Recycling diversion</div>
+        <div class="kpi-row">
+            <div class="kpi-num-big">74.3%</div>
+            <div class="kpi-delta">↗ +4.1pt</div>
+        </div>
+        <div class="kpi-note">vs. previous 7 days</div>
+    </article>
+    <article class="kpi-card">
+        <div class="cell-key">Mean confidence</div>
+        <div class="kpi-row">
+            <div class="kpi-num-big">0.94</div>
+            <div class="kpi-delta">↗ +0.02</div>
+        </div>
+        <div class="kpi-note">across all classifications</div>
+    </article>
+    <article class="kpi-card">
+        <div class="cell-key">CO₂ avoided</div>
+        <div class="kpi-row">
+            <div class="kpi-num-big">12.4 t</div>
+            <div class="kpi-delta">↗ +1.8 t</div>
+        </div>
+        <div class="kpi-note">estimated, this period</div>
+    </article>
+</section>
+
+<section class="analytics-grid">
+    <article class="analytics-card chart-area">
+        <header class="card-head">
+            <div>
+                <div class="cell-key">Volume</div>
+                <h3>Classifications by category · 7 days</h3>
+            </div>
+            <div class="chart-legend" id="area-legend"></div>
+        </header>
+        <div id="stacked-area"></div>
+    </article>
+
+    <article class="analytics-card chart-donut">
+        <header class="card-head">
+            <div>
+                <div class="cell-key">Composition</div>
+                <h3>Material mix · today</h3>
+            </div>
+        </header>
+        <div id="donut-chart" class="donut-wrap"></div>
+    </article>
+</section>
+
+<section class="analytics-grid">
+    <article class="analytics-card">
+        <header class="card-head">
+            <div>
+                <div class="cell-key">Leaderboard</div>
+                <h3>Bins by throughput · today</h3>
+            </div>
+        </header>
+        <div id="leaderboard" class="leaderboard"></div>
+    </article>
+
+    <article class="analytics-card">
+        <header class="card-head">
+            <div>
+                <div class="cell-key">Recent</div>
+                <h3>Latest classifications</h3>
+            </div>
+            <a href="/" class="card-link" id="view-all">View all →</a>
+        </header>
+        <div id="recent-classifications" class="recent-table"></div>
+    </article>
+</section>
+
+<section class="analytics-card analytics-card-full">
+    <header class="card-head">
+        <div>
+            <div class="cell-key">Model performance</div>
+            <h3>Confusion matrix · gemini-3-flash-preview</h3>
+        </div>
+        <span class="cc-mono" id="cm-meta">n = — · 7 days</span>
+    </header>
+    <div id="confusion-matrix" class="confusion-matrix"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dashboard_analytics.js"></script>
+{% endblock %}

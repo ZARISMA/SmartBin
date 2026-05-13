@@ -3,174 +3,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Waste AI - Login</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>Sign in · SmartBin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/brand.css">
     <style>
         body {
+            display: grid;
+            place-items: center;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at 30% 20%, rgba(189, 183, 107, 0.20) 0%, transparent 55%),
+                radial-gradient(circle at 75% 80%, rgba(45, 90, 66, 0.18) 0%, transparent 60%),
+                var(--sb-cream);
+        }
+        .login-wrap {
+            width: 100%;
+            max-width: 420px;
+            padding: 24px;
+        }
+        .login-brand {
             display: flex;
             align-items: center;
+            gap: 12px;
             justify-content: center;
-            min-height: 100vh;
-            margin: 0;
+            margin-bottom: 28px;
+        }
+        .login-brand .logo {
+            width: 36px; height: 36px;
+            color: var(--sb-forest);
+        }
+        .login-brand .logo svg { width: 100%; height: 100%; }
+        .login-brand .name {
+            font-family: var(--sb-font-display);
+            font-size: 38px;
+            color: var(--sb-ink);
+            letter-spacing: -0.02em;
+            line-height: 1;
         }
         .login-card {
-            background: rgba(30, 40, 35, 0.7);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(45, 90, 66, 0.3);
-            border-radius: 20px;
-            padding: 48px 40px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            background: var(--sb-white);
+            border-radius: 18px;
+            padding: 36px 36px 32px;
+            box-shadow: 0 24px 64px rgba(29, 39, 34, 0.08), 0 0 0 1px rgba(29, 39, 34, 0.05);
+        }
+        .login-card .kicker {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--sb-forest);
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            text-align: center;
         }
         .login-card h1 {
             text-align: center;
-            font-size: 1.6rem;
-            margin: 0 0 8px 0;
-            background: linear-gradient(135deg, #2D5A42, #1A4D6B);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-family: var(--sb-font-display);
+            font-size: 32px;
+            font-weight: 400;
+            color: var(--sb-ink);
+            letter-spacing: -0.02em;
+            margin: 8px 0 6px;
         }
         .login-card .subtitle {
             text-align: center;
-            color: #8C8C8C;
-            font-size: 0.9rem;
-            margin-bottom: 32px;
+            color: var(--sb-stone);
+            font-size: 14px;
+            margin: 0 0 28px;
         }
-        .form-group {
-            margin-bottom: 20px;
-        }
+        .form-group { margin-bottom: 16px; }
         .form-group label {
             display: block;
-            color: #E0E0E0;
-            font-size: 0.85rem;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--sb-stone);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
             margin-bottom: 6px;
         }
         .form-group input {
             width: 100%;
-            padding: 12px 16px;
-            border: 1px solid rgba(45, 90, 66, 0.3);
+            padding: 12px 14px;
+            border: 1px solid rgba(29, 39, 34, 0.10);
             border-radius: 10px;
-            background: rgba(20, 28, 24, 0.6);
-            color: #F5F5F7;
-            font-size: 1rem;
+            background: var(--sb-cream);
+            color: var(--sb-ink);
+            font-size: 15px;
+            font-family: var(--sb-font-ui);
             outline: none;
-            transition: border-color 0.2s;
             box-sizing: border-box;
+            transition: border-color 120ms ease, background 120ms ease;
         }
         .form-group input:focus {
-            border-color: #2D5A42;
-            box-shadow: 0 0 0 2px rgba(45, 90, 66, 0.2);
+            border-color: var(--sb-forest);
+            background: var(--sb-white);
+            box-shadow: 0 0 0 3px rgba(45, 90, 66, 0.12);
         }
         .login-btn {
             width: 100%;
             padding: 14px;
+            margin-top: 8px;
             border: none;
             border-radius: 10px;
-            background: linear-gradient(135deg, #2D5A42, #1A4D6B);
-            color: #fff;
-            font-size: 1rem;
+            background: var(--sb-forest);
+            color: var(--sb-white);
+            font-size: 15px;
             font-weight: 600;
+            font-family: var(--sb-font-ui);
             cursor: pointer;
-            transition: opacity 0.2s, transform 0.1s;
-            margin-top: 8px;
+            transition: background 120ms ease;
         }
-        .login-btn:hover { opacity: 0.9; }
-        .login-btn:active { transform: scale(0.98); }
+        .login-btn:hover { background: #244836; }
         .error-msg {
-            background: rgba(198, 40, 40, 0.15);
-            border: 1px solid rgba(198, 40, 40, 0.3);
-            color: #ef5350;
+            background: rgba(198, 40, 40, 0.08);
+            border: 1px solid rgba(198, 40, 40, 0.30);
+            color: var(--sb-error);
             border-radius: 8px;
             padding: 10px 14px;
-            font-size: 0.85rem;
-            margin-bottom: 20px;
+            font-size: 13px;
+            margin-bottom: 18px;
             text-align: center;
         }
         .site-link {
             display: block;
             text-align: center;
-            margin-top: 24px;
-            color: #8C8C8C;
-            font-size: 0.85rem;
+            margin-top: 22px;
+            color: var(--sb-stone);
+            font-size: 12px;
         }
         .site-link a {
-            color: #40E0D0;
+            color: var(--sb-forest);
             text-decoration: none;
+            font-weight: 600;
         }
         .site-link a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-    <canvas id="particles"></canvas>
+    <div class="login-wrap">
+        <div class="login-brand">
+            <span class="logo" aria-hidden="true">
+                <svg viewBox="0 0 64 64" fill="none">
+                    <path d="M32 4 L57 18 L57 46 L32 60 L7 46 L7 18 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                    <path d="M32 4 L48 13 L48 25 L32 34 L16 25 L16 13 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.85"/>
+                    <path d="M7 18 L16 13 M57 18 L48 13 M16 25 L7 18 M48 25 L57 18 M32 34 L32 60" stroke="currentColor" stroke-width="1" stroke-linejoin="round" opacity="0.55"/>
+                </svg>
+            </span>
+            <span class="name">SmartBin</span>
+        </div>
 
-    <div class="login-card">
-        <h1>Smart Waste AI</h1>
-        <p class="subtitle">Sign in to access the dashboard</p>
+        <div class="login-card">
+            <div class="kicker">Control Center</div>
+            <h1>Sign in</h1>
+            <p class="subtitle">Access the operator dashboard.</p>
 
-        {% if error %}
-        <div class="error-msg">{{ error }}</div>
-        {% endif %}
+            {% if error %}
+            <div class="error-msg">{{ error }}</div>
+            {% endif %}
 
-        <form method="POST" action="/login">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
+            <form method="POST" action="/login">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required autofocus autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="login-btn">Sign in</button>
+            </form>
+
+            <div class="site-link">
+                <a href="/site">View SmartBin presentation →</a>
             </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            <button type="submit" class="login-btn">Sign In</button>
-        </form>
-
-        <div class="site-link">
-            <a href="/site">View SmartBin presentation</a>
         </div>
     </div>
-
-    <script>
-        /* Particle background (same as dashboard) */
-        (function initParticles() {
-            const canvas = document.getElementById('particles');
-            const ctx = canvas.getContext('2d');
-            let particles = [];
-            const COUNT = 25;
-            function resize() {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            }
-            resize();
-            window.addEventListener('resize', resize);
-            for (let i = 0; i < COUNT; i++) {
-                particles.push({
-                    x: Math.random() * canvas.width,
-                    y: Math.random() * canvas.height,
-                    r: Math.random() * 1.5 + 0.5,
-                    dx: (Math.random() - 0.5) * 0.3,
-                    dy: (Math.random() - 0.5) * 0.3,
-                    alpha: Math.random() * 0.3 + 0.05,
-                });
-            }
-            function draw() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                for (const p of particles) {
-                    p.x += p.dx; p.y += p.dy;
-                    if (p.x < 0) p.x = canvas.width;
-                    if (p.x > canvas.width) p.x = 0;
-                    if (p.y < 0) p.y = canvas.height;
-                    if (p.y > canvas.height) p.y = 0;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(45, 90, 66, ${p.alpha})`;
-                    ctx.fill();
-                }
-                requestAnimationFrame(draw);
-            }
-            draw();
-        })();
-    </script>
 </body>
 </html>

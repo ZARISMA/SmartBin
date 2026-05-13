@@ -17,3 +17,9 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+
+# Local-only design scratch / references
+.design_tmp/
+
+# Generated pitch decks
+HexaBin_HTI_Pitch.pptx

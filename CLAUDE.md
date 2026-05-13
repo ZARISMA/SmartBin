@@ -71,9 +71,30 @@ Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketin
 
 **Contact placeholders:** Phone `+374 12 345 678`, email `info@smartbin.am` — update in `site.html` footer.
 
-## Fleet Control Dashboard
+## Control Center (Admin UI)
 
-The default admin landing page (`/`) is a fleet control surface. Each online bin is rendered as a card with a live thumbnail (MJPEG proxied from the edge), status pill (`online` / `degraded` / `offline` / `stopped`), structured warnings, and these controls:
+The authenticated admin UI is a multi-page **Control Center** built around a shared sidebar layout. All pages extend `smartwaste/web_templates/_cc_base.html`, which provides:
+
+- Left sidebar with SmartBin brand, nav (Fleet / Map / Analytics / Devices / Alerts / Classifications), server-health footer, signed-in operator chip, and a "Presentation site" link.
+- Top bar with kicker + page title, plus page-specific actions injected via `{% block topbar_actions %}`.
+- Global toast host (`#toast-host`) and confirm-modal scaffolding (`#modal`) reused by all dashboard JS.
+
+Routes (all require login; all redirect to `/login` otherwise):
+
+| Path | Template | JS | Purpose |
+|---|---|---|---|
+| `/` | `dashboard.html` | `dashboard.js` | Fleet Control (cards grid + filters) |
+| `/map` | `dashboard_map.html` | `dashboard_map.js` | Deployment map with Leaflet, legend, basemap switch, detail panel |
+| `/analytics` | `dashboard_analytics.html` | `dashboard_analytics.js` | KPI strip, charts, period switch, CSV export |
+| `/bin/{bin_id}` | `index.html` | — | Per-bin detail view (live stream, controls, stats) |
+| `/site` | `site.html` | `site.js` | Public marketing/presentation site |
+| `/login` | `login.html` | — | Authentication |
+
+Each authenticated route passes `{ active, user }` into the base template so the sidebar highlights the current page and shows the logged-in operator.
+
+### Fleet Control page (`/`)
+
+Each online bin is rendered as a card with a live thumbnail (MJPEG proxied from the edge), status pill (`online` / `degraded` / `offline` / `stopped`), structured warnings, and these controls:
 
 - **Start / Stop** — pause or resume classifications (in-process; no restart).
 - **Restart** — clean exit 0 so the container supervisor respawns with current env.
@@ -85,6 +106,15 @@ The default admin landing page (`/`) is a fleet control surface. Each online bin
 Commands flow: browser → `POST /api/bin/{id}/command` (server, auth-gated, per-bin rate-limit) → edge sidecar `/command` (Bearer `EDGE_API_KEY`) → mutates `AppState`. Heartbeats carry the live `strategy`, `pipeline`, `camera_count`, `running`, `auto_classify`, and `warnings[]` so the dashboard reflects edge state within ~5 seconds.
 
 Warnings are structured (`code`, `severity`, `message`) and deduped by code in `smartwaste/warnings.py`. Known codes today: `CAMERA_COUNT_LOW`, `CAMERA_MISSING`.
+
+### Static assets
+
+- `brand.css` — design tokens (CSS variables for brand palette, typography, spacing); loaded first by `_cc_base.html`.
+- `dashboard.css` — Control Center layout, sidebar, cards, modals, toasts. (Supersedes the older `style.css`, which is kept for back-compat only.)
+- `sb-logo.svg` — SmartBin wordmark/logo.
+- `models/smartbin.glb` — 3D bin model used by the presentation site / hero. `web.py` registers `.glb` → `model/gltf-binary` and `.gltf` → `model/gltf+json` MIME types at import time so `StaticFiles` serves them with correct `Content-Type`.
+
+**External CDN deps (admin):** Manrope + Instrument Serif + JetBrains Mono (Google Fonts), Leaflet 1.9.4 (on `/map`).
 
 ## Database Backend
 
@@ -157,17 +187,27 @@ smartwaste/
   ui.py              ← OpenCV overlay rendering
   utils.py           ← shared frame helpers
   web.py             ← FastAPI web UI with auth, multi-bin dashboard, edge endpoints
-  web_templates/     ← Jinja2 HTML templates
-    dashboard.html   ← multi-bin overview (authenticated landing page)
-    index.html       ← per-bin detail view (live stream, controls, stats)
-    login.html       ← authentication page
-    site.html        ← presentation/marketing website (public)
-  web_static/        ← CSS/JS static files
-    style.css        ← dashboard styles
-    site.css         ← presentation site styles
-    site.js          ← presentation site JS (stats, map, animations)
+  web_templates/         ← Jinja2 HTML templates
+    _cc_base.html        ← Control Center shared layout (sidebar + topbar + modal/toast hosts)
+    dashboard.html       ← Fleet page  (`/`)  — bin cards, filters, stat strip
+    dashboard_map.html   ← Map page    (`/map`) — Leaflet, legend, detail panel
+    dashboard_analytics.html ← Analytics page (`/analytics`) — KPIs, charts, export
+    index.html           ← per-bin detail view (`/bin/{id}`)
+    login.html           ← authentication page
+    site.html            ← presentation/marketing website (public)
+  web_static/            ← CSS/JS static files
+    brand.css            ← brand design tokens (CSS variables)
+    dashboard.css        ← Control Center styles (sidebar, cards, modals)
+    dashboard.js         ← Fleet page JS (polling, filters, commands)
+    dashboard_map.js     ← Map page JS (Leaflet init, markers, basemap switch)
+    dashboard_analytics.js ← Analytics page JS (charts, period switch, CSV)
+    site.css / site.js   ← presentation site assets
+    sb-logo.svg          ← brand logo
+    models/smartbin.glb  ← 3D bin model (served via StaticFiles)
+    style.css            ← legacy dashboard styles (kept for back-compat)
 scripts/
-  migrate_json_to_pg.py ← one-time data migration to PostgreSQL
+  migrate_json_to_pg.py  ← one-time data migration to PostgreSQL
+  build_pitch_hti.py     ← generates HexaBin_HTI_Pitch.pptx (Armenian grant pitch deck)
 grafana/             ← Grafana provisioning and dashboards
 ```
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SmartBin — Control Center{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/brand.css">
+    <link rel="stylesheet" href="/static/dashboard.css">
+    {% block head %}{% endblock %}
+</head>
+<body class="cc-body-root">
+<div class="cc-shell">
+
+    <aside class="cc-sidebar" aria-label="Control center navigation">
+        <a href="/" class="cc-brand">
+            <span class="cc-brand-logo">
+                <svg viewBox="0 0 64 64" fill="none">
+                    <path d="M32 4 L57 18 L57 46 L32 60 L7 46 L7 18 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                    <path d="M32 4 L48 13 L48 25 L32 34 L16 25 L16 13 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.85"/>
+                    <path d="M7 18 L16 13 M57 18 L48 13 M16 25 L7 18 M48 25 L57 18 M32 34 L32 60" stroke="currentColor" stroke-width="1" stroke-linejoin="round" opacity="0.55"/>
+                </svg>
+            </span>
+            <span class="cc-brand-text">
+                <span class="cc-brand-name">SmartBin</span>
+                <span class="cc-brand-sub">CONTROL CENTER</span>
+            </span>
+        </a>
+
+        <div class="cc-section-label">Operate</div>
+        <nav class="cc-nav">
+            <a href="/" class="cc-nav-item {% if active == 'fleet' %}active{% endif %}">
+                <span class="icon">◫</span><span class="label">Fleet</span>
+            </a>
+            <a href="/map" class="cc-nav-item {% if active == 'map' %}active{% endif %}">
+                <span class="icon">◉</span><span class="label">Map</span>
+            </a>
+            <a href="/analytics" class="cc-nav-item {% if active == 'analytics' %}active{% endif %}">
+                <span class="icon">▦</span><span class="label">Analytics</span>
+            </a>
+            <a href="/" class="cc-nav-item">
+                <span class="icon">⌬</span><span class="label">Devices</span>
+            </a>
+            <a href="/" class="cc-nav-item">
+                <span class="icon">◬</span><span class="label">Alerts</span>
+                <span class="cc-nav-badge" id="cc-alerts-badge" hidden>0</span>
+            </a>
+            <a href="/" class="cc-nav-item">
+                <span class="icon">⊞</span><span class="label">Classifications</span>
+            </a>
+        </nav>
+
+        <div class="cc-sidebar-foot">
+            <div class="cc-health">
+                <div class="cc-health-head">
+                    <span class="dot"></span>
+                    <span class="cc-health-name">Server healthy</span>
+                </div>
+                <div class="cc-health-host" id="cc-server-host">—</div>
+            </div>
+            <div class="cc-user">
+                <div class="cc-user-avatar">{{ (user or 'A')[0]|upper }}</div>
+                <div class="cc-user-info">
+                    <div class="cc-user-name">{{ user or 'admin' }}</div>
+                    <div class="cc-user-role">Operator · Yerevan</div>
+                </div>
+                <form method="POST" action="/logout" class="cc-user-logout">
+                    <button type="submit" title="Sign out" aria-label="Sign out">⎋</button>
+                </form>
+            </div>
+            <a href="/site" class="cc-presentation">Presentation site →</a>
+        </div>
+    </aside>
+
+    <main class="cc-main">
+        <header class="cc-topbar">
+            <div class="cc-title-block">
+                <div class="cc-kicker">{% block kicker %}§ Operate{% endblock %}</div>
+                <h1 class="cc-title">{% block page_title %}Control Center{% endblock %}</h1>
+            </div>
+            <div class="cc-topbar-actions">
+                {% block topbar_actions %}{% endblock %}
+            </div>
+        </header>
+        <div class="cc-content {% block content_class %}{% endblock %}">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+</div>
+
+<div id="toast-host" class="toast-host" aria-live="polite"></div>
+<div id="modal" class="modal-backdrop" hidden>
+    <div class="modal">
+        <h3 id="modal-title">Confirm</h3>
+        <p id="modal-body">Are you sure?</p>
+        <div class="modal-actions">
+            <button id="modal-cancel" class="sb-btn sb-btn-secondary" type="button">Cancel</button>
+            <button id="modal-ok" class="sb-btn sb-btn-danger" type="button">Confirm</button>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

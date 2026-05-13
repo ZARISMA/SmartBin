@@ -1,99 +1,71 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Waste AI — Fleet Control</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="stylesheet" href="/static/dashboard.css">
-</head>
-<body>
-    <canvas id="particles"></canvas>
+{% extends "_cc_base.html" %}
+{% block title %}Fleet · SmartBin Control Center{% endblock %}
+{% block page_title %}Fleet Control{% endblock %}
+{% block kicker %}§ Operate{% endblock %}
 
-    <header class="dash-header">
-        <div class="dash-header-left">
-            <h1>SmartBin <span class="accent-sub">Fleet Control</span></h1>
-            <div class="summary-inline">
-                <span class="chip chip-online"><span class="dot"></span><b id="online-bins">0</b> online</span>
-                <span class="chip chip-degraded"><span class="dot"></span><b id="degraded-bins">0</b> degraded</span>
-                <span class="chip chip-offline"><span class="dot"></span><b id="offline-bins">0</b> offline</span>
-                <span class="chip chip-neutral"><b id="total-classifications">0</b> classifications</span>
-            </div>
-        </div>
-        <div class="dash-header-right">
-            <a href="/site" class="header-link">Presentation</a>
-            <form method="POST" action="/logout" class="header-form">
-                <button type="submit" class="btn-logout">Logout</button>
-            </form>
-        </div>
-    </header>
+{% block topbar_actions %}
+    <div class="cc-search">
+        <span class="cc-search-icon" aria-hidden="true">⌕</span>
+        <input id="filter-input" type="text" placeholder="Filter by id or location…" autocomplete="off">
+        <span class="cc-kbd">⌘ K</span>
+    </div>
+    <button id="refresh-btn" class="sb-btn sb-btn-secondary" type="button">↻ Refresh</button>
+    <a href="/" class="sb-btn sb-btn-primary">+ Add bin</a>
+{% endblock %}
 
-    <main class="fleet-main">
-        <div class="toolbar">
-            <h2 class="section-title">Bins</h2>
-            <div class="toolbar-right">
-                <label class="search-wrap">
-                    <input id="filter-input" type="text" placeholder="Filter by id or location…" autocomplete="off">
-                </label>
-                <button id="refresh-btn" class="btn-ghost" type="button">Refresh</button>
-            </div>
-        </div>
+{% block content %}
+<section class="stat-strip">
+    <article class="stat-card" style="--accent: var(--sb-success);">
+        <div class="stat-accent"></div>
+        <div class="cell-key">Online</div>
+        <div class="stat-num" id="stat-online">0</div>
+        <div class="stat-sub" id="stat-online-sub">of 0 total</div>
+    </article>
+    <article class="stat-card" style="--accent: var(--sb-warning);">
+        <div class="stat-accent"></div>
+        <div class="cell-key">Degraded</div>
+        <div class="stat-num" id="stat-degraded">0</div>
+        <div class="stat-sub" id="stat-degraded-sub">no warnings</div>
+    </article>
+    <article class="stat-card" style="--accent: var(--sb-error);">
+        <div class="stat-accent"></div>
+        <div class="cell-key">Offline</div>
+        <div class="stat-num" id="stat-offline">0</div>
+        <div class="stat-sub">&gt; 60s no heartbeat</div>
+    </article>
+    <article class="stat-card" style="--accent: var(--sb-forest);">
+        <div class="stat-accent"></div>
+        <div class="cell-key">Total classifications · today</div>
+        <div class="stat-num" id="stat-total">0</div>
+        <div class="stat-sub">across the fleet</div>
+    </article>
+</section>
 
-        <div class="bins-grid" id="bins-grid">
-            <div class="empty-state">
-                <h2>Loading…</h2>
-                <p>Fetching bin data</p>
-            </div>
-        </div>
-    </main>
-
-    <div id="toast-host" class="toast-host" aria-live="polite"></div>
-
-    <!-- Confirmation modal -->
-    <div id="modal" class="modal-backdrop" hidden>
-        <div class="modal">
-            <h3 id="modal-title">Confirm</h3>
-            <p id="modal-body">Are you sure?</p>
-            <div class="modal-actions">
-                <button id="modal-cancel" class="btn-ghost" type="button">Cancel</button>
-                <button id="modal-ok" class="btn-danger" type="button">Confirm</button>
-            </div>
+<section class="fleet-controls">
+    <div class="fleet-controls-left">
+        <div class="fleet-section-name">Bins</div>
+        <div class="filter-chips" role="tablist">
+            <button class="chip active" data-filter="all"      role="tab">All</button>
+            <button class="chip"        data-filter="online"   role="tab">Online</button>
+            <button class="chip"        data-filter="degraded" role="tab">Degraded</button>
+            <button class="chip"        data-filter="offline"  role="tab">Offline</button>
+            <button class="chip"        data-filter="stopped"  role="tab">Stopped</button>
         </div>
     </div>
+    <div class="fleet-controls-right">
+        <span class="cc-mono" id="last-refresh">updated —</span>
+        <span class="cc-mono cc-muted">· auto-refresh 5s</span>
+    </div>
+</section>
 
-    <script src="/static/dashboard.js"></script>
-    <script>
-        /* Particle background (shared animation with site page) */
-        (function initParticles() {
-            const canvas = document.getElementById('particles');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const COUNT = 25;
-            const particles = [];
-            function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-            resize();
-            window.addEventListener('resize', resize);
-            for (let i = 0; i < COUNT; i++) {
-                particles.push({
-                    x: Math.random() * canvas.width, y: Math.random() * canvas.height,
-                    r: Math.random() * 1.5 + 0.5,
-                    dx: (Math.random() - 0.5) * 0.3, dy: (Math.random() - 0.5) * 0.3,
-                    alpha: Math.random() * 0.3 + 0.05,
-                });
-            }
-            function draw() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                for (const p of particles) {
-                    p.x += p.dx; p.y += p.dy;
-                    if (p.x < 0) p.x = canvas.width; if (p.x > canvas.width) p.x = 0;
-                    if (p.y < 0) p.y = canvas.height; if (p.y > canvas.height) p.y = 0;
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(45, 90, 66, ${p.alpha})`; ctx.fill();
-                }
-                requestAnimationFrame(draw);
-            }
-            draw();
-        })();
-    </script>
-</body>
-</html>
+<section class="bins-grid" id="bins-grid">
+    <div class="empty-state">
+        <h2>Loading…</h2>
+        <p>Fetching bin data.</p>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dashboard.js"></script>
+{% endblock %}
