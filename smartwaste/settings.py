@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     # ── Authentication ─────────────────────────────────────────────────────────
     admin_username: str = "admin"
     admin_password: str = "password123"
-    secret_key: str = "smartwaste-session-secret-change-in-prod"
+    secret_key: str
 
     # ── Bin identity ───────────────────────────────────────────────────────────
     bin_id: str = "bin-01"
@@ -117,4 +117,4 @@ class Settings(BaseSettings):
 
 
 # Module-level singleton — imported by config.py and classifier.py
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]
