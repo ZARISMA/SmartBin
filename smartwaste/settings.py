@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     db_port: int = 5432
     db_name: str = "smartwaste"
     db_user: str = "smartwaste"
-    db_password: str = "smartwaste"
+    db_password: str = ""
 
     # ── Web UI ─────────────────────────────────────────────────────────────────
     web_host: str = "0.0.0.0"
@@ -103,8 +103,8 @@ class Settings(BaseSettings):
 
     # ── Authentication ─────────────────────────────────────────────────────────
     admin_username: str = "admin"
-    admin_password: str = "password123"
-    secret_key: str = "smartwaste-session-secret-change-in-prod"
+    admin_password: str = ""
+    secret_key: str = ""
 
     # ── Bin identity ───────────────────────────────────────────────────────────
     bin_id: str = "bin-01"
