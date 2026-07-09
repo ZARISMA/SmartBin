@@ -102,6 +102,8 @@ def _build_app(state: AppState, buf: FrameBuffer):
         frame = buf.get()
         if frame is None:
             return JSONResponse({"error": "No camera frame available"}, status_code=503)
+        if not state.running:
+            return JSONResponse({"error": "Bin stopped by admin — start it first"}, status_code=409)
         if not state.start_classify():
             return JSONResponse({"error": "Classification already in progress"}, status_code=409)
         img_bytes = encode_frame(frame)
@@ -209,6 +211,11 @@ def _build_app(state: AppState, buf: FrameBuffer):
             if frame is None:
                 return JSONResponse(
                     {"status": "error", "message": "no frame available"}, status_code=503
+                )
+            if not state.running:
+                return JSONResponse(
+                    {"status": "error", "message": "stopped by admin — start the bin first"},
+                    status_code=409,
                 )
             if not state.start_classify():
                 return JSONResponse(

@@ -12,8 +12,11 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-# ── 1. Satisfy GEMINI_API_KEY check in classifier.py ─────────────────────────
+# ── 1. Provide a Gemini key (the client is built lazily, on first use) ───────
 os.environ.setdefault("GEMINI_API_KEY", "test-key-for-pytest")
+
+# ── 1a. Edge API key so auth-scoping tests can exercise the ingest endpoints ─
+os.environ.setdefault("SMARTWASTE_EDGE_API_KEY", "test-edge-key")
 
 # ── 1b. Default to SQLite for tests (no PostgreSQL required) ─────────────────
 os.environ.setdefault("SMARTWASTE_DB_BACKEND", "sqlite")

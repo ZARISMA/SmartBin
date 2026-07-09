@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS waste_entries (
     simulated_vibration     REAL,
     simulated_air_pollution REAL,
     simulated_smoke         REAL,
-    bin_id        TEXT DEFAULT 'bin-01'
+    bin_id        TEXT DEFAULT 'bin-01',
+    confidence    REAL,
+    llm_backend   TEXT DEFAULT ''
 );
 """
 
@@ -58,7 +60,9 @@ CREATE TABLE IF NOT EXISTS waste_entries (
     simulated_vibration     DOUBLE PRECISION,
     simulated_air_pollution DOUBLE PRECISION,
     simulated_smoke         DOUBLE PRECISION,
-    bin_id                  TEXT DEFAULT 'bin-01'
+    bin_id                  TEXT DEFAULT 'bin-01',
+    confidence              DOUBLE PRECISION,
+    llm_backend             TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_waste_label ON waste_entries(label);
 CREATE INDEX IF NOT EXISTS idx_waste_ts ON waste_entries(timestamp);
@@ -78,6 +82,8 @@ _INSERT_COLS = (
     "simulated_air_pollution",
     "simulated_smoke",
     "bin_id",
+    "confidence",
+    "llm_backend",
 )
 
 _SQLITE_INSERT = (
@@ -156,6 +162,37 @@ def _migrate_add_bin_id() -> None:
             pass  # column already exists
 
 
+def _migrate_add_llm_fields() -> None:
+    """Add confidence / llm_backend columns to existing tables that lack them."""
+    if _use_pg():
+        pool = _get_pg_pool()
+        conn = pool.getconn()
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "ALTER TABLE waste_entries"
+                        " ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION"
+                    )
+                    cur.execute(
+                        "ALTER TABLE waste_entries"
+                        " ADD COLUMN IF NOT EXISTS llm_backend TEXT DEFAULT ''"
+                    )
+        finally:
+            pool.putconn(conn)
+    else:
+        # One ALTER per column: an existing `confidence` must not skip `llm_backend`.
+        for ddl in (
+            "ALTER TABLE waste_entries ADD COLUMN confidence REAL",
+            "ALTER TABLE waste_entries ADD COLUMN llm_backend TEXT DEFAULT ''",
+        ):
+            try:
+                with sqlite3.connect(DB_FILE) as conn:
+                    conn.execute(ddl)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
+
 def init_db() -> None:
     """Create the database table if it doesn't exist yet."""
     global _initialized
@@ -177,6 +214,7 @@ def init_db() -> None:
             conn.execute(_SQLITE_CREATE)
         logger.info("SQLite database ready: %s", DB_FILE)
     _migrate_add_bin_id()
+    _migrate_add_llm_fields()
     _initialized = True
 
 
@@ -192,6 +230,8 @@ def insert_entry(entry: dict, env: dict) -> int | None:
     _ensure_init()
     row = {**entry, **env}
     row.setdefault("bin_id", BIN_ID)
+    row.setdefault("confidence", None)
+    row.setdefault("llm_backend", "")
     try:
         if _use_pg():
             pool = _get_pg_pool()

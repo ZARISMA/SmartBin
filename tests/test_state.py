@@ -146,6 +146,29 @@ class TestToggleAuto:
         assert auto is False
 
 
+class TestRunningGate:
+    """The dashboard Stop button pauses classifications via start_classify."""
+
+    def test_stopped_bin_rejects_classification(self, app_state):
+        app_state.set_running(False)
+        assert app_state.start_classify() is False
+
+    def test_restart_allows_classification_again(self, app_state):
+        app_state.set_running(False)
+        app_state.set_running(True)
+        assert app_state.start_classify() is True
+
+    def test_stop_does_not_release_inflight_flag(self, app_state):
+        assert app_state.start_classify() is True
+        app_state.set_running(False)
+        app_state.finish_classify()
+        assert app_state.start_classify() is False  # still stopped
+
+    def test_shutdown_also_blocks_classification(self, app_state):
+        app_state.request_shutdown()
+        assert app_state.start_classify() is False
+
+
 class TestConcurrency:
     def test_only_one_start_classify_wins_under_contention(self):
         """Exactly one thread should win the start_classify race."""

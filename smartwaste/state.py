@@ -44,9 +44,14 @@ class AppState:
             self._detail = detail
 
     def start_classify(self) -> bool:
-        """Atomically check-and-set is_classifying. Returns False if already busy."""
+        """Atomically check-and-set is_classifying.
+
+        Returns False when a classification is already in flight, or when the
+        bin was stopped by an admin — this single gate is what makes the
+        dashboard Stop button actually pause classifications (every trigger
+        path funnels through here)."""
         with self._lock:
-            if self._is_classifying:
+            if self._is_classifying or not self._running:
                 return False
             self._is_classifying = True
             return True

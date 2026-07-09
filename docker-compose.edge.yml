@@ -22,7 +22,13 @@ services:
     environment:
       - SMARTWASTE_EDGE_MODE=true
       - SMARTWASTE_SERVER_URL=${SMARTWASTE_SERVER_URL:-http://192.168.1.100:8000}
-      - SMARTWASTE_EDGE_API_KEY=${SMARTWASTE_EDGE_API_KEY:-password123}
+      # Must match the server's SMARTWASTE_EDGE_API_KEY. This key is scoped to
+      # the ingest endpoints only — it does not open the admin dashboard.
+      - SMARTWASTE_EDGE_API_KEY=${SMARTWASTE_EDGE_API_KEY:-edge-key-change-me}
+      # "server": send frames to the central server, which runs the LLM and
+      # replies with the bin-module command. "local": classify on-device with
+      # Gemini (the original behavior; needs GEMINI_API_KEY on the Pi).
+      - SMARTWASTE_CLASSIFY_MODE=${SMARTWASTE_CLASSIFY_MODE:-server}
       - SMARTWASTE_BIN_ID=${SMARTWASTE_BIN_ID:-bin-01}
       - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak-native}
       - SMARTWASTE_STRATEGY=${SMARTWASTE_STRATEGY:-manual}

@@ -32,6 +32,10 @@ services:
       - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak-native}
       - SMARTWASTE_BIN_ID=${SMARTWASTE_BIN_ID:-bin-01}
       - SMARTWASTE_LOCATION=${SMARTWASTE_LOCATION:-Yerevan}
+      # In-process classification backend: gemini (default) | lmstudio | cascade
+      - SMARTWASTE_LLM_BACKEND=${SMARTWASTE_LLM_BACKEND:-gemini}
+      - SMARTWASTE_LMSTUDIO_URL=${SMARTWASTE_LMSTUDIO_URL:-http://localhost:1234/v1}
+      - SMARTWASTE_LMSTUDIO_MODEL=${SMARTWASTE_LMSTUDIO_MODEL:-google/gemma-4-12b-qat}
     ports:
       - "8000:8000"
     privileged: true

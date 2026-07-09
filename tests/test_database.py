@@ -266,3 +266,61 @@ class TestGetEntryCount:
         for _ in range(3):
             db.insert_entry(_entry(), _env())
         assert db.get_entry_count() == 3
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# confidence / llm_backend columns (server-side LLM classification)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestLLMFieldsMigration:
+    def test_new_columns_exist_on_fresh_db(self, tmp_path, monkeypatch):
+        db, db_path = _setup_db(tmp_path, monkeypatch)
+        with sqlite3.connect(db_path) as conn:
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(waste_entries)")]
+        assert "confidence" in cols
+        assert "llm_backend" in cols
+
+    def test_migration_upgrades_old_table(self, tmp_path, monkeypatch):
+        """A pre-existing table without the new columns gains them on init."""
+        import smartwaste.database as db
+
+        db_path = str(tmp_path / "old.db")
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("CREATE TABLE waste_entries (id INTEGER PRIMARY KEY, label TEXT)")
+        monkeypatch.setattr(db, "DB_FILE", db_path)
+        monkeypatch.setattr(db, "_initialized", False)
+        monkeypatch.setattr(db, "DB_BACKEND", "sqlite")
+        db.init_db()
+        with sqlite3.connect(db_path) as conn:
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(waste_entries)")]
+        assert "confidence" in cols
+        assert "llm_backend" in cols
+
+    def test_insert_without_confidence_stores_null(self, tmp_path, monkeypatch):
+        db, db_path = _setup_db(tmp_path, monkeypatch)
+        db.insert_entry(_entry(), _env())
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute("SELECT confidence, llm_backend FROM waste_entries").fetchone()
+        assert row[0] is None
+        assert row[1] == ""
+
+    def test_insert_with_confidence_persists(self, tmp_path, monkeypatch):
+        db, db_path = _setup_db(tmp_path, monkeypatch)
+        e = _entry()
+        e["confidence"] = 0.87
+        e["llm_backend"] = "lmstudio"
+        db.insert_entry(e, _env())
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute("SELECT confidence, llm_backend FROM waste_entries").fetchone()
+        assert row[0] == pytest.approx(0.87)
+        assert row[1] == "lmstudio"
+
+    def test_get_entries_includes_new_fields(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        e = _entry()
+        e["confidence"] = 0.5
+        db.insert_entry(e, _env())
+        entry = db.get_entries()[0]
+        assert "confidence" in entry
+        assert "llm_backend" in entry

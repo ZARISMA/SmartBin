@@ -2,7 +2,8 @@
 Tests for smartwaste/classifier.py.
 
 _extract_json  — tested directly (no network calls needed).
-classify()     — tested with a mocked Gemini client.
+classify()     — tested with a mocked LLM backend (local mode) and a mocked
+                 classify_remote (server mode).
 """
 
 import json
@@ -148,34 +149,53 @@ class TestExtractJsonErrors:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# classify() — mocked Gemini client
+# classify() — local mode with a mocked LLM backend
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _mock_response(json_text: str) -> MagicMock:
-    r = MagicMock()
-    r.text = json_text
-    return r
+def _backend_for(response_text: str) -> MagicMock:
+    """Stub backend whose classify() parses *response_text* like a real one."""
+    from smartwaste.llm import parse_result
+
+    backend = MagicMock()
+    backend.classify.side_effect = lambda img: parse_result(response_text, "gemini")
+    return backend
 
 
 def _run_classify(response_text: str, state=None):
-    """Helper: run classify() with a mocked client."""
-    import smartwaste.classifier as clf
-
+    """Helper: run classify() with a mocked LLM backend."""
     if state is None:
         state = AppState()
         state.start_classify()
 
     frame = np.zeros((10, 10, 3), dtype=np.uint8)
     with (
-        patch.object(clf, "client") as mock_client,
+        patch("smartwaste.classifier.build_backend", return_value=_backend_for(response_text)),
         patch("smartwaste.classifier.save_entry") as mock_save,
     ):
-        mock_client.models.generate_content.return_value = _mock_response(response_text)
         from smartwaste.classifier import classify
 
         classify(b"fake_bytes", frame, state)
         return state, mock_save
+
+
+def _run_classify_error(error: Exception, state=None):
+    """Helper: run classify() with a backend that raises *error*."""
+    if state is None:
+        state = AppState()
+        state.start_classify()
+
+    frame = np.zeros((10, 10, 3), dtype=np.uint8)
+    backend = MagicMock()
+    backend.classify.side_effect = error
+    with (
+        patch("smartwaste.classifier.build_backend", return_value=backend),
+        patch("smartwaste.classifier.save_entry"),
+    ):
+        from smartwaste.classifier import classify
+
+        classify(b"bytes", frame, state)
+    return state
 
 
 class TestClassifyHappyPath:
@@ -199,6 +219,14 @@ class TestClassifyHappyPath:
             '{"category": "Plastic", "description": "x", "brand_product": "y"}'
         )
         assert mock_save.called
+
+    def test_save_entry_receives_confidence_and_backend(self):
+        _, mock_save = _run_classify(
+            '{"category": "Plastic", "description": "x", "brand_product": "y", "confidence": 88}'
+        )
+        kwargs = mock_save.call_args.kwargs
+        assert kwargs["confidence"] == pytest.approx(0.88)
+        assert kwargs["backend"] == "gemini"
 
     def test_save_entry_not_called_for_empty(self):
         _, mock_save = _run_classify(
@@ -255,64 +283,113 @@ class TestClassifyCategoryNormalization:
 
 class TestClassifyErrorHandling:
     def test_quota_error_sets_quota_label(self):
-        import smartwaste.classifier as clf
-
-        state = AppState()
-        state.start_classify()
-        frame = np.zeros((10, 10, 3), dtype=np.uint8)
-
-        with patch.object(clf, "client") as mock_client:
-            mock_client.models.generate_content.side_effect = Exception("429 RESOURCE_EXHAUSTED")
-            from smartwaste.classifier import classify
-
-            classify(b"bytes", frame, state)
-
+        state = _run_classify_error(Exception("429 RESOURCE_EXHAUSTED"))
         label, _, _ = state.get_display()
         assert "429" in label or "Quota" in label
 
     def test_generic_error_sets_error_label(self):
-        import smartwaste.classifier as clf
-
-        state = AppState()
-        state.start_classify()
-        frame = np.zeros((10, 10, 3), dtype=np.uint8)
-
-        with patch.object(clf, "client") as mock_client:
-            mock_client.models.generate_content.side_effect = Exception("Network timeout")
-            from smartwaste.classifier import classify
-
-            classify(b"bytes", frame, state)
-
+        state = _run_classify_error(Exception("Network timeout"))
         label, _, _ = state.get_display()
         assert label == "Error"
 
+    def test_circuit_open_sets_paused_label(self):
+        from smartwaste.llm import CircuitOpenError
+
+        state = _run_classify_error(CircuitOpenError("circuit open — retrying later"))
+        label, _, _ = state.get_display()
+        assert label == "API paused"
+
     def test_finish_classify_called_on_error(self):
-        import smartwaste.classifier as clf
-
-        state = AppState()
-        state.start_classify()
-        frame = np.zeros((10, 10, 3), dtype=np.uint8)
-
-        with patch.object(clf, "client") as mock_client:
-            mock_client.models.generate_content.side_effect = Exception("boom")
-            from smartwaste.classifier import classify
-
-            classify(b"bytes", frame, state)
-
+        state = _run_classify_error(Exception("boom"))
         assert state.start_classify() is True  # finish_classify was called
 
     def test_bad_json_response_does_not_crash(self):
-        import smartwaste.classifier as clf
+        state, _ = _run_classify("not json at all")
+        # Should either set Error status or handle gracefully
+        assert state.start_classify() is True  # finish_classify was called
 
-        state = AppState()
-        state.start_classify()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# classify() — server mode (edge sends the frame to the central server)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+_SERVER_RESPONSE = {
+    "status": "ok",
+    "id": 7,
+    "result": {
+        "category": "Plastic",
+        "description": "bottle",
+        "brand_product": "Jermuk",
+        "confidence": 0.91,
+        "backend": "lmstudio",
+        "escalated": False,
+    },
+    "command": {"action": "open_module", "module": 1, "category": "Plastic"},
+}
+
+
+class TestClassifyServerMode:
+    def _run(self, remote_response=None, error=None, state=None):
+        if state is None:
+            state = AppState()
+            state.start_classify()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
-
-        with patch.object(clf, "client") as mock_client, patch("smartwaste.classifier.save_entry"):
-            mock_client.models.generate_content.return_value = _mock_response("not json at all")
+        with (
+            patch("smartwaste.classifier.CLASSIFY_MODE", "server"),
+            patch("smartwaste.classifier.classify_remote") as mock_remote,
+            patch("smartwaste.classifier.save_entry") as mock_save,
+            patch("smartwaste.classifier.dispatch") as mock_dispatch,
+        ):
+            if error is not None:
+                mock_remote.side_effect = error
+            else:
+                mock_remote.return_value = remote_response
             from smartwaste.classifier import classify
 
             classify(b"bytes", frame, state)
+        return state, mock_save, mock_dispatch
 
-        # Should either set Error status or handle gracefully
-        assert state.start_classify() is True  # finish_classify was called
+    def test_result_applied_to_state(self):
+        state, _, _ = self._run(_SERVER_RESPONSE)
+        label, detail, _ = state.get_display()
+        assert label == "Plastic"
+        assert "Jermuk" in detail
+
+    def test_actuator_dispatched_with_server_module(self):
+        _, _, mock_dispatch = self._run(_SERVER_RESPONSE)
+        mock_dispatch.assert_called_once_with("Plastic", module=1)
+
+    def test_no_local_persistence(self):
+        _, mock_save, _ = self._run(_SERVER_RESPONSE)
+        assert not mock_save.called
+
+    def test_none_command_does_not_dispatch(self):
+        resp = {
+            **_SERVER_RESPONSE,
+            "result": {**_SERVER_RESPONSE["result"], "category": "Empty"},
+            "command": {"action": "none", "module": None, "category": "Empty"},
+        }
+        _, _, mock_dispatch = self._run(resp)
+        assert not mock_dispatch.called
+
+    def test_server_error_sets_status_and_warning(self):
+        from smartwaste.edge_client import EdgeServerError
+
+        state, _, _ = self._run(error=EdgeServerError("connection refused"))
+        label, _, _ = state.get_display()
+        assert label == "Server error"
+        codes = [w["code"] for w in state.warnings.list()]
+        assert "SERVER_UNREACHABLE" in codes
+
+    def test_success_clears_unreachable_warning(self):
+        state = AppState()
+        state.warnings.add("SERVER_UNREACHABLE", "was down", severity="error")
+        state.start_classify()
+        self._run(_SERVER_RESPONSE, state=state)
+        codes = [w["code"] for w in state.warnings.list()]
+        assert "SERVER_UNREACHABLE" not in codes
+
+    def test_finish_classify_called(self):
+        state, _, _ = self._run(_SERVER_RESPONSE)
+        assert state.start_classify() is True

@@ -17,8 +17,18 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
-from .config import BIN_ID, CAMERA_MODE, EDGE_API_KEY, HEARTBEAT_INTERVAL, SERVER_URL, WEB_PORT
+from .config import (
+    BIN_ID,
+    CAMERA_MODE,
+    CLASSIFY_TIMEOUT,
+    EDGE_API_KEY,
+    HEARTBEAT_INTERVAL,
+    LOCATION,
+    SERVER_URL,
+    WEB_PORT,
+)
 from .log_setup import get_logger
 from .state import AppState
 
@@ -118,6 +128,8 @@ def report_classification(entry: dict, env: dict, image_bytes: bytes | None = No
         "simulated_vibration": env.get("simulated_vibration", 0.0),
         "simulated_air_pollution": env.get("simulated_air_pollution", 0.0),
         "simulated_smoke": env.get("simulated_smoke", 0.0),
+        "confidence": entry.get("confidence"),
+        "llm_backend": entry.get("llm_backend", ""),
     }
     if image_bytes:
         payload["image_b64"] = base64.b64encode(image_bytes).decode("ascii")
@@ -126,6 +138,61 @@ def report_classification(entry: dict, env: dict, image_bytes: bytes | None = No
     if ok:
         logger.info("Edge: reported classification '%s' to server", entry.get("label"))
     return ok
+
+
+class EdgeServerError(Exception):
+    """The central server could not classify a frame (network error, timeout,
+    or non-2xx response)."""
+
+
+def classify_remote(
+    img_bytes: bytes,
+    env: dict | None = None,
+    timeout: float | None = None,
+) -> dict:
+    """POST a frame to the central server for classification.
+
+    Returns the parsed EdgeClassifyResponse dict:
+    ``{"status", "id", "result": {...}, "command": {"action", "module", ...}}``.
+
+    Unlike ``_post`` (which swallows errors — fine for heartbeats), this raises
+    EdgeServerError so the caller knows the frame was NOT classified.
+    """
+    if not SERVER_URL:
+        raise EdgeServerError("SMARTWASTE_SERVER_URL is not configured")
+
+    env = env or {}
+    payload = {
+        "bin_id": BIN_ID,
+        "image_b64": base64.b64encode(img_bytes).decode("ascii"),
+        "captured_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "location": LOCATION,
+        "weight": "",
+        "simulated_temperature": env.get("simulated_temperature", 0.0),
+        "simulated_humidity": env.get("simulated_humidity", 0.0),
+        "simulated_vibration": env.get("simulated_vibration", 0.0),
+        "simulated_air_pollution": env.get("simulated_air_pollution", 0.0),
+        "simulated_smoke": env.get("simulated_smoke", 0.0),
+    }
+    url = f"{SERVER_URL.rstrip('/')}/api/edge/classify"
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=_headers(), method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout or CLASSIFY_TIMEOUT) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", "replace")[:200]
+        except Exception:
+            pass
+        raise EdgeServerError(f"server returned HTTP {e.code}: {detail}") from e
+    except Exception as e:
+        raise EdgeServerError(str(e)) from e
+
+    if not isinstance(body, dict):
+        raise EdgeServerError("unexpected server response (not a JSON object)")
+    return body
 
 
 def _derive_status(state: AppState | None) -> str:

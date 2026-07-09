@@ -24,7 +24,58 @@ class EdgeReport(BaseModel):
     simulated_vibration: float = 0.0
     simulated_air_pollution: float = 0.0
     simulated_smoke: float = 0.0
-    image_b64: str | None = None  # optional base64-encoded JPEG
+    # ~10 MB decoded — reject absurd payloads at validation time
+    image_b64: str | None = Field(default=None, max_length=14_000_000)
+    confidence: float | None = None  # 0.0-1.0 self-reported by the LLM
+    llm_backend: str = ""  # backend that produced the result ("gemini", "lmstudio")
+
+
+class EdgeClassifyRequest(BaseModel):
+    """A frame sent from an edge device for server-side classification."""
+
+    bin_id: str
+    # ~10 MB decoded — reject absurd payloads at validation time
+    image_b64: str = Field(..., max_length=14_000_000)
+    captured_at: str = ""  # "YYYY-MM-DD HH:MM:SS"; server fills in when empty
+    location: str = ""
+    weight: str = ""
+    simulated_temperature: float = 0.0
+    simulated_humidity: float = 0.0
+    simulated_vibration: float = 0.0
+    simulated_air_pollution: float = 0.0
+    simulated_smoke: float = 0.0
+
+
+class LLMResultModel(BaseModel):
+    """Classification produced by the server-side LLM backend."""
+
+    category: str
+    description: str = "N/A"
+    brand_product: str = "Unknown"
+    confidence: float | None = None  # 0.0-1.0, None if the model didn't report one
+    backend: str = ""  # "gemini" | "lmstudio"
+    escalated: bool = False  # True when cascade fell through to Gemini
+
+
+class ActuatorCommand(BaseModel):
+    """Lightweight actuation command returned to the edge device."""
+
+    action: Literal["open_module", "none"] = "none"
+    module: int | None = None
+    category: str = ""
+
+
+class EdgeClassifyResponse(BaseModel):
+    """Server response to an EdgeClassifyRequest.
+
+    ``db_error`` means the LLM classified fine but the DB insert failed — the
+    result and command are still returned so the bin can actuate.
+    """
+
+    status: Literal["ok", "db_error"]
+    id: int | None = None
+    result: LLMResultModel
+    command: ActuatorCommand
 
 
 class WarningInfo(BaseModel):

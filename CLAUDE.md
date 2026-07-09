@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Smart Waste AI — real-time waste classification using dual OAK-D USB3 depth cameras and Google Gemini vision API. Captures side-by-side frames, classifies into 7 categories, logs to PostgreSQL/SQLite and image files.
+Smart Waste AI — real-time waste classification using dual OAK-D USB3 depth cameras and a pluggable LLM vision backend: Google Gemini (cloud), LM Studio (local, OpenAI-compatible API), or a **cascade** (local first, escalate to Gemini below a confidence threshold). Captures side-by-side frames, classifies into 7 categories, logs to PostgreSQL/SQLite and image files, and returns an "open module N" actuation command per classification.
 
 **Entry points:**
 - `python main.py` / `smartwaste` — manual mode, dual OAK cameras, OpenCV window
@@ -28,32 +28,57 @@ Dashboard and API require login. Default credentials: `admin` / `password123`.
 Override via `SMARTWASTE_ADMIN_USERNAME` and `SMARTWASTE_ADMIN_PASSWORD` env vars.
 The presentation site at `/site` is public (no login required).
 
-## Docker Mode — Three Deployment Options
+Auth is **scoped**: the admin session/password opens everything; the edge API key
+(`SMARTWASTE_EDGE_API_KEY` as a Bearer token) is valid ONLY for the ingest endpoints
+`/api/report`, `/api/heartbeat`, and `/api/edge/classify` — it does not open admin routes.
 
-### 1. Server mode (LAN dashboard, no cameras)
+## Deployment Roles
+
+### 1. Server only (LAN dashboard, no cameras, no local LLM)
 ```bash
 docker compose up -d
 ```
-Runs FastAPI + PostgreSQL + Grafana. No cameras needed.
-Accessible from any device on the network at `http://<server-ip>:8000`.
-Edge devices POST results here via `/api/report`.
+Runs FastAPI + PostgreSQL + Grafana. Edge devices POST frames to `/api/edge/classify`
+(server-side classification) or finished results to `/api/report` (legacy local mode).
+Classification backend defaults to Gemini; point `SMARTWASTE_LMSTUDIO_URL` at a remote
+LLM host (role 3) and set `SMARTWASTE_LLM_BACKEND=lmstudio|cascade` to go local.
 
-### 2. Full stack on Raspberry Pi (cameras + dashboard)
+### 2. Server + LLM host (same machine)
+```bash
+# First: start LM Studio's server with the model loaded
+#   lms server start        (or Developer → Start Server in the GUI)
+#   curl http://localhost:1234/v1/models   → must list google/gemma-4-12b-qat
+docker compose -f docker-compose.server-llm.yml up -d
+```
+Same server stack, pre-wired to LM Studio on the Docker host via
+`host.docker.internal:1234`. Default backend is `cascade`: LM Studio classifies first;
+confidence < 70% (or LM Studio failure) escalates the image to Gemini.
+
+### 3. LLM host only
+No SmartBin code runs here. Install LM Studio on any machine, load
+`google/gemma-4-12b-qat`, start the server and enable **"Serve on Local Network"**.
+Verify with `curl http://<ip>:1234/v1/models`, then point the SmartBin server at it via
+`SMARTWASTE_LMSTUDIO_URL=http://<ip>:1234/v1`.
+**LM Studio has no authentication — keep port 1234 LAN-only/firewalled, never internet-facing.**
+
+### 4. Full stack on Raspberry Pi (cameras + dashboard)
 ```bash
 docker compose -f docker-compose.edge-full.yml up -d
 ```
 Runs everything on the Pi: cameras, web UI, database, Grafana.
-View locally at `http://localhost:8000` or from LAN.
 
-### 3. Lightweight edge (cameras only, reports to server)
+### 5. Lightweight edge (cameras only, classifies via server)
 ```bash
 SMARTWASTE_SERVER_URL=http://<server-ip>:8000 \
 SMARTWASTE_BIN_ID=bin-01 \
 docker compose -f docker-compose.edge.yml up -d
 ```
-Runs camera + classifier on the Pi. No web UI. POSTs results to the central server.
+Runs the camera pipeline on the Pi, no web UI. Default `SMARTWASTE_CLASSIFY_MODE=server`:
+each captured frame is POSTed to the server, which runs the LLM and replies with the
+classification + actuation command in the same response. Set `SMARTWASTE_CLASSIFY_MODE=local`
+for the original on-device Gemini behavior (needs `GEMINI_API_KEY` on the Pi).
 
-Services: Web UI `:8000`, Grafana `:3000` (admin/admin), PostgreSQL `:5432`.
+Services: Web UI `:8000`, Grafana `:3000` (admin/admin), PostgreSQL `:5433` (server) / `:5432` (edge-full), LM Studio `:1234`.
 Full-stack and edge modes require Linux host with cameras on USB.
 
 ## Presentation Website
@@ -105,7 +130,7 @@ Each online bin is rendered as a card with a live thumbnail (MJPEG proxied from 
 
 Commands flow: browser → `POST /api/bin/{id}/command` (server, auth-gated, per-bin rate-limit) → edge sidecar `/command` (Bearer `EDGE_API_KEY`) → mutates `AppState`. Heartbeats carry the live `strategy`, `pipeline`, `camera_count`, `running`, `auto_classify`, and `warnings[]` so the dashboard reflects edge state within ~5 seconds.
 
-Warnings are structured (`code`, `severity`, `message`) and deduped by code in `smartwaste/warnings.py`. Known codes today: `CAMERA_COUNT_LOW`, `CAMERA_MISSING`.
+Warnings are structured (`code`, `severity`, `message`) and deduped by code in `smartwaste/warnings.py`. Known codes today: `CAMERA_COUNT_LOW`, `CAMERA_MISSING`, `SERVER_UNREACHABLE` (edge could not reach `/api/edge/classify` in server mode).
 
 ### Static assets
 
@@ -133,30 +158,52 @@ Migration: `python scripts/migrate_json_to_pg.py --source sqlite|json`
 | `CROP_PERCENT` | 0.20 | Crops 20% from each side before AI analysis |
 | `MAX_DT` | 0.25 s | Max frame timestamp delta between cameras |
 | `MODEL_NAME` | `gemini-3-flash-preview` | Gemini model |
+| `LLM_BACKEND` | `gemini` | Classification backend: `gemini`, `lmstudio`, or `cascade` |
+| `LMSTUDIO_URL` | `http://localhost:1234/v1` | LM Studio OpenAI-compatible base URL (any OpenAI-compatible server works) |
+| `LMSTUDIO_MODEL` | `google/gemma-4-12b-qat` | Local model id (must match `GET {url}/models`) |
+| `LMSTUDIO_TIMEOUT` | `120` s | Per-call timeout for local inference |
+| `LMSTUDIO_MAX_TOKENS` | `2000` | Completion budget — generous because reasoning models burn tokens before the JSON |
+| `CONFIDENCE_THRESHOLD` | `0.70` | Cascade: escalate to Gemini below this confidence |
+| `LLM_MAX_CONCURRENCY` | `2` | Concurrent LLM calls the server will run |
+| `CLASSIFY_MODE` | `local` | Edge classification: `local` (on-device) or `server` (via `/api/edge/classify`) |
+| `CLASSIFY_TIMEOUT` | `180` s | Edge → server classify HTTP timeout |
+| `MODULE_MAP` | built-in | JSON category→module override, e.g. `{"Plastic": 1}` ("Empty" never opens) |
+| `ACTUATOR` | `log` | Actuation driver: `log`, `none` (`gpio` reserved — see `smartwaste/actuator.py`) |
+| `MAX_UPLOAD_MB` | `10` | Max decoded image size accepted by ingest endpoints |
 | `JPEG_QUALITY` | 85 | Compression for API image uploads |
 | `DB_BACKEND` | `sqlite` | Database backend (`sqlite` or `postgresql`) |
 | `CAMERA_MODE` | `oak` | Camera backend for web UI (`oak`, `raspberry`, `oak-native`, `none`) |
 | `ADMIN_USERNAME` | `admin` | Dashboard login username |
 | `ADMIN_PASSWORD` | `password123` | Dashboard login password |
 | `BIN_ID` | `bin-01` | Unique identifier for this bin device |
-| `EDGE_MODE` | `false` | Enable edge mode (POST results to server) |
-| `SERVER_URL` | `` | Central server URL for edge reporting |
-| `EDGE_API_KEY` | `` | Shared secret for edge-to-server auth |
+| `EDGE_MODE` | `false` | Enable edge mode (heartbeats + sidecar + server reporting) |
+| `SERVER_URL` | `` | Central server URL for edge reporting/classification |
+| `EDGE_API_KEY` | `` | Shared secret for edge-to-server auth (ingest endpoints only) |
 | `HEARTBEAT_INTERVAL` | `30` | Seconds between edge heartbeats |
 
 All constants flow through `settings.py` (Pydantic BaseSettings) — override via env vars or `.env`.
 
 ## Architecture
 
-**Threading model:** Main thread handles capture, UI, and keyboard input. Daemon worker threads handle Gemini API calls asynchronously. `AppState` (`state.py`) coordinates shared flags thread-safely.
+**Threading model:** Main thread handles capture, UI, and keyboard input. Daemon worker threads handle LLM calls asynchronously. `AppState` (`state.py`) coordinates shared flags thread-safely; its `start_classify()` gate also enforces the dashboard Stop button.
 
-**Data flow:**
+**Data flow (local mode, `CLASSIFY_MODE=local`):**
 1. Dual camera frames captured independently → synced by timestamp (`MAX_DT`)
 2. Frames concatenated horizontally → cropped → JPEG-encoded
-3. Bytes sent to Gemini with structured prompt → strict JSON response parsed
-4. Result logged to console, `logs/run_*.log`, database, and `waste_dataset/*.jpg`
+3. Bytes sent to the configured backend (`smartwaste/llm.py`) → strict JSON response parsed
+4. Result logged to console, `logs/run_*.log`, database, and `waste_dataset/*.jpg`; `actuator.dispatch()` opens the mapped module
 
-**AI prompt** (`smartwaste/prompt.py`): Returns `{"category": ..., "description": ..., "brand_product": ...}`. Includes Armenian brand examples (Jermuk, BOOM, etc.) for Yerevan deployment.
+**Data flow (server mode, `CLASSIFY_MODE=server` — the hub-and-spoke architecture):**
+1. Sensors → End Device: cameras capture and JPEG-encode the frame
+2. End Device → Server: one `POST /api/edge/classify` with `image_b64` + sensor data (Bearer `EDGE_API_KEY`)
+3. Server → LLM: server forwards the image to the configured backend (LM Studio / Gemini / cascade), bounded by `LLM_MAX_CONCURRENCY`
+4. LLM → Server: classification (+ self-reported confidence) parsed and normalized
+5. Server → End Device: the same HTTP response carries `{result, command: {action: "open_module", module: N}}`; the edge applies it to `AppState` and calls `actuator.dispatch()`
+6. In parallel the server persists the row (+ `confidence`, `llm_backend`) and image, and the dashboard picks it up on its 5-second poll
+
+**Cascade semantics** (`CascadeBackend` in `smartwaste/llm.py`): LM Studio first; escalate to Gemini when it errors, reports no confidence, or confidence < `CONFIDENCE_THRESHOLD`. If Gemini then fails but LM Studio produced a parseable low-confidence result, that result is used (degraded beats erroring).
+
+**AI prompt** (`smartwaste/prompt.py`): Returns `{"category": ..., "description": ..., "brand_product": ..., "confidence": 0-100}`. Includes Armenian brand examples (Jermuk, BOOM, etc.) for Yerevan deployment.
 
 ## Module Structure
 
@@ -165,22 +212,24 @@ main.py              ← manual OAK mode (OpenCV window)
 mainauto.py          ← auto gate mode (presence-gated classifications)
 mainoak.py           ← OAK-D Native mode (depth + IMU + NN sensor fusion)
 smartwaste/
+  actuator.py        ← pluggable bin-module actuation (log now, GPIO drops in later)
   app.py             ← shared OAK-camera run loop
   camera.py          ← OAK camera pipeline helper (single device)
   cameraOak.py       ← dual OAK pipeline setup and frame cropping
   cameraraspberry.py ← legacy Raspberry Pi picamera2 setup (kept for web.py)
   control.py         ← unified edge runner (docker entry point)
   warnings.py        ← structured runtime warnings surfaced on the dashboard
-  classifier.py      ← Gemini API call, JSON parsing, retry logic
-  config.py          ← all constants and paths
-  database.py        ← dual SQLite/PostgreSQL persistence layer (with bin_id)
+  classifier.py      ← classification worker: dispatches local (in-process LLM) vs server mode
+  config.py          ← all constants and paths (incl. MODULE_MAP parsing)
+  database.py        ← dual SQLite/PostgreSQL persistence layer (bin_id, confidence, llm_backend)
   dataset.py         ← save images, database entries, and edge reporting
-  edge_client.py     ← HTTP client for edge→server reporting and heartbeats
+  edge_client.py     ← HTTP client for edge→server reporting, heartbeats, classify_remote
+  llm.py             ← LLM backends: Gemini (retry + circuit breaker), LM Studio, cascade
   log_setup.py       ← logging configuration
   oak_native.py      ← OAK-D multi-sensor occupancy detector (depth + IMU + NN)
   presence.py        ← pixel-diff background model for bin-occupancy (no API calls)
-  prompt.py          ← Gemini prompt string
-  schemas.py         ← Pydantic models for edge communication (EdgeReport, BinHeartbeat)
+  prompt.py          ← LLM prompt string (strict JSON incl. confidence)
+  schemas.py         ← Pydantic models for edge communication (EdgeReport, EdgeClassifyRequest/Response, BinHeartbeat)
   settings.py        ← Pydantic BaseSettings (layered config, env-var overrides)
   state.py           ← thread-safe AppState class
   strategies.py      ← classification-trigger strategies (Manual, PresenceGate)
@@ -254,3 +303,15 @@ python -m pytest tests/ --cov=smartwaste --cov-report=term-missing
 ```
 
 Test files follow `tests/test_<module>.py`. Install deps: `pip install -r requirements-test.txt`.
+## Rules
+
+- **No hardcoding**: no URLs/hosts/ports/keys/secrets in source — use env vars; defaults belong in `.env`.
+- **Security**: fail fast if `JWT_SECRET`/`DATABASE_URL` missing (no fallbacks); authenticate + authorize every endpoint; validate/whitelist all input (never raw `req.body` to DB); uploads MIME+extension checked & authed; rate-limit auth endpoints; never self-assign elevated roles at register; Socket.IO authed via JWT handshake; CORS restricted to `CORS_ORIGIN`. Never leak internal errors to clients in prod.
+- **Authorization**: permission-based only (see RBAC). Client prefers `useAuth().hasPermission('slug')` over role checks.
+- **Audit**: every state-changing admin endpoint calls `AuditService`.
+- **Full-stack consistency**: a change affecting both sides ships both in the same PR; server response-shape changes update the matching client interface.
+- **Logging**: **Pino only, never `console.*`** — `createLogger('Module')`; `warn`/`error`/`fatal` persist to DB + admin panel. Pass errors as `logger.error({ err }, 'msg')`.
+- **Tests** (Vitest): server in `server/tests/` (mock at the service boundary), client in `client/src/tests/` (mock `api/`, not axios) — both mirror source layout. New service/controller/hook ships ≥1 happy + 1 error test. Verify changes actually run before declaring done.
+- **Modularity**: one concern per file (separate display / logic / data fetching); >~300 lines is a signal to split — flag pre-existing oversized files, don't silently rewrite.
+- **Naming**: components `PascalCase.tsx`, hooks `useCamelCase.ts`, other TS `camelCase.ts`, server classes/services `PascalCase.js` else `camelCase.js`, migrations `YYYYMMDDHHMMSS-kebab.js`, tests mirror source + `.test`.
+- **Git**: Conventional Commits (`feat(scope):`, `fix(scope):`, …); descriptive branches; don't force-push `main`; never commit `.env`/`node_modules`/seed binaries.

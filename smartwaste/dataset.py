@@ -22,7 +22,14 @@ def _environment_data() -> dict:
     }
 
 
-def save_entry(label: str, img, description: str, brand_product: str) -> None:
+def save_entry(
+    label: str,
+    img,
+    description: str,
+    brand_product: str,
+    confidence: float | None = None,
+    backend: str = "",
+) -> None:
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"{label}_{ts}.jpg"
     filepath = os.path.join(DATASET_DIR, filename)
@@ -37,6 +44,8 @@ def save_entry(label: str, img, description: str, brand_product: str) -> None:
         "weight": "",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "bin_id": BIN_ID,
+        "confidence": confidence,
+        "llm_backend": backend,
     }
 
     logger.info("Saved dataset entry: %s", filename)

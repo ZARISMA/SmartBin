@@ -17,6 +17,7 @@ import base64
 import contextlib
 import mimetypes
 import os
+import re
 import threading
 import time
 import urllib.error
@@ -39,6 +40,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
+from .actuator import resolve_module
 from .config import (
     ADMIN_PASSWORD,
     ADMIN_USERNAME,
@@ -51,7 +53,10 @@ from .config import (
     EDGE_API_KEY,
     EDGE_MODE,
     JPEG_QUALITY,
+    LLM_MAX_CONCURRENCY,
+    LLM_QUEUE_TIMEOUT,
     MAX_DT,
+    MAX_UPLOAD_BYTES,
     OAK_CHECK_INTERVAL,
     OAK_DETECT_CONFIRM_N,
     OAK_DISPLAY_H,
@@ -63,8 +68,15 @@ from .config import (
     WEB_PORT,
 )
 from .database import get_active_bins, get_entries, get_entry_count, get_label_counts, insert_entry
+from .llm import CircuitOpenError, build_backend
 from .log_setup import get_logger
-from .schemas import BinCommand, BinHeartbeat, EdgeReport
+from .schemas import (
+    BinCommand,
+    BinHeartbeat,
+    EdgeClassifyRequest,
+    EdgeClassifyResponse,
+    EdgeReport,
+)
 from .state import AppState
 from .ui import draw_nn_detections, draw_overlay
 from .utils import encode_frame, launch_classify
@@ -93,16 +105,44 @@ templates = Jinja2Templates(directory=os.path.join(_MODULE_DIR, "web_templates")
 # ── Auth helpers ─────────────────────────────────────────────────────────────
 
 
-def _is_authenticated(request: Request) -> bool:
-    """Check session cookie or Authorization Bearer token."""
-    if request.session.get("user"):
-        return True
+def _bearer_token(request: Request) -> str:
     auth = request.headers.get("authorization", "")
     if auth.startswith("Bearer "):
-        token = auth[7:]
-        if token == ADMIN_PASSWORD or (EDGE_API_KEY and token == EDGE_API_KEY):
-            return True
-    return False
+        return auth[7:]
+    return ""
+
+
+def _is_admin(request: Request) -> bool:
+    """Operator auth: session cookie or the admin password as a bearer token."""
+    if request.session.get("user"):
+        return True
+    return _bearer_token(request) == ADMIN_PASSWORD
+
+
+def _is_edge_client(request: Request) -> bool:
+    """Edge-device auth — valid ONLY for the ingest endpoints
+    (/api/report, /api/heartbeat, /api/edge/classify).
+
+    The edge API key deliberately does not open admin routes; admins may
+    still call the ingest endpoints."""
+    token = _bearer_token(request)
+    if EDGE_API_KEY and token == EDGE_API_KEY:
+        return True
+    return _is_admin(request)
+
+
+_SAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _safe_filename(label: str, bin_id: str, ts: str) -> str:
+    """Build a flat .jpg filename from client-supplied fields.
+
+    Strips path separators and anything else that could escape DATASET_DIR."""
+    parts = []
+    for raw in (label, bin_id, ts):
+        part = _SAFE_FILENAME_CHARS.sub("_", str(raw)).lstrip(".")[:40]
+        parts.append(part or "x")
+    return "_".join(parts) + ".jpg"
 
 
 # ── Bin registry (in-memory, populated by edge heartbeats) ───────────────────
@@ -530,7 +570,7 @@ def site(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return RedirectResponse("/login", status_code=302)
     return templates.TemplateResponse(
         request=request,
@@ -541,7 +581,7 @@ def dashboard(request: Request):
 
 @app.get("/map", response_class=HTMLResponse)
 def dashboard_map(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return RedirectResponse("/login", status_code=302)
     return templates.TemplateResponse(
         request=request,
@@ -552,7 +592,7 @@ def dashboard_map(request: Request):
 
 @app.get("/analytics", response_class=HTMLResponse)
 def dashboard_analytics(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return RedirectResponse("/login", status_code=302)
     return templates.TemplateResponse(
         request=request,
@@ -563,7 +603,7 @@ def dashboard_analytics(request: Request):
 
 @app.get("/bin/{bin_id}", response_class=HTMLResponse)
 def bin_detail(request: Request, bin_id: str):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return RedirectResponse("/login", status_code=302)
 
     is_local = bin_id == BIN_ID and CAMERA_MODE != "none" and _cameras_ok
@@ -660,7 +700,7 @@ def _proxy_request(
 
 @app.get("/api/bin/{bin_id}/stream")
 def proxy_bin_stream(request: Request, bin_id: str):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     info = _get_bin_info(bin_id)
     if info is None or not info.host:
@@ -673,7 +713,7 @@ def proxy_bin_stream(request: Request, bin_id: str):
 
 @app.post("/api/bin/{bin_id}/classify")
 def proxy_bin_classify(request: Request, bin_id: str):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     info = _get_bin_info(bin_id)
     if info is None or not info.host:
@@ -684,7 +724,7 @@ def proxy_bin_classify(request: Request, bin_id: str):
 
 @app.post("/api/bin/{bin_id}/toggle-auto")
 def proxy_bin_toggle(request: Request, bin_id: str):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     info = _get_bin_info(bin_id)
     if info is None or not info.host:
@@ -695,7 +735,7 @@ def proxy_bin_toggle(request: Request, bin_id: str):
 
 @app.get("/api/bin/{bin_id}/state")
 def proxy_bin_state(request: Request, bin_id: str):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     info = _get_bin_info(bin_id)
     if info is None or not info.host:
@@ -706,7 +746,7 @@ def proxy_bin_state(request: Request, bin_id: str):
 
 @app.get("/api/bin/{bin_id}/diagnostics")
 def proxy_bin_diagnostics(request: Request, bin_id: str):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     info = _get_bin_info(bin_id)
     if info is None or not info.host:
@@ -735,7 +775,7 @@ def _rate_limited(bin_id: str) -> bool:
 
 @app.post("/api/bin/{bin_id}/command")
 def proxy_bin_command(request: Request, bin_id: str, cmd: BinCommand):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     info = _get_bin_info(bin_id)
     if info is None or not info.host:
@@ -763,7 +803,7 @@ def proxy_bin_command(request: Request, bin_id: str, cmd: BinCommand):
 
 @app.get("/api/audit")
 def api_audit(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     with _command_lock:
         return list(reversed(_command_audit))
@@ -771,7 +811,7 @@ def api_audit(request: Request):
 
 @app.get("/stream")
 def video_feed(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return StreamingResponse(
         _generate_frames(),
@@ -784,7 +824,7 @@ def video_feed(request: Request):
 
 @app.post("/api/classify")
 def api_classify(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     frame = _get_frame()
     if frame is None:
@@ -798,7 +838,7 @@ def api_classify(request: Request):
 
 @app.post("/api/toggle-auto")
 def api_toggle_auto(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     new_state = _state.toggle_auto()
     return {"auto_classify": new_state}
@@ -806,7 +846,7 @@ def api_toggle_auto(request: Request):
 
 @app.get("/api/state")
 def api_state(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     label, detail, auto_on = _state.get_display()
     return {
@@ -820,14 +860,14 @@ def api_state(request: Request):
 
 @app.get("/api/entries")
 def api_entries(request: Request, limit: int = 20, offset: int = 0, bin_id: str | None = None):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return get_entries(limit=limit, offset=offset, bin_id=bin_id)
 
 
 @app.get("/api/stats")
 def api_stats(request: Request, bin_id: str | None = None):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return {
         "total": get_entry_count(bin_id=bin_id),
@@ -837,7 +877,7 @@ def api_stats(request: Request, bin_id: str | None = None):
 
 @app.get("/api/bins")
 def api_bins(request: Request):
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return get_active_bins()
 
@@ -847,7 +887,7 @@ def api_bins(request: Request):
 
 @app.post("/api/report")
 def api_report(request: Request, report: EdgeReport):
-    if not _is_authenticated(request):
+    if not _is_edge_client(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     entry = {
@@ -859,6 +899,8 @@ def api_report(request: Request, report: EdgeReport):
         "weight": report.weight,
         "timestamp": report.timestamp,
         "bin_id": report.bin_id,
+        "confidence": report.confidence,
+        "llm_backend": report.llm_backend,
     }
     env = {
         "simulated_temperature": report.simulated_temperature,
@@ -872,10 +914,12 @@ def api_report(request: Request, report: EdgeReport):
     if report.image_b64:
         try:
             img_data = base64.b64decode(report.image_b64)
+            if len(img_data) > MAX_UPLOAD_BYTES:
+                raise ValueError("image exceeds SMARTWASTE_MAX_UPLOAD_MB")
             os.makedirs(DATASET_DIR, exist_ok=True)
-            ts = report.timestamp.replace(" ", "_").replace(":", "-")
-            filename = f"{report.label}_{report.bin_id}_{ts}.jpg"
-            filepath = os.path.join(DATASET_DIR, filename)
+            filepath = os.path.join(
+                DATASET_DIR, _safe_filename(report.label, report.bin_id, report.timestamp)
+            )
             with open(filepath, "wb") as f:
                 f.write(img_data)
             entry["filename"] = filepath
@@ -883,12 +927,115 @@ def api_report(request: Request, report: EdgeReport):
             logger.warning("Failed to save edge image: %s", e)
 
     row_id = insert_entry(entry, env)
+    if row_id is None:
+        return JSONResponse(
+            {"status": "error", "detail": "database insert failed"}, status_code=500
+        )
     return {"status": "ok", "id": row_id}
+
+
+# Bound concurrent LLM calls so slow local inference can't exhaust the
+# request threadpool (sync routes each hold a worker thread while they run).
+_llm_semaphore = threading.BoundedSemaphore(LLM_MAX_CONCURRENCY)
+
+
+@app.post("/api/edge/classify", response_model=EdgeClassifyResponse)
+def api_edge_classify(request: Request, req: EdgeClassifyRequest):
+    """Classify a frame POSTed by an edge device.
+
+    This is the End Device → Server → LLM → Server → End Device round-trip:
+    the server runs the configured LLM backend on the image, persists the
+    result (dashboard picks it up on its next poll), and returns the
+    classification plus the actuation command in the same HTTP response.
+    """
+    if not _is_edge_client(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    try:
+        img_data = base64.b64decode(req.image_b64, validate=True)
+    except Exception:
+        return JSONResponse({"error": "invalid base64 image"}, status_code=400)
+    if len(img_data) > MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": "image too large"}, status_code=413)
+
+    if not _llm_semaphore.acquire(timeout=LLM_QUEUE_TIMEOUT):
+        return JSONResponse({"error": "classifier busy — try again later"}, status_code=503)
+    try:
+        result = build_backend().classify(img_data)
+    except CircuitOpenError as e:
+        return JSONResponse({"error": f"classifier paused: {e}"}, status_code=503)
+    except Exception as e:
+        logger.error("Edge classify failed: %s", e)
+        return JSONResponse({"error": f"classification failed: {e}"}, status_code=502)
+    finally:
+        _llm_semaphore.release()
+
+    module = resolve_module(result.category)
+    command = {
+        "action": "open_module" if module is not None else "none",
+        "module": module,
+        "category": result.category,
+    }
+
+    status = "ok"
+    row_id = None
+    if result.category != "Empty":
+        timestamp = req.captured_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry = {
+            "filename": "",
+            "label": result.category,
+            "description": result.description,
+            "brand_product": result.brand_product,
+            "location": req.location,
+            "weight": req.weight,
+            "timestamp": timestamp,
+            "bin_id": req.bin_id,
+            "confidence": result.confidence,
+            "llm_backend": result.backend,
+        }
+        env = {
+            "simulated_temperature": req.simulated_temperature,
+            "simulated_humidity": req.simulated_humidity,
+            "simulated_vibration": req.simulated_vibration,
+            "simulated_air_pollution": req.simulated_air_pollution,
+            "simulated_smoke": req.simulated_smoke,
+        }
+        try:
+            os.makedirs(DATASET_DIR, exist_ok=True)
+            filepath = os.path.join(
+                DATASET_DIR, _safe_filename(result.category, req.bin_id, timestamp)
+            )
+            with open(filepath, "wb") as f:
+                f.write(img_data)
+            entry["filename"] = filepath
+        except Exception as e:
+            logger.warning("Failed to save edge image: %s", e)
+
+        row_id = insert_entry(entry, env)
+        if row_id is None:
+            # Classified fine but not persisted — still return the command so
+            # the bin can open the right module (contrast with /api/report,
+            # which is persistence-only and therefore 500s).
+            status = "db_error"
+
+    return {
+        "status": status,
+        "id": row_id,
+        "result": {
+            "category": result.category,
+            "description": result.description,
+            "brand_product": result.brand_product,
+            "confidence": result.confidence,
+            "backend": result.backend,
+            "escalated": result.escalated,
+        },
+        "command": command,
+    }
 
 
 @app.post("/api/heartbeat")
 def api_heartbeat(request: Request, hb: BinHeartbeat):
-    if not _is_authenticated(request):
+    if not _is_edge_client(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     _update_bin(hb)
     return {"status": "ok"}
@@ -897,7 +1044,7 @@ def api_heartbeat(request: Request, hb: BinHeartbeat):
 @app.get("/api/dashboard")
 def api_dashboard(request: Request):
     """Combined bin registry + database stats for the dashboard page."""
-    if not _is_authenticated(request):
+    if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     # Merge heartbeat registry with DB data

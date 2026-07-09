@@ -1,5 +1,6 @@
-# Virtual environment
+# Virtual environments
 oak_env/
+.venv/
 
 # Runtime-generated data
 logs/

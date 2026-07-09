@@ -99,13 +99,26 @@ pkill -f /tmp/hb.sh
 
 ## 3. Verify end-to-end
 
-From the laptop:
+From the laptop (note: the edge API key is now scoped to the ingest endpoints only —
+use the **admin password** as the bearer token for admin APIs like `/api/dashboard`):
 
 ```bash
-curl -s -H "Authorization: Bearer smartbin-edge-2026-a7f3k9" http://localhost:8000/api/dashboard
+curl -s -H "Authorization: Bearer password123" http://localhost:8000/api/dashboard
 ```
 
 Expect `bin-01` with `"status":"online"`. In the browser, the dashboard card will update within 5 s (poll interval). A bin flips to offline 60 s after its last heartbeat.
+
+To verify server-side classification (End Device → Server → LLM → command), POST a frame
+with the edge key:
+
+```bash
+python -c "import base64,json;print(json.dumps({'bin_id':'bin-01','image_b64':base64.b64encode(open('image.png','rb').read()).decode()}))" > /tmp/payload.json
+curl -s -X POST http://localhost:8000/api/edge/classify \
+  -H "Authorization: Bearer smartbin-edge-2026-a7f3k9" \
+  -H "Content-Type: application/json" --data @/tmp/payload.json
+```
+
+Expect `{"status":"ok","id":N,"result":{...,"backend":"lmstudio"|"gemini"},"command":{"action":"open_module","module":M}}`.
 
 ---
 

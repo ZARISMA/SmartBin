@@ -19,13 +19,15 @@ Output JSON format (exact keys):
 {
   "category": "Plastic/Glass/Paper/Organic/Aluminum/Other/Empty",
   "description": "One sentence describing material, color, and shape.",
-  "brand_product": "Recognized brand and product name, try also to recognize the Armenian brands and product name like Jermuk, Bjni, BOOM and etc. or 'Unknown'."
+  "brand_product": "Recognized brand and product name, try also to recognize the Armenian brands and product name like Jermuk, Bjni, BOOM and etc. or 'Unknown'.",
+  "confidence": "<integer 0-100 — how certain you are about the category>"
 }
 
 Rules:
 - If pipe is empty -> category="Empty", description="N/A", brand_product="Unknown"
 - Use exactly one of these categories: Plastic, Glass, Paper, Organic, Aluminum, Other, Empty
 - If mixed/unclear -> Other
+- "confidence" must be an integer 0-100. Use low values when you are unsure.
 
 Do NOT:
 - Mention the pipe or background

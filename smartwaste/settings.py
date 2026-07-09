@@ -115,6 +115,29 @@ class Settings(BaseSettings):
     edge_api_key: str = ""  # shared secret for authenticating to server
     heartbeat_interval: int = 30  # seconds between heartbeats
 
+    # ── LLM backend (whoever runs the classification) ──────────────────────────
+    llm_backend: str = "gemini"  # "gemini", "lmstudio", or "cascade"
+    lmstudio_url: str = "http://localhost:1234/v1"  # OpenAI-compatible base URL
+    lmstudio_model: str = "google/gemma-4-12b-qat"  # id listed by GET {url}/models
+    lmstudio_timeout: float = 120.0  # seconds per local inference call
+    # Reasoning models (e.g. gemma-4) burn completion tokens on reasoning BEFORE
+    # emitting the JSON — a tight budget yields an empty response.
+    lmstudio_max_tokens: int = 2000
+    confidence_threshold: float = 0.70  # cascade: escalate to Gemini below this
+    llm_max_concurrency: int = 2  # concurrent LLM calls served by the web app
+    llm_queue_timeout: float = 30.0  # seconds to wait for a free LLM slot
+
+    # ── Edge classification ────────────────────────────────────────────────────
+    classify_mode: str = "local"  # "local" (classify on-device) or "server"
+    classify_timeout: float = 180.0  # edge → server classify HTTP timeout (s)
+
+    # ── Actuation ──────────────────────────────────────────────────────────────
+    module_map: str = ""  # JSON {"Plastic": 1, ...}; empty → built-in default
+    actuator: str = "log"  # "log" or "none" ("gpio" reserved for hardware)
+
+    # ── Ingest limits ──────────────────────────────────────────────────────────
+    max_upload_mb: int = 10  # max decoded image size accepted by the server
+
 
 # Module-level singleton — imported by config.py and classifier.py
 settings = Settings()

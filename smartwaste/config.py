@@ -9,6 +9,8 @@ To override without editing source, set env vars (SMARTWASTE_* prefix) or add
 entries to a .env file in the project root.  See smartwaste/settings.py.
 """
 
+import json
+import logging
 import os
 
 from .settings import settings
@@ -50,6 +52,62 @@ HEARTBEAT_INTERVAL = settings.heartbeat_interval
 MODEL_NAME = settings.model_name
 VALID_CLASSES = ["Plastic", "Glass", "Paper", "Organic", "Aluminum", "Other", "Empty"]
 LOCATION = settings.location
+
+# ── LLM backend ────────────────────────────────────────────────────────────────
+LLM_BACKEND = settings.llm_backend
+LMSTUDIO_URL = settings.lmstudio_url
+LMSTUDIO_MODEL = settings.lmstudio_model
+LMSTUDIO_TIMEOUT = settings.lmstudio_timeout
+LMSTUDIO_MAX_TOKENS = settings.lmstudio_max_tokens
+CONFIDENCE_THRESHOLD = settings.confidence_threshold
+LLM_MAX_CONCURRENCY = settings.llm_max_concurrency
+LLM_QUEUE_TIMEOUT = settings.llm_queue_timeout
+
+# ── Edge classification ────────────────────────────────────────────────────────
+CLASSIFY_MODE = settings.classify_mode
+CLASSIFY_TIMEOUT = settings.classify_timeout
+
+# ── Ingest limits ──────────────────────────────────────────────────────────────
+MAX_UPLOAD_BYTES = settings.max_upload_mb * 1024 * 1024
+
+# ── Actuation ──────────────────────────────────────────────────────────────────
+ACTUATOR = settings.actuator
+
+# Which physical bin module opens for each category. "Empty" never opens one.
+DEFAULT_MODULE_MAP = {
+    "Plastic": 1,
+    "Glass": 2,
+    "Paper": 3,
+    "Organic": 4,
+    "Aluminum": 5,
+    "Other": 6,
+}
+
+
+def _parse_module_map(raw: str) -> dict[str, int]:
+    """Parse the SMARTWASTE_MODULE_MAP JSON override; fall back to the default."""
+    if not raw.strip():
+        return dict(DEFAULT_MODULE_MAP)
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("module map must be a JSON object")
+        parsed = {}
+        for key, value in data.items():
+            if key not in VALID_CLASSES or key == "Empty":
+                continue
+            parsed[str(key)] = int(value)
+        if not parsed:
+            raise ValueError("module map has no valid categories")
+        return parsed
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Invalid SMARTWASTE_MODULE_MAP %r (%s) — using default mapping.", raw, exc
+        )
+        return dict(DEFAULT_MODULE_MAP)
+
+
+MODULE_MAP = _parse_module_map(settings.module_map)
 
 # ── Camera / display ───────────────────────────────────────────────────────────
 WINDOW = "Smart Waste AI (Dual OAK)"

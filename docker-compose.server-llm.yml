@@ -1,8 +1,21 @@
-# docker-compose.yml — Server mode (LAN dashboard)
-# Run on a laptop/server. No cameras needed.
-# Accessible from any device on the same network at http://<server-ip>:8000
+# docker-compose.server-llm.yml — Server + LLM host on the same machine
+# Same server stack as docker-compose.yml, pre-wired to an LM Studio server
+# running on the Docker HOST (LM Studio is a host application, not a container):
 #
-# Usage:  docker compose up -d
+#   1. In LM Studio, load the model (default: google/gemma-4-12b-qat) and
+#      start the server:  `lms server start`  or  Developer → Start Server.
+#      Verify:  curl http://localhost:1234/v1/models
+#   2. docker compose -f docker-compose.server-llm.yml up -d
+#
+# The app reaches LM Studio via host.docker.internal (native on Docker Desktop
+# for Windows/macOS; the extra_hosts entry makes it work on Linux too).
+#
+# Default backend is "cascade": LM Studio classifies first; results with
+# confidence below SMARTWASTE_CONFIDENCE_THRESHOLD (70%) — or LM Studio
+# failures — escalate to Gemini (set GEMINI_API_KEY in .env for that).
+#
+# SECURITY: LM Studio's server has no authentication — keep port 1234 on a
+# trusted LAN / behind a firewall, never exposed to the internet.
 
 services:
   postgres:
@@ -30,13 +43,12 @@ services:
       - SMARTWASTE_DB_BACKEND=postgresql
       - SMARTWASTE_DB_HOST=postgres
       - SMARTWASTE_CAMERA_MODE=none
-      # LLM backend: gemini (default) | lmstudio | cascade.
-      # For a separate LLM-host machine, point SMARTWASTE_LMSTUDIO_URL at it,
-      # e.g. http://<llm-host-ip>:1234/v1 (see docker-compose.server-llm.yml
-      # for running server + LM Studio on the same machine).
-      - SMARTWASTE_LLM_BACKEND=${SMARTWASTE_LLM_BACKEND:-gemini}
-      - SMARTWASTE_LMSTUDIO_URL=${SMARTWASTE_LMSTUDIO_URL:-http://localhost:1234/v1}
+      - SMARTWASTE_LLM_BACKEND=${SMARTWASTE_LLM_BACKEND:-cascade}
+      - SMARTWASTE_LMSTUDIO_URL=${SMARTWASTE_LMSTUDIO_URL:-http://host.docker.internal:1234/v1}
       - SMARTWASTE_LMSTUDIO_MODEL=${SMARTWASTE_LMSTUDIO_MODEL:-google/gemma-4-12b-qat}
+      - SMARTWASTE_CONFIDENCE_THRESHOLD=${SMARTWASTE_CONFIDENCE_THRESHOLD:-0.70}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:

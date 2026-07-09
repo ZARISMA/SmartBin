@@ -4,3 +4,6 @@ google-genai
 blobconverter
 tenacity
 pydantic-settings>=2.0
+# Required by the edge sidecar HTTP server (stream proxy + dashboard commands)
+fastapi
+uvicorn
