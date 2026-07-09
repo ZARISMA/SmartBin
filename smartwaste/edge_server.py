@@ -23,6 +23,7 @@ import numpy as np
 
 from .config import EDGE_API_KEY, WEB_HOST, WEB_PORT
 from .log_setup import get_logger
+from .schemas import BinCommand
 from .state import AppState
 from .utils import encode_frame, launch_classify
 
@@ -78,8 +79,6 @@ def _build_app(state: AppState, buf: FrameBuffer):
     from fastapi import FastAPI, Header
     from fastapi.responses import JSONResponse
     from starlette.responses import StreamingResponse
-
-    from .schemas import BinCommand
 
     app = FastAPI(title="SmartBin Edge")
 
