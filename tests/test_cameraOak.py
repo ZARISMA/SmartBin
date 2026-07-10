@@ -121,3 +121,26 @@ class TestGrayscaleFrames:
     def test_grayscale_zero_crop_unchanged(self):
         frame = np.arange(200, dtype=np.uint8).reshape(10, 20)
         np.testing.assert_array_equal(crop_sides(frame, 0.0), frame)
+
+from unittest.mock import MagicMock, patch
+import depthai as dai
+from smartwaste.cameraOak import make_pipeline
+
+def test_make_pipeline():
+    with patch("smartwaste.cameraOak.dai.Pipeline") as mock_pipeline_cls:
+        mock_pipeline = MagicMock()
+        mock_pipeline_cls.return_value = mock_pipeline
+
+        mock_cam = MagicMock()
+        mock_pipeline.create.return_value = mock_cam
+
+        mock_queue = MagicMock()
+        mock_cam.build.return_value.requestFullResolutionOutput.return_value.createOutputQueue.return_value = mock_queue
+
+        device = MagicMock()
+
+        pipeline, queue = make_pipeline(device)
+
+        assert pipeline == mock_pipeline
+        assert queue == mock_queue
+        mock_pipeline.start.assert_called_once()
