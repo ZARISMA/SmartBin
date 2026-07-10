@@ -25,6 +25,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import psycopg2
+import psycopg2.extras
 
 from smartwaste.config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
 
@@ -88,12 +89,17 @@ def migrate_sqlite(conn):
     src.close()
 
     count = 0
+    data = []
     with conn.cursor() as cur:
         for row in rows:
             d = dict(row)
             d.pop("id", None)
-            cur.execute(INSERT_SQL, d)
+            data.append(d)
             count += 1
+        if data:
+            psycopg2.extras.execute_batch(
+                cur, INSERT_SQL, data, page_size=1000
+            )
     conn.commit()
     return count
 
@@ -107,6 +113,7 @@ def migrate_json(conn):
         entries = json.load(f)
 
     count = 0
+    data = []
     with conn.cursor() as cur:
         for entry in entries:
             d = {
@@ -123,8 +130,12 @@ def migrate_json(conn):
                 "simulated_air_pollution": 0.0,
                 "simulated_smoke": 0.0,
             }
-            cur.execute(INSERT_SQL, d)
+            data.append(d)
             count += 1
+        if data:
+            psycopg2.extras.execute_batch(
+                cur, INSERT_SQL, data, page_size=1000
+            )
     conn.commit()
     return count
 
