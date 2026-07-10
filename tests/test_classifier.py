@@ -16,7 +16,6 @@ from smartwaste.classifier import _extract_json
 from smartwaste.config import VALID_CLASSES
 from smartwaste.state import AppState
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # _extract_json
 # ─────────────────────────────────────────────────────────────────────────────

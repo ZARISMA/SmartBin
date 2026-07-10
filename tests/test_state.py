@@ -3,8 +3,6 @@
 import threading
 import time
 
-import pytest
-
 from smartwaste.state import AppState
 
 

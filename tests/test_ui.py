@@ -1,7 +1,6 @@
 """Tests for smartwaste/ui.py — draw_overlay()."""
 
 import numpy as np
-import pytest
 
 from smartwaste.ui import draw_overlay
 
