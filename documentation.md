@@ -804,21 +804,9 @@ Creates DepthAI pipeline:
 
 **Motion spike detection:** Replaces physical IMU. Detects when `(current_score - previous_score) > MOTION_THRESHOLD * MOTION_SPIKE_FACTOR`. The spike flag auto-expires after `DROP_FLAG_DURATION` seconds.
 
-### `smartwaste/camera.py` — Single OAK Camera Pipeline
-
-**Purpose:** Creates and starts a camera pipeline for one OAK device.
-
-**Function: `make_pipeline(device: dai.Device) -> tuple[pipeline, queue]`**
-
-Creates a DepthAI pipeline with a single camera node on `CAM_A`, outputting full-resolution BGR888p frames to a queue (maxSize=4, non-blocking).
-
-**Function: `crop_sides(frame: np.ndarray, crop_percent: float) -> np.ndarray`**
-
-Removes `crop_percent` fraction from both left and right sides of the frame. Returns the frame unchanged if `crop_percent <= 0`.
-
 ### `smartwaste/cameraOak.py` — Dual OAK Camera Pipeline
 
-Identical to `camera.py`. Contains the same `make_pipeline()` and `crop_sides()` functions. Used by `main.py`, `mainauto.py`, and `mainoak.py`.
+Contains the `make_pipeline()` and `crop_sides()` functions.
 
 ### `smartwaste/cameraraspberry.py` — Raspberry Pi Camera Module
 
@@ -2016,7 +2004,6 @@ SmartBin/
 │   ├── prompt.py               # Gemini prompt string
 │   ├── presence.py             # Pixel-diff presence detector
 │   ├── oak_native.py           # OAK multi-sensor occupancy detector
-│   ├── camera.py               # Single OAK camera pipeline
 │   ├── cameraOak.py            # Dual OAK pipeline + crop_sides()
 │   ├── cameraraspberry.py      # Raspberry Pi picamera2 module
 │   ├── database.py             # SQLite/PostgreSQL persistence layer
