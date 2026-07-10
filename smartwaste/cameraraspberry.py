@@ -26,13 +26,3 @@ def stop_cameras(cameras: list) -> None:
             cam.stop()
         except Exception:
             pass
-
-
-def crop_sides(frame: np.ndarray, crop_percent: float) -> np.ndarray:
-    """Remove crop_percent fraction from both left and right sides."""
-    if crop_percent <= 0:
-        return frame
-    h, w = frame.shape[:2]
-    left = int(w * crop_percent)
-    right = int(w * (1 - crop_percent))
-    return frame[:, left:right]

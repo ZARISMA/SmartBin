@@ -18,11 +18,12 @@ import cv2
 import depthai as dai
 import numpy as np
 
-from .cameraOak import crop_sides, make_pipeline
+from .cameraOak import make_pipeline
 from .config import CROP_PERCENT, DISPLAY_SIZE, EDGE_MODE, MAX_DT, WINDOW
 from .log_setup import get_logger
 from .state import AppState
 from .ui import draw_overlay
+from .utils import crop_sides
 
 logger = get_logger()
 

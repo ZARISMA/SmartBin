@@ -253,7 +253,8 @@ def _camera_loop_oak() -> None:
     try:
         import depthai as dai  # noqa: I001
 
-        from .cameraOak import crop_sides, make_pipeline
+        from .cameraOak import make_pipeline
+        from .utils import crop_sides
     except Exception as e:
         logger.error("Cannot import OAK camera modules: %s", e)
         return
@@ -314,7 +315,8 @@ def _camera_loop_raspberry() -> None:
     global _cameras_ok
 
     try:
-        from .cameraraspberry import crop_sides, grab_frame, make_cameras, stop_cameras
+        from .cameraraspberry import grab_frame, make_cameras, stop_cameras
+        from .utils import crop_sides
     except Exception as e:
         logger.error("Cannot import Raspberry Pi camera modules: %s", e)
         return

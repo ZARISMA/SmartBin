@@ -63,9 +63,10 @@ def app_state():
 @pytest.fixture
 def ready_detector():
     """PresenceDetector that has completed warmup on a black frame."""
-    from smartwaste.presence import PresenceDetector
-    from smartwaste.config import BG_WARMUP_FRAMES
     import numpy as np
+
+    from smartwaste.config import BG_WARMUP_FRAMES
+    from smartwaste.presence import PresenceDetector
 
     d = PresenceDetector()
     black = np.zeros((100, 100), dtype=np.uint8)
