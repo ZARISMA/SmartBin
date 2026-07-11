@@ -1,0 +1,54 @@
+{% extends "_cc_base.html" %}
+{% block title %}Classifications · SmartBin Control Center{% endblock %}
+{% block page_title %}Classifications{% endblock %}
+{% block kicker %}§ Records{% endblock %}
+
+{% block topbar_actions %}
+    <div class="cc-search">
+        <span class="cc-search-icon" aria-hidden="true">⌕</span>
+        <input id="filter-q" type="text" placeholder="Search description or brand…" autocomplete="off">
+    </div>
+    <button id="refresh-btn" class="sb-btn sb-btn-secondary" type="button">↻ Refresh</button>
+{% endblock %}
+
+{% block content %}
+<section class="class-toolbar">
+    <div class="class-toolbar-left">
+        <select id="filter-bin" class="cc-select" aria-label="Filter by bin">
+            <option value="">All bins</option>
+        </select>
+        <select id="filter-category" class="cc-select" aria-label="Filter by category">
+            <option value="">All categories</option>
+            {% for c in categories %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <span class="cc-mono" id="records-count">— records</span>
+</section>
+
+<section class="analytics-card">
+    <div id="class-table" class="class-table">
+        <div class="empty-state">
+            <h2>Loading…</h2>
+            <p>Fetching classifications.</p>
+        </div>
+    </div>
+    <footer class="class-pager">
+        <button id="page-prev" class="sb-btn sb-btn-secondary" type="button" disabled>← Prev</button>
+        <span class="cc-mono" id="page-label">Page 1</span>
+        <button id="page-next" class="sb-btn sb-btn-secondary" type="button" disabled>Next →</button>
+    </footer>
+</section>
+
+<div id="lightbox" class="modal-backdrop" hidden>
+    <figure class="lightbox-fig">
+        <img id="lightbox-img" alt="Classification frame">
+        <figcaption id="lightbox-cap" class="cc-mono"></figcaption>
+    </figure>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dashboard_classifications.js"></script>
+{% endblock %}

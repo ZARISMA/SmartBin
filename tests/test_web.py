@@ -222,6 +222,91 @@ class TestAlertsPage:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# /api/entries filters, /api/entries/count, /api/entries/{id}/image
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestApiEntriesFilters:
+    def test_invalid_label_returns_400(self, client):
+        assert client.get("/api/entries?label=NotAClass").status_code == 400
+
+    def test_valid_label_returns_list(self, client):
+        r = client.get("/api/entries?label=Plastic")
+        assert r.status_code == 200
+        assert isinstance(r.json(), list)
+
+    def test_invalid_since_returns_400(self, client):
+        assert client.get("/api/entries?since=garbage").status_code == 400
+
+    def test_count_returns_total(self, client):
+        r = client.get("/api/entries/count")
+        assert r.status_code == 200
+        assert isinstance(r.json()["total"], int)
+
+    def test_count_validates_label(self, client):
+        assert client.get("/api/entries/count?label=nope").status_code == 400
+
+    def test_count_anon_rejected(self, anon_client):
+        assert anon_client.get("/api/entries/count").status_code == 401
+
+
+class TestApiEntryImage:
+    def _get(self, client, tmp_path, entry, entry_id=1):
+        with (
+            patch("smartwaste.web.get_entry_by_id", return_value=entry),
+            patch("smartwaste.web.DATASET_DIR", str(tmp_path)),
+        ):
+            return client.get(f"/api/entries/{entry_id}/image")
+
+    def test_serves_jpeg(self, client, tmp_path):
+        (tmp_path / "x.jpg").write_bytes(b"\xff\xd8fake-jpeg")
+        r = self._get(client, tmp_path, {"id": 1, "filename": "x.jpg"})
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "image/jpeg"
+
+    def test_foreign_windows_path_resolves_by_basename(self, client, tmp_path):
+        (tmp_path / "y.jpg").write_bytes(b"jpeg")
+        r = self._get(client, tmp_path, {"id": 1, "filename": "C:\\other\\host\\..\\y.jpg"})
+        assert r.status_code == 200
+
+    def test_docker_posix_path_resolves_by_basename(self, client, tmp_path):
+        (tmp_path / "z.jpg").write_bytes(b"jpeg")
+        r = self._get(client, tmp_path, {"id": 1, "filename": "/app/waste_dataset/z.jpg"})
+        assert r.status_code == 200
+
+    def test_non_image_extension_rejected(self, client, tmp_path):
+        (tmp_path / "evil.exe").write_bytes(b"MZ")
+        r = self._get(client, tmp_path, {"id": 1, "filename": "evil.exe"})
+        assert r.status_code == 404
+
+    def test_missing_entry_404(self, client, tmp_path):
+        assert self._get(client, tmp_path, None).status_code == 404
+
+    def test_blank_filename_404(self, client, tmp_path):
+        assert self._get(client, tmp_path, {"id": 1, "filename": ""}).status_code == 404
+
+    def test_missing_file_404(self, client, tmp_path):
+        assert self._get(client, tmp_path, {"id": 1, "filename": "gone.jpg"}).status_code == 404
+
+    def test_anon_rejected(self, anon_client):
+        assert anon_client.get("/api/entries/1/image").status_code == 401
+
+
+class TestClassificationsPage:
+    def test_authed_returns_page(self, client):
+        r = client.get("/classifications")
+        assert r.status_code == 200
+        assert "Classifications" in r.text and "class-table" in r.text
+        # category filter is populated server-side from VALID_CLASSES
+        assert 'value="Plastic"' in r.text
+
+    def test_anon_redirects_to_login(self, anon_client):
+        r = anon_client.get("/classifications", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"] == "/login"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Auth scoping — the edge key only opens the ingest endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 

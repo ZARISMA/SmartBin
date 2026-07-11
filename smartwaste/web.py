@@ -35,7 +35,13 @@ from datetime import datetime
 import cv2
 import numpy as np
 from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -67,10 +73,18 @@ from .config import (
     OAK_EMPTY_CONFIRM_N,
     OAK_VOTES_NEEDED,
     SECRET_KEY,
+    VALID_CLASSES,
     WEB_HOST,
     WEB_PORT,
 )
-from .database import get_active_bins, get_entries, get_entry_count, get_label_counts, insert_entry
+from .database import (
+    get_active_bins,
+    get_entries,
+    get_entry_by_id,
+    get_entry_count,
+    get_label_counts,
+    insert_entry,
+)
 from .llm import CircuitOpenError, build_backend
 from .log_setup import get_logger
 from .schemas import (
@@ -662,6 +676,21 @@ def dashboard_alerts(request: Request):
     )
 
 
+@app.get("/classifications", response_class=HTMLResponse)
+def dashboard_classifications(request: Request):
+    if not _is_admin(request):
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard_classifications.html",
+        context={
+            "active": "classifications",
+            "user": request.session.get("user", "admin"),
+            "categories": VALID_CLASSES,
+        },
+    )
+
+
 @app.get("/bin/{bin_id}", response_class=HTMLResponse)
 def bin_detail(request: Request, bin_id: str):
     if not _is_admin(request):
@@ -919,11 +948,87 @@ def api_state(request: Request):
     }
 
 
+def _entry_filters(
+    bin_id: str | None,
+    label: str | None,
+    q: str | None,
+    since: str | None,
+    until: str | None,
+) -> tuple[dict, JSONResponse | None]:
+    """Validate/whitelist the shared /api/entries filter params."""
+    if label and label not in VALID_CLASSES:
+        return {}, JSONResponse({"error": "invalid label"}, status_code=400)
+    for name, value in (("since", since), ("until", until)):
+        if value:
+            try:
+                datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return {}, JSONResponse({"error": f"invalid {name}"}, status_code=400)
+    q = (q or "").strip()[:80] or None
+    return {"bin_id": bin_id, "label": label, "q": q, "since": since, "until": until}, None
+
+
 @app.get("/api/entries")
-def api_entries(request: Request, limit: int = 20, offset: int = 0, bin_id: str | None = None):
+def api_entries(
+    request: Request,
+    limit: int = 20,
+    offset: int = 0,
+    bin_id: str | None = None,
+    label: str | None = None,
+    q: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+):
     if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
-    return get_entries(limit=limit, offset=offset, bin_id=bin_id)
+    filters, err = _entry_filters(bin_id, label, q, since, until)
+    if err:
+        return err
+    return get_entries(limit=max(1, min(limit, 200)), offset=max(0, offset), **filters)
+
+
+@app.get("/api/entries/count")
+def api_entries_count(
+    request: Request,
+    bin_id: str | None = None,
+    label: str | None = None,
+    q: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    filters, err = _entry_filters(bin_id, label, q, since, until)
+    if err:
+        return err
+    return {"total": get_entry_count(**filters)}
+
+
+_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+
+
+@app.get("/api/entries/{entry_id}/image")
+def api_entry_image(request: Request, entry_id: int):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    entry = get_entry_by_id(entry_id)
+    if not entry or not entry.get("filename"):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    # The filename column stores absolute paths from whichever host ingested
+    # the frame (Windows or Docker) — keep only the basename and re-anchor it
+    # in this host's DATASET_DIR, then confine the resolved path to it.
+    name = os.path.basename(str(entry["filename"]).replace("\\", "/"))
+    if os.path.splitext(name)[1].lower() not in _IMAGE_EXTENSIONS:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    root = os.path.realpath(DATASET_DIR)
+    path = os.path.realpath(os.path.join(root, name))
+    try:
+        inside = os.path.commonpath([root, path]) == root
+    except ValueError:
+        inside = False
+    if not inside or not os.path.isfile(path):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(path)
 
 
 @app.get("/api/stats")
