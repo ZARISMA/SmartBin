@@ -43,7 +43,7 @@
             <a href="/" class="cc-nav-item">
                 <span class="icon">⌬</span><span class="label">Devices</span>
             </a>
-            <a href="/" class="cc-nav-item">
+            <a href="/alerts" class="cc-nav-item {% if active == 'alerts' %}active{% endif %}">
                 <span class="icon">◬</span><span class="label">Alerts</span>
                 <span class="cc-nav-badge" id="cc-alerts-badge" hidden>0</span>
             </a>
@@ -103,6 +103,7 @@
     </div>
 </div>
 
+<script src="/static/cc_nav.js" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

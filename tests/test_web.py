@@ -1,6 +1,7 @@
 """Tests for smartwaste/web.py — FastAPI endpoints."""
 
 import base64
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -149,6 +150,75 @@ class TestApiAnalyticsExport:
 
     def test_anon_rejected(self, anon_client):
         assert anon_client.get("/api/analytics/export").status_code == 401
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /api/alerts — camera-availability alerts from the bin registry
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestApiAlerts:
+    def _seed_registry(self, monkeypatch, bins):
+        """bins: iterable of (bin_id, camera_count, age_seconds)."""
+        import smartwaste.web as web
+
+        registry = {}
+        for bin_id, camera_count, age_seconds in bins:
+            info = web.BinInfo(bin_id=bin_id, camera_count=camera_count, pipeline="oak")
+            info.last_seen = datetime.now() - timedelta(seconds=age_seconds)
+            registry[bin_id] = info
+        monkeypatch.setattr(web, "_bin_registry", registry)
+
+    def test_no_camera_is_error(self, client, monkeypatch):
+        self._seed_registry(monkeypatch, [("bin-a", 0, 0)])
+        data = client.get("/api/alerts").json()
+        assert data["counts"] == {"error": 1, "warning": 0, "total": 1, "monitored": 1}
+        alert = data["alerts"][0]
+        assert alert["severity"] == "error"
+        assert alert["code"] == "NO_CAMERA"
+        assert alert["bin_id"] == "bin-a"
+
+    def test_single_camera_is_warning(self, client, monkeypatch):
+        self._seed_registry(monkeypatch, [("bin-a", 1, 0)])
+        data = client.get("/api/alerts").json()
+        assert data["counts"]["warning"] == 1
+        assert data["alerts"][0]["code"] == "SINGLE_CAMERA"
+        assert data["alerts"][0]["message"] == "Only one camera available"
+
+    def test_two_cameras_is_healthy(self, client, monkeypatch):
+        self._seed_registry(monkeypatch, [("bin-a", 2, 0)])
+        data = client.get("/api/alerts").json()
+        assert data["alerts"] == []
+        assert data["counts"] == {"error": 0, "warning": 0, "total": 0, "monitored": 1}
+
+    def test_stale_bin_excluded(self, client, monkeypatch):
+        self._seed_registry(monkeypatch, [("bin-a", 0, 120)])
+        data = client.get("/api/alerts").json()
+        assert data["alerts"] == []
+        assert data["counts"]["monitored"] == 0
+
+    def test_errors_sort_before_warnings(self, client, monkeypatch):
+        self._seed_registry(monkeypatch, [("bin-w", 1, 0), ("bin-e", 0, 0)])
+        data = client.get("/api/alerts").json()
+        assert [a["severity"] for a in data["alerts"]] == ["error", "warning"]
+
+    def test_anon_rejected(self, anon_client):
+        assert anon_client.get("/api/alerts").status_code == 401
+
+    def test_edge_key_rejected(self, anon_client):
+        assert anon_client.get("/api/alerts", headers=EDGE_HEADERS).status_code == 401
+
+
+class TestAlertsPage:
+    def test_authed_returns_page(self, client):
+        r = client.get("/alerts")
+        assert r.status_code == 200
+        assert "Alerts" in r.text and "alerts-list" in r.text
+
+    def test_anon_redirects_to_login(self, anon_client):
+        r = anon_client.get("/alerts", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"] == "/login"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -227,6 +227,53 @@ def _get_bin_status() -> list[dict]:
         return out
 
 
+def _derive_alerts() -> dict:
+    """Camera-availability alerts derived from the live bin registry.
+
+    Live-only by design: a bin that never heartbeats (or went stale) is the
+    Fleet page's offline problem, not a camera alert. An oak-native pipeline
+    legitimately runs one camera but still gets the single-camera warning —
+    the spec is "alert below 2 cameras" for every reporting bin.
+    """
+    alerts: list[dict] = []
+    monitored = 0
+    for bin_info in _get_bin_status():
+        if bin_info["status"] == "offline":
+            continue
+        monitored += 1
+        cameras = bin_info["camera_count"] or 0
+        if cameras >= 2:
+            continue
+        severity, code, message = (
+            ("error", "NO_CAMERA", "No camera detected")
+            if cameras == 0
+            else ("warning", "SINGLE_CAMERA", "Only one camera available")
+        )
+        alerts.append(
+            {
+                "bin_id": bin_info["bin_id"],
+                "severity": severity,
+                "code": code,
+                "message": message,
+                "camera_count": cameras,
+                "pipeline": bin_info["pipeline"],
+                "host": bin_info["host"],
+                "last_seen": bin_info["last_seen"],
+            }
+        )
+    alerts.sort(key=lambda a: (a["severity"] != "error", a["bin_id"]))
+    errors = sum(1 for a in alerts if a["severity"] == "error")
+    return {
+        "alerts": alerts,
+        "counts": {
+            "error": errors,
+            "warning": len(alerts) - errors,
+            "total": len(alerts),
+            "monitored": monitored,
+        },
+    }
+
+
 # ── Shared state ──────────────────────────────────────────────────────────────
 
 _state = AppState()
@@ -604,6 +651,17 @@ def dashboard_analytics(request: Request):
     )
 
 
+@app.get("/alerts", response_class=HTMLResponse)
+def dashboard_alerts(request: Request):
+    if not _is_admin(request):
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard_alerts.html",
+        context={"active": "alerts", "user": request.session.get("user", "admin")},
+    )
+
+
 @app.get("/bin/{bin_id}", response_class=HTMLResponse)
 def bin_detail(request: Request, bin_id: str):
     if not _is_admin(request):
@@ -883,6 +941,13 @@ def api_bins(request: Request):
     if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return get_active_bins()
+
+
+@app.get("/api/alerts")
+def api_alerts(request: Request):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return _derive_alerts()
 
 
 @app.get("/api/analytics")

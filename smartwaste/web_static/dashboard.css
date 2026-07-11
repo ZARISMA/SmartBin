@@ -945,6 +945,42 @@
 .backend-count { text-align: right; color: var(--sb-ink); }
 .backend-conf { text-align: right; }
 
+/* ── Alerts page ─────────────────────────────────────────────────────── */
+.alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.alert-row {
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    background: var(--sb-white);
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: var(--sb-shadow-card);
+    border-left: 3px solid var(--sb-stone);
+}
+.alert-row.sev-error   { border-left-color: var(--sb-error); }
+.alert-row.sev-warning { border-left-color: var(--sb-warning); }
+.alert-icon {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    background: rgba(140, 140, 140, 0.12);
+    color: var(--sb-stone);
+}
+.alert-row.sev-error .alert-icon   { background: rgba(198, 40, 40, 0.10); color: var(--sb-error); }
+.alert-row.sev-warning .alert-icon { background: rgba(255, 152, 0, 0.12); color: var(--sb-warning); }
+.alert-message { font-size: 14px; font-weight: 700; color: var(--sb-ink); }
+.alert-meta { margin-top: 4px; }
+.alert-meta a { color: var(--sb-forest); text-decoration: none; font-weight: 700; }
+.alert-time { color: var(--sb-stone); }
+
 .recent-table {
     display: flex;
     flex-direction: column;
