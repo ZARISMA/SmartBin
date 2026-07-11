@@ -97,6 +97,60 @@ class TestApiStats:
         assert "by_category" in data
 
 
+class TestApiAnalytics:
+    def test_returns_full_payload(self, client):
+        r = client.get("/api/analytics?period=7d")
+        assert r.status_code == 200
+        data = r.json()
+        for key in (
+            "period",
+            "period_label",
+            "granularity",
+            "range",
+            "kpis",
+            "series",
+            "by_category",
+            "by_category_prev",
+            "leaderboard",
+            "backends",
+        ):
+            assert key in data
+        assert data["period"] == "7d"
+        assert set(data["kpis"]) == {"total", "diversion_rate", "avg_confidence", "active_bins"}
+        assert len(data["series"]["buckets"]) == 7
+
+    def test_hourly_granularity_for_24h(self, client):
+        data = client.get("/api/analytics?period=24h").json()
+        assert data["granularity"] == "hour"
+        assert len(data["series"]["buckets"]) == 24
+
+    def test_invalid_period_returns_400(self, client):
+        assert client.get("/api/analytics?period=bogus").status_code == 400
+
+    def test_anon_rejected(self, anon_client):
+        assert anon_client.get("/api/analytics").status_code == 401
+
+    def test_edge_key_rejected(self, anon_client):
+        assert anon_client.get("/api/analytics", headers=EDGE_HEADERS).status_code == 401
+
+
+class TestApiAnalyticsExport:
+    def test_returns_csv_attachment(self, client):
+        from smartwaste import analytics
+
+        r = client.get("/api/analytics/export?period=24h")
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/csv")
+        assert "smartbin-classifications-24h.csv" in r.headers["content-disposition"]
+        assert r.text.splitlines()[0] == ",".join(analytics.EXPORT_COLUMNS)
+
+    def test_invalid_period_returns_400(self, client):
+        assert client.get("/api/analytics/export?period=nope").status_code == 400
+
+    def test_anon_rejected(self, anon_client):
+        assert anon_client.get("/api/analytics/export").status_code == 401
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Auth scoping — the edge key only opens the ingest endpoints
 # ─────────────────────────────────────────────────────────────────────────────

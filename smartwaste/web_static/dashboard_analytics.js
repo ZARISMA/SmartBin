@@ -1,7 +1,7 @@
 /* SmartBin Analytics view
- * Wires real data where we have it (/api/stats + /api/entries + /api/dashboard)
- * and uses static placeholders for metrics the backend doesn't yet compute.
- * Period selector (24h/7d/30d/90d/YTD) is a visual stub until period filtering exists.
+ * Every widget reads real data from /api/analytics?period=… — KPIs with
+ * previous-period deltas, per-bucket category series, material mix, bin
+ * leaderboard, LLM backend mix — plus /api/entries for the recent table.
  */
 (function () {
     'use strict';
@@ -16,21 +16,14 @@
         Other:    '#9370DB',
         Empty:    '#8C8C8C',
     };
-    const DELTAS = {
-        Plastic: '+12%', Paper: '+8%', Glass: '+18%',
-        Organic: '+24%', Aluminum: '+3%', Other: '−4%',
-    };
-    const NEG = new Set(['Other']);
 
-    // Deterministic fallback when there isn't enough real data for a 7-day series.
-    const FALLBACK_SERIES = {
-        Plastic:  [40, 52, 64, 48, 70, 92, 116],
-        Paper:    [38, 42, 48, 56, 60, 72, 80],
-        Glass:    [22, 24, 30, 28, 36, 38, 33],
-        Organic:  [16, 18, 22, 26, 28, 32, 36],
-        Aluminum: [12, 14, 14, 16, 16, 18, 14],
-        Other:    [4,  5,  6,  8,  7,  9,  8],
-    };
+    let period = '7d';
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
+    }
 
     // ── Fetch ─────────────────────────────────────────────────────────
     async function fetchJSON(url) {
@@ -45,9 +38,62 @@
     }
 
     // ── KPI strip ─────────────────────────────────────────────────────
-    function renderKpis(stats) {
-        const t = (stats && stats.total) || 0;
-        document.getElementById('kpi-total').textContent = t.toLocaleString();
+    const KPI_DEFS = [
+        {
+            key: 'total', el: 'kpi-total',
+            fmt: (v) => (v == null ? '—' : v.toLocaleString()),
+            deltaFmt: (d) => `${d > 0 ? '+' : ''}${d}%`,
+        },
+        {
+            key: 'diversion_rate', el: 'kpi-diversion',
+            fmt: (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`),
+            deltaFmt: (d) => `${d > 0 ? '+' : ''}${d}pt`,
+        },
+        {
+            key: 'avg_confidence', el: 'kpi-confidence',
+            fmt: (v) => (v == null ? '—' : v.toFixed(2)),
+            deltaFmt: (d) => `${d > 0 ? '+' : ''}${d.toFixed(2)}`,
+        },
+        {
+            key: 'active_bins', el: 'kpi-bins',
+            fmt: (v) => (v == null ? '—' : v.toLocaleString()),
+            deltaFmt: (d) => `${d > 0 ? '+' : ''}${d}`,
+        },
+    ];
+
+    function renderKpis(kpis, periodLabel) {
+        KPI_DEFS.forEach((def) => {
+            const k = (kpis && kpis[def.key]) || {};
+            const numEl = document.getElementById(def.el);
+            const deltaEl = document.getElementById(def.el + '-delta');
+            const noteEl = document.getElementById(def.el + '-note');
+            if (numEl) numEl.textContent = def.fmt(k.value);
+            if (deltaEl) {
+                deltaEl.classList.remove('pos', 'neg');
+                if (k.delta == null) {
+                    deltaEl.textContent = '—';
+                } else if (k.delta === 0) {
+                    deltaEl.textContent = '· ±0';
+                } else {
+                    deltaEl.textContent = `${k.delta > 0 ? '↗' : '↘'} ${def.deltaFmt(k.delta)}`;
+                    deltaEl.classList.add(k.delta > 0 ? 'pos' : 'neg');
+                }
+            }
+            if (noteEl) noteEl.textContent = `vs. previous ${periodLabel}`;
+        });
+    }
+
+    // ── Period-aware card titles ──────────────────────────────────────
+    function retitle(periodLabel) {
+        const titles = {
+            'area-title': `Classifications by category · ${periodLabel}`,
+            'donut-title': `Material mix · ${periodLabel}`,
+            'leaderboard-title': `Bins by throughput · ${periodLabel}`,
+        };
+        Object.entries(titles).forEach(([id, text]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        });
     }
 
     // ── Stacked area chart ───────────────────────────────────────────
@@ -58,70 +104,82 @@
         ).join('');
     }
 
-    function buildSeriesFromEntries(entries) {
-        if (!entries || !entries.length) return null;
-        const day = 24 * 60 * 60 * 1000;
-        const now = Date.now();
-        const buckets = Array.from({ length: 7 }, () => Object.fromEntries(CAT.map((c) => [c, 0])));
-        let any = false;
-        entries.forEach((e) => {
-            const ts = e.timestamp ? new Date(e.timestamp).getTime() : 0;
-            if (!ts) return;
-            const ageDays = Math.floor((now - ts) / day);
-            if (ageDays < 0 || ageDays > 6) return;
-            const idx = 6 - ageDays;
-            const cat = CAT.includes(e.label) ? e.label : 'Other';
-            buckets[idx][cat] += 1;
-            any = true;
-        });
-        if (!any) return null;
-        const out = {};
-        CAT.forEach((c) => { out[c] = buckets.map((b) => b[c]); });
-        return out;
-    }
-
     function renderStackedArea(series) {
         const host = document.getElementById('stacked-area');
-        const days = 7;
+        const buckets = (series && series.buckets) || [];
+        const data = (series && series.data) || {};
+        const order = (series && series.categories) || CAT;
+        const n = buckets.length;
+        if (!n) {
+            host.innerHTML = '<div class="empty-line">No data in this period.</div>';
+            return;
+        }
         const W = 740, H = 240, P = 12;
-        const order = CAT;
-        const totals = Array.from({ length: days }, (_, d) =>
-            order.reduce((a, c) => a + series[c][d], 0)
+        const totals = Array.from({ length: n }, (_, i) =>
+            order.reduce((a, c) => a + ((data[c] || [])[i] || 0), 0)
         );
         const maxT = Math.max(1, ...totals);
-        const xs = (i) => P + (i / (days - 1)) * (W - 2 * P);
+        const xs = (i) => (n > 1 ? P + (i / (n - 1)) * (W - 2 * P) : W / 2);
         const ys = (v) => H - P - (v / maxT) * (H - 2 * P);
 
-        let cumul = Array(days).fill(0);
-        const paths = order.map((c) => {
-            const s = series[c];
-            const top = s.map((v, d) => cumul[d] + v);
-            const bottom = [...cumul];
-            const path = [
-                `M ${xs(0)} ${ys(top[0])}`,
-                ...top.map((v, d) => `L ${xs(d)} ${ys(v)}`),
-                ...bottom.reverse().map((v, d) => `L ${xs(days - 1 - d)} ${ys(v)}`),
-                'Z',
-            ].join(' ');
-            cumul = top;
-            return `<path d="${path}" fill="${COLORS[c]}" fill-opacity="0.92" stroke="${COLORS[c]}" stroke-width="0.5"/>`;
-        });
+        let cumul = Array(n).fill(0);
+        let marks;
+        if (n === 1) {
+            // Single bucket (e.g. YTD on Jan 1) — a centered stacked bar.
+            marks = order.map((c) => {
+                const v = (data[c] || [])[0] || 0;
+                if (!v) return '';
+                const y0 = ys(cumul[0]), y1 = ys(cumul[0] + v);
+                cumul[0] += v;
+                return `<rect x="${W / 2 - 30}" y="${y1}" width="60" height="${Math.max(1, y0 - y1)}"
+                              fill="${COLORS[c]}"><title>${c}: ${v}</title></rect>`;
+            });
+        } else {
+            marks = order.map((c) => {
+                const s = buckets.map((_, i) => (data[c] || [])[i] || 0);
+                const top = s.map((v, i) => cumul[i] + v);
+                const bottom = [...cumul];
+                const path = [
+                    `M ${xs(0)} ${ys(top[0])}`,
+                    ...top.map((v, i) => `L ${xs(i)} ${ys(v)}`),
+                    ...bottom.reverse().map((v, i) => `L ${xs(n - 1 - i)} ${ys(v)}`),
+                    'Z',
+                ].join(' ');
+                cumul = top;
+                const catTotal = s.reduce((a, v) => a + v, 0);
+                return `<path d="${path}" fill="${COLORS[c]}" fill-opacity="0.92"
+                              stroke="${COLORS[c]}" stroke-width="0.5"><title>${c}: ${catTotal}</title></path>`;
+            });
+        }
         const grid = [0.25, 0.5, 0.75, 1].map((t) =>
             `<line x1="${P}" x2="${W - P}" y1="${H - P - t * (H - 2 * P)}" y2="${H - P - t * (H - 2 * P)}" stroke="rgba(29,39,34,0.08)" stroke-width="1"/>`
         ).join('');
-        const days_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const labels = days_labels.map((d, i) =>
-            `<text x="${xs(i)}" y="${H - 1}" font-size="10" fill="#8C8C8C" text-anchor="middle" font-family="Manrope">${d}</text>`
-        ).join('');
+        const labelStep = Math.max(1, Math.ceil(n / 10));
+        const labels = buckets.map((b, i) => {
+            if (i % labelStep !== 0 && i !== n - 1) return '';
+            return `<text x="${xs(i)}" y="${H - 1}" font-size="10" fill="#8C8C8C" text-anchor="middle" font-family="Manrope">${escapeHtml(b.label)}</text>`;
+        }).join('');
 
-        host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" width="100%" height="${H}">${grid}${paths.join('')}${labels}</svg>`;
+        host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" width="100%" height="${H}">${grid}${marks.join('')}${labels}</svg>`;
     }
 
     // ── Donut chart ───────────────────────────────────────────────────
-    function renderDonut(by_category, total) {
+    function foldCategories(byCategory) {
+        const out = Object.fromEntries(CAT.map((c) => [c, 0]));
+        Object.entries(byCategory || {}).forEach(([label, v]) => {
+            if (label === 'Empty') return; // mix excludes empty checks
+            out[CAT.includes(label) ? label : 'Other'] += v;
+        });
+        return out;
+    }
+
+    function renderDonut(byCategory, byCategoryPrev) {
         const host = document.getElementById('donut-chart');
-        const cats = CAT.map((c) => ({ name: c, value: (by_category && by_category[c]) || 0 }));
-        const sum = Math.max(1, cats.reduce((a, c) => a + c.value, 0));
+        const cur = foldCategories(byCategory);
+        const prev = foldCategories(byCategoryPrev);
+        const cats = CAT.map((c) => ({ name: c, value: cur[c] || 0 }));
+        const total = cats.reduce((a, c) => a + c.value, 0);
+        const sum = Math.max(1, total);
         const R = 80, r = 50, cx = 110, cy = 110;
         let angle = -Math.PI / 2;
         const slicesSvg = cats.map((c) => {
@@ -134,46 +192,51 @@
             const x1 = cx + R * Math.cos(a1), y1 = cy + R * Math.sin(a1);
             const xi0 = cx + r * Math.cos(a0), yi0 = cy + r * Math.sin(a0);
             const xi1 = cx + r * Math.cos(a1), yi1 = cy + r * Math.sin(a1);
-            return `<path d="M ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1} L ${xi1} ${yi1} A ${r} ${r} 0 ${large} 0 ${xi0} ${yi0} Z" fill="${COLORS[c.name]}"/>`;
+            return `<path d="M ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1} L ${xi1} ${yi1} A ${r} ${r} 0 ${large} 0 ${xi0} ${yi0} Z" fill="${COLORS[c.name]}"><title>${c.name}: ${c.value}</title></path>`;
         }).join('');
-        const totalNum = (total || sum).toLocaleString();
-        const legend = cats.map((c) =>
-            `<div class="donut-legend-row">
+        const legend = cats.map((c) => {
+            const p = prev[c.name] || 0;
+            let deltaHtml = '<span class="delta">—</span>';
+            if (p > 0) {
+                const d = Math.round(((c.value - p) / p) * 100);
+                deltaHtml = `<span class="delta ${d < 0 ? 'neg' : 'pos'}">${d > 0 ? '+' : ''}${d}%</span>`;
+            }
+            return `<div class="donut-legend-row">
                 <span class="sw" style="background:${COLORS[c.name]};"></span>
                 <span class="name">${c.name}</span>
                 <span class="val cc-mono">${c.value}</span>
-                <span class="delta ${NEG.has(c.name) ? 'neg' : 'pos'}">${DELTAS[c.name] || ''}</span>
-            </div>`
-        ).join('');
+                ${deltaHtml}
+            </div>`;
+        }).join('');
 
         host.innerHTML = `
             <svg viewBox="0 0 220 220" width="220" height="220">${slicesSvg}
                 <text x="110" y="105" text-anchor="middle" font-size="11" fill="#8C8C8C" font-family="Manrope" font-weight="700" letter-spacing="2">TOTAL</text>
-                <text x="110" y="130" text-anchor="middle" font-size="28" fill="#1d2722" font-family="Instrument Serif">${totalNum}</text>
+                <text x="110" y="130" text-anchor="middle" font-size="28" fill="#1d2722" font-family="Instrument Serif">${total.toLocaleString()}</text>
             </svg>
             <div class="donut-legend">${legend}</div>
         `;
     }
 
     // ── Leaderboard ──────────────────────────────────────────────────
-    function renderLeaderboard(bins) {
+    function renderLeaderboard(rows) {
         const host = document.getElementById('leaderboard');
-        const sorted = bins.slice().sort((a, b) => (b.total_entries || 0) - (a.total_entries || 0)).slice(0, 6);
+        const sorted = (rows || []).slice(0, 6);
         if (!sorted.length) {
-            host.innerHTML = `<div class="empty-line">No bin throughput yet.</div>`;
+            host.innerHTML = `<div class="empty-line">No classifications in this period.</div>`;
             return;
         }
-        const max = Math.max(1, ...sorted.map((b) => b.total_entries || 0));
+        const max = Math.max(1, ...sorted.map((b) => b.count || 0));
         host.innerHTML = sorted.map((b, i) => `
             <div class="leader-row">
                 <div class="leader-rank cc-mono">${i + 1}</div>
                 <div class="leader-body">
                     <div class="leader-head">
-                        <span class="leader-name">${b.location || b.bin_id}</span>
-                        <span class="leader-num cc-mono">${(b.total_entries || 0).toLocaleString()}</span>
+                        <span class="leader-name">${escapeHtml(b.bin_id)}</span>
+                        <span class="leader-num cc-mono">${(b.count || 0).toLocaleString()}</span>
                     </div>
                     <div class="leader-track">
-                        <div class="leader-bar" style="width:${(b.total_entries || 0) / max * 100}%;"></div>
+                        <div class="leader-bar" style="width:${(b.count || 0) / max * 100}%;"></div>
                     </div>
                 </div>
             </div>
@@ -204,92 +267,72 @@
             return `
                 <div class="recent-row">
                     <span class="recent-time cc-mono">${timeLabel}</span>
-                    <span class="recent-cat"><span class="sw" style="background:${color};"></span>${cat}</span>
-                    <span class="recent-desc">${desc}</span>
-                    <span class="recent-bin cc-mono">${e.bin_id || '—'}</span>
+                    <span class="recent-cat"><span class="sw" style="background:${color};"></span>${escapeHtml(cat)}</span>
+                    <span class="recent-desc">${escapeHtml(desc)}</span>
+                    <span class="recent-bin cc-mono">${escapeHtml(e.bin_id || '—')}</span>
                 </div>
             `;
         }).join('');
     }
 
-    // ── Confusion matrix (static placeholder) ────────────────────────
-    function renderConfusionMatrix() {
-        const labels = ['Plastic', 'Paper', 'Glass', 'Organic', 'Aluminum', 'Other', 'Empty'];
-        const m = [
-            [0.96, 0.01, 0.01, 0.00, 0.00, 0.02, 0.00],
-            [0.02, 0.94, 0.00, 0.02, 0.00, 0.01, 0.01],
-            [0.01, 0.00, 0.93, 0.00, 0.04, 0.02, 0.00],
-            [0.00, 0.03, 0.00, 0.91, 0.00, 0.05, 0.01],
-            [0.00, 0.00, 0.05, 0.00, 0.92, 0.03, 0.00],
-            [0.04, 0.02, 0.03, 0.06, 0.03, 0.81, 0.01],
-            [0.01, 0.00, 0.00, 0.01, 0.00, 0.01, 0.97],
-        ];
-        const host = document.getElementById('confusion-matrix');
-        let html = `<div class="cm-cell cm-corner"></div>`;
-        labels.forEach((l) => { html += `<div class="cm-cell cm-h">${l}</div>`; });
-        m.forEach((row, i) => {
-            html += `<div class="cm-cell cm-r">${labels[i]}</div>`;
-            row.forEach((v, j) => {
-                const txtLight = v > 0.5 ? 'light' : '';
-                const bold = i === j ? 'bold' : '';
-                html += `<div class="cm-cell cm-v ${txtLight} ${bold}" style="background:rgba(45,90,66,${v.toFixed(2)});">${Math.round(v * 100)}</div>`;
-            });
-        });
-        host.innerHTML = html;
+    // ── LLM backend mix ──────────────────────────────────────────────
+    function renderBackends(backends, total, periodLabel) {
+        const host = document.getElementById('backend-stats');
+        const meta = document.getElementById('backend-meta');
+        if (meta) meta.textContent = `n = ${(total || 0).toLocaleString()} · ${periodLabel}`;
+        if (!backends || !backends.length) {
+            host.innerHTML = `<div class="empty-line">No classifications in this period.</div>`;
+            return;
+        }
+        const max = Math.max(1, ...backends.map((b) => b.count || 0));
+        host.innerHTML = backends.map((b) => `
+            <div class="backend-row">
+                <span class="backend-name cc-mono">${escapeHtml(b.backend)}</span>
+                <div class="leader-track">
+                    <div class="leader-bar" style="width:${(b.count || 0) / max * 100}%;"></div>
+                </div>
+                <span class="backend-count cc-mono">${(b.count || 0).toLocaleString()}</span>
+                <span class="backend-conf cc-mono">${b.avg_confidence == null ? 'conf —' : 'conf ' + b.avg_confidence.toFixed(2)}</span>
+            </div>
+        `).join('');
     }
 
     // ── Boot ──────────────────────────────────────────────────────────
     async function boot() {
         renderAreaLegend();
-        renderConfusionMatrix();
 
-        const [stats, dash, entries] = await Promise.all([
-            fetchJSON('/api/stats'),
-            fetchJSON('/api/dashboard'),
-            fetchJSON('/api/entries?limit=100'),
+        const [payload, entries] = await Promise.all([
+            fetchJSON('/api/analytics?period=' + encodeURIComponent(period)),
+            fetchJSON('/api/entries?limit=6'),
         ]);
 
-        renderKpis(stats || {});
-
-        const total = (stats && stats.total) || 0;
-        const byCat = (stats && stats.by_category) || {};
-        renderDonut(byCat, total);
-
-        const series = buildSeriesFromEntries(entries) || FALLBACK_SERIES;
-        renderStackedArea(series);
-
-        const bins = (dash && dash.bins) || [];
-        renderLeaderboard(bins);
+        if (payload) {
+            retitle(payload.period_label);
+            renderKpis(payload.kpis, payload.period_label);
+            renderStackedArea(payload.series);
+            renderDonut(payload.by_category, payload.by_category_prev);
+            renderLeaderboard(payload.leaderboard);
+            const total = payload.kpis && payload.kpis.total ? payload.kpis.total.value : 0;
+            renderBackends(payload.backends, total, payload.period_label);
+        }
 
         renderRecent(entries || []);
-
-        document.getElementById('cm-meta').textContent = `n = ${(total || 0).toLocaleString()} · 7 days`;
 
         const hostEl = document.getElementById('cc-server-host');
         if (hostEl) hostEl.textContent = window.location.host || '—';
     }
 
-    // Period selector — visual stub. Re-rendering with real period filtering would
-    // require backend support (period query param on /api/stats and /api/entries).
     document.querySelectorAll('.period-btn').forEach((b) => {
         b.addEventListener('click', () => {
             document.querySelectorAll('.period-btn').forEach((x) => x.classList.remove('active'));
             b.classList.add('active');
+            period = b.dataset.period || '7d';
+            boot();
         });
     });
 
-    document.getElementById('export-csv').addEventListener('click', async () => {
-        const entries = await fetchJSON('/api/entries?limit=1000');
-        if (!entries || !entries.length) return;
-        const cols = ['timestamp', 'bin_id', 'label', 'description', 'brand_product', 'location'];
-        const csv = [cols.join(',')]
-            .concat(entries.map((e) => cols.map((c) => JSON.stringify(e[c] ?? '')).join(',')))
-            .join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'smartbin-classifications.csv';
-        a.click();
+    document.getElementById('export-csv').addEventListener('click', () => {
+        window.location.href = '/api/analytics/export?period=' + encodeURIComponent(period);
     });
 
     boot();

@@ -15,6 +15,8 @@ Camera mode is selected via the SMARTWASTE_CAMERA_MODE env var:
 
 import base64
 import contextlib
+import csv
+import io
 import mimetypes
 import os
 import re
@@ -33,13 +35,14 @@ from datetime import datetime
 import cv2
 import numpy as np
 from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
+from . import analytics
 from .actuator import resolve_module
 from .config import (
     ADMIN_PASSWORD,
@@ -880,6 +883,36 @@ def api_bins(request: Request):
     if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return get_active_bins()
+
+
+@app.get("/api/analytics")
+def api_analytics(request: Request, period: str = "7d"):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if period not in analytics.PERIODS:
+        return JSONResponse({"error": "invalid period"}, status_code=400)
+    return analytics.build_payload(period)
+
+
+@app.get("/api/analytics/export")
+def api_analytics_export(request: Request, period: str = "7d"):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if period not in analytics.PERIODS:
+        return JSONResponse({"error": "invalid period"}, status_code=400)
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=analytics.EXPORT_COLUMNS)
+    writer.writeheader()
+    writer.writerows(analytics.build_export_rows(period))
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="smartbin-classifications-{period}.csv"'
+            )
+        },
+    )
 
 
 # ── Routes: Edge reporting (used by edge devices) ────────────────────────────

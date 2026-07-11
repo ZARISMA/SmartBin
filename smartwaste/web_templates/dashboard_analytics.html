@@ -19,34 +19,34 @@
     <article class="kpi-card">
         <div class="cell-key">Total classifications</div>
         <div class="kpi-row">
-            <div class="kpi-num-big" id="kpi-total">0</div>
-            <div class="kpi-delta">↗ +18.2%</div>
+            <div class="kpi-num-big" id="kpi-total">—</div>
+            <div class="kpi-delta" id="kpi-total-delta">—</div>
         </div>
-        <div class="kpi-note">vs. previous 7 days</div>
+        <div class="kpi-note" id="kpi-total-note">&nbsp;</div>
     </article>
     <article class="kpi-card">
         <div class="cell-key">Recycling diversion</div>
         <div class="kpi-row">
-            <div class="kpi-num-big">74.3%</div>
-            <div class="kpi-delta">↗ +4.1pt</div>
+            <div class="kpi-num-big" id="kpi-diversion">—</div>
+            <div class="kpi-delta" id="kpi-diversion-delta">—</div>
         </div>
-        <div class="kpi-note">vs. previous 7 days</div>
+        <div class="kpi-note" id="kpi-diversion-note">&nbsp;</div>
     </article>
     <article class="kpi-card">
         <div class="cell-key">Mean confidence</div>
         <div class="kpi-row">
-            <div class="kpi-num-big">0.94</div>
-            <div class="kpi-delta">↗ +0.02</div>
+            <div class="kpi-num-big" id="kpi-confidence">—</div>
+            <div class="kpi-delta" id="kpi-confidence-delta">—</div>
         </div>
-        <div class="kpi-note">across all classifications</div>
+        <div class="kpi-note" id="kpi-confidence-note">&nbsp;</div>
     </article>
     <article class="kpi-card">
-        <div class="cell-key">CO₂ avoided</div>
+        <div class="cell-key">Active bins</div>
         <div class="kpi-row">
-            <div class="kpi-num-big">12.4 t</div>
-            <div class="kpi-delta">↗ +1.8 t</div>
+            <div class="kpi-num-big" id="kpi-bins">—</div>
+            <div class="kpi-delta" id="kpi-bins-delta">—</div>
         </div>
-        <div class="kpi-note">estimated, this period</div>
+        <div class="kpi-note" id="kpi-bins-note">&nbsp;</div>
     </article>
 </section>
 
@@ -55,7 +55,7 @@
         <header class="card-head">
             <div>
                 <div class="cell-key">Volume</div>
-                <h3>Classifications by category · 7 days</h3>
+                <h3 id="area-title">Classifications by category</h3>
             </div>
             <div class="chart-legend" id="area-legend"></div>
         </header>
@@ -66,7 +66,7 @@
         <header class="card-head">
             <div>
                 <div class="cell-key">Composition</div>
-                <h3>Material mix · today</h3>
+                <h3 id="donut-title">Material mix</h3>
             </div>
         </header>
         <div id="donut-chart" class="donut-wrap"></div>
@@ -78,7 +78,7 @@
         <header class="card-head">
             <div>
                 <div class="cell-key">Leaderboard</div>
-                <h3>Bins by throughput · today</h3>
+                <h3 id="leaderboard-title">Bins by throughput</h3>
             </div>
         </header>
         <div id="leaderboard" class="leaderboard"></div>
@@ -99,12 +99,12 @@
 <section class="analytics-card analytics-card-full">
     <header class="card-head">
         <div>
-            <div class="cell-key">Model performance</div>
-            <h3>Confusion matrix · gemini-3-flash-preview</h3>
+            <div class="cell-key">Model usage</div>
+            <h3>LLM backend mix</h3>
         </div>
-        <span class="cc-mono" id="cm-meta">n = — · 7 days</span>
+        <span class="cc-mono" id="backend-meta">n = —</span>
     </header>
-    <div id="confusion-matrix" class="confusion-matrix"></div>
+    <div id="backend-stats" class="backend-stats"></div>
 </section>
 {% endblock %}
 

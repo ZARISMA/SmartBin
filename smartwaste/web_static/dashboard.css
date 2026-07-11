@@ -793,9 +793,11 @@
 }
 .kpi-delta {
     font-size: 13px;
-    color: var(--sb-success);
+    color: var(--sb-stone);
     font-weight: 700;
 }
+.kpi-delta.pos { color: var(--sb-success); }
+.kpi-delta.neg { color: var(--sb-error); }
 .kpi-note {
     font-size: 12px;
     color: var(--sb-stone);
@@ -926,6 +928,22 @@
     background: var(--sb-forest);
     border-radius: 999px;
 }
+
+/* ── LLM backend mix (analytics) ─────────────────────────────────────── */
+.backend-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.backend-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 60px 90px;
+    gap: 12px;
+    align-items: center;
+}
+.backend-name { font-weight: 700; color: var(--sb-ink); }
+.backend-count { text-align: right; color: var(--sb-ink); }
+.backend-conf { text-align: right; }
 
 .recent-table {
     display: flex;
