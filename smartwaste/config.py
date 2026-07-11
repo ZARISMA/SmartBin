@@ -51,6 +51,8 @@ HEARTBEAT_INTERVAL = settings.heartbeat_interval
 # ── Classification ─────────────────────────────────────────────────────────────
 MODEL_NAME = settings.model_name
 VALID_CLASSES = ["Plastic", "Glass", "Paper", "Organic", "Aluminum", "Other", "Empty"]
+# Categories that count toward the recycling diversion rate ("Other"/"Empty" don't).
+RECYCLABLE_CLASSES = ["Plastic", "Glass", "Paper", "Organic", "Aluminum"]
 LOCATION = settings.location
 
 # ── LLM backend ────────────────────────────────────────────────────────────────

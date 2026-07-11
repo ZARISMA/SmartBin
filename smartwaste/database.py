@@ -135,6 +135,64 @@ def _ensure_init():
         _initialized = True
 
 
+def _filters_sql(
+    pg: bool,
+    *,
+    bin_id: str | None = None,
+    label: str | None = None,
+    q: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> tuple[str, dict]:
+    """Build a ' WHERE ...' clause + named params for the active backend.
+
+    pg=True uses %(name)s placeholders, otherwise :name.  since/until are
+    'YYYY-MM-DD HH:MM:SS' strings; the range is half-open [since, until) —
+    lexicographic comparison on the SQLite TEXT column matches chronological
+    order because the stored format is fixed-width.
+    """
+
+    def ph(name: str) -> str:
+        return f"%({name})s" if pg else f":{name}"
+
+    clauses: list[str] = []
+    params: dict = {}
+    if bin_id:
+        clauses.append(f"bin_id = {ph('bin_id')}")
+        params["bin_id"] = bin_id
+    if label:
+        clauses.append(f"label = {ph('label')}")
+        params["label"] = label
+    if q:
+        like = "ILIKE" if pg else "LIKE"
+        clauses.append(f"(description {like} {ph('q')} OR brand_product {like} {ph('q')})")
+        params["q"] = f"%{q}%"
+    if since:
+        clauses.append(f"timestamp >= {ph('since')}")
+        params["since"] = since
+    if until:
+        clauses.append(f"timestamp < {ph('until')}")
+        params["until"] = until
+    if not clauses:
+        return "", {}
+    return " WHERE " + " AND ".join(clauses), params
+
+
+def _fetch_rows(sql: str, params: dict | tuple = ()) -> list[tuple]:
+    """Run a SELECT on the active backend and return all rows (raises on error)."""
+    if _use_pg():
+        pool = _get_pg_pool()
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                return cur.fetchall()
+        finally:
+            pool.putconn(conn)
+    with sqlite3.connect(DB_FILE) as conn:
+        return conn.execute(sql, params).fetchall()
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -212,6 +270,15 @@ def init_db() -> None:
         os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
         with sqlite3.connect(DB_FILE) as conn:
             conn.execute(_SQLITE_CREATE)
+            # PG creates these in its DDL; legacy tables may lack the columns.
+            for ddl in (
+                "CREATE INDEX IF NOT EXISTS idx_waste_label ON waste_entries(label)",
+                "CREATE INDEX IF NOT EXISTS idx_waste_ts ON waste_entries(timestamp)",
+            ):
+                try:
+                    conn.execute(ddl)
+                except sqlite3.OperationalError:
+                    pass
         logger.info("SQLite database ready: %s", DB_FILE)
     _migrate_add_bin_id()
     _migrate_add_llm_fields()
@@ -266,49 +333,33 @@ def insert_entry(entry: dict, env: dict) -> int | None:
         return None
 
 
-def get_entries(limit: int = 100, offset: int = 0, bin_id: str | None = None) -> list[dict]:
-    """Return recent classification entries, newest first, optionally filtered by bin."""
+def get_entries(
+    limit: int = 100,
+    offset: int = 0,
+    bin_id: str | None = None,
+    label: str | None = None,
+    q: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> list[dict]:
+    """Return recent classification entries, newest first.
+
+    Optional filters: bin, exact label, q substring (description or brand),
+    and a half-open [since, until) timestamp range.
+    """
     _ensure_init()
     cols = list(_INSERT_COLS) + ["id"]
-    where = ""
+    pg = _use_pg()
+    where, params = _filters_sql(pg, bin_id=bin_id, label=label, q=q, since=since, until=until)
+    params.update({"limit": limit, "offset": offset})
+    tail = (
+        " ORDER BY id DESC LIMIT %(limit)s OFFSET %(offset)s"
+        if pg
+        else " ORDER BY id DESC LIMIT :limit OFFSET :offset"
+    )
+    sql = "SELECT " + ", ".join(cols) + f" FROM waste_entries{where}{tail}"
     try:
-        if _use_pg():
-            pool = _get_pg_pool()
-            conn = pool.getconn()
-            try:
-                params: list = []
-                if bin_id:
-                    where = " WHERE bin_id = %s"
-                    params = [bin_id, limit, offset]
-                else:
-                    params = [limit, offset]
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT "
-                        + ", ".join(cols)
-                        + f" FROM waste_entries{where} ORDER BY id DESC LIMIT %s OFFSET %s",
-                        params,
-                    )
-                    rows = cur.fetchall()
-                return [dict(zip(cols, r)) for r in rows]
-            finally:
-                pool.putconn(conn)
-        else:
-            with sqlite3.connect(DB_FILE) as conn:
-                conn.row_factory = sqlite3.Row
-                sql_params: tuple
-                if bin_id:
-                    where = " WHERE bin_id = ?"
-                    sql_params = (bin_id, limit, offset)
-                else:
-                    sql_params = (limit, offset)
-                cur = conn.execute(
-                    "SELECT "
-                    + ", ".join(cols)
-                    + f" FROM waste_entries{where} ORDER BY id DESC LIMIT ? OFFSET ?",
-                    sql_params,
-                )
-                return [dict(r) for r in cur.fetchall()]
+        return [dict(zip(cols, r)) for r in _fetch_rows(sql, params)]
     except Exception as e:
         logger.error("DB query failed: %s", e)
         return []
@@ -353,33 +404,21 @@ def get_label_counts(bin_id: str | None = None) -> dict[str, int]:
         return {}
 
 
-def get_entry_count(bin_id: str | None = None) -> int:
-    """Return total number of classification entries, optionally filtered by bin."""
+def get_entry_count(
+    bin_id: str | None = None,
+    label: str | None = None,
+    q: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> int:
+    """Return the number of classification entries matching the given filters."""
     _ensure_init()
-    where = ""
-    params: tuple | dict = ()
-    if bin_id:
-        if _use_pg():
-            where = " WHERE bin_id = %(bin_id)s"
-            params = {"bin_id": bin_id}
-        else:
-            where = " WHERE bin_id = :bin_id"
-            params = {"bin_id": bin_id}
+    where, params = _filters_sql(
+        _use_pg(), bin_id=bin_id, label=label, q=q, since=since, until=until
+    )
     try:
-        if _use_pg():
-            pool = _get_pg_pool()
-            conn = pool.getconn()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(f"SELECT COUNT(*) FROM waste_entries{where}", params)
-                    return int(cur.fetchone()[0])
-            finally:
-                pool.putconn(conn)
-        else:
-            with sqlite3.connect(DB_FILE) as conn:
-                return int(
-                    conn.execute(f"SELECT COUNT(*) FROM waste_entries{where}", params).fetchone()[0]
-                )
+        rows = _fetch_rows(f"SELECT COUNT(*) FROM waste_entries{where}", params)
+        return int(rows[0][0])
     except Exception as e:
         logger.error("DB query failed: %s", e)
         return 0
@@ -426,3 +465,116 @@ def get_active_bins() -> list[dict]:
     except Exception as e:
         logger.error("DB query failed: %s", e)
         return []
+
+
+# ── Date-range analytics queries ──────────────────────────────────────────────
+
+# granularity → (SQLite bucket expression, PG to_char format). The stored
+# 'YYYY-MM-DD HH:MM:SS' format makes string prefixes exact bucket keys.
+_BUCKET_SQL = {
+    "hour": ("substr(timestamp, 1, 13)", "YYYY-MM-DD HH24"),
+    "day": ("substr(timestamp, 1, 10)", "YYYY-MM-DD"),
+}
+
+
+def get_summary_in_range(since: str, until: str) -> dict:
+    """Return {'total': int, 'avg_confidence': float | None} for [since, until)."""
+    _ensure_init()
+    where, params = _filters_sql(_use_pg(), since=since, until=until)
+    try:
+        row = _fetch_rows(f"SELECT COUNT(*), AVG(confidence) FROM waste_entries{where}", params)[0]
+        return {
+            "total": int(row[0]),
+            "avg_confidence": float(row[1]) if row[1] is not None else None,
+        }
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return {"total": 0, "avg_confidence": None}
+
+
+def get_label_counts_in_range(since: str, until: str) -> dict[str, int]:
+    """Return {label: count} for entries in [since, until)."""
+    _ensure_init()
+    where, params = _filters_sql(_use_pg(), since=since, until=until)
+    try:
+        rows = _fetch_rows(f"SELECT label, COUNT(*) FROM waste_entries{where} GROUP BY label", params)
+        return {r[0]: int(r[1]) for r in rows}
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return {}
+
+
+def get_timeseries_in_range(since: str, until: str, granularity: str = "day") -> list[dict]:
+    """Return [{'bucket', 'label', 'count'}] for [since, until).
+
+    Bucket keys are 'YYYY-MM-DD' (day) or 'YYYY-MM-DD HH' (hour) on both
+    backends. granularity is whitelisted — it is interpolated into SQL.
+    """
+    if granularity not in _BUCKET_SQL:
+        raise ValueError(f"granularity must be one of {sorted(_BUCKET_SQL)}, got {granularity!r}")
+    _ensure_init()
+    pg = _use_pg()
+    sqlite_expr, pg_fmt = _BUCKET_SQL[granularity]
+    bucket = f"to_char(timestamp, '{pg_fmt}')" if pg else sqlite_expr
+    where, params = _filters_sql(pg, since=since, until=until)
+    sql = f"SELECT {bucket} AS bucket, label, COUNT(*) FROM waste_entries{where} GROUP BY bucket, label"
+    try:
+        return [
+            {"bucket": r[0], "label": r[1], "count": int(r[2])} for r in _fetch_rows(sql, params)
+        ]
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return []
+
+
+def get_bin_counts_in_range(since: str, until: str) -> dict[str, int]:
+    """Return {bin_id: count} for entries in [since, until)."""
+    _ensure_init()
+    where, params = _filters_sql(_use_pg(), since=since, until=until)
+    where += " AND bin_id IS NOT NULL" if where else " WHERE bin_id IS NOT NULL"
+    try:
+        rows = _fetch_rows(f"SELECT bin_id, COUNT(*) FROM waste_entries{where} GROUP BY bin_id", params)
+        return {r[0]: int(r[1]) for r in rows}
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return {}
+
+
+def get_backend_stats_in_range(since: str, until: str) -> list[dict]:
+    """Return [{'backend', 'count', 'avg_confidence'}] for [since, until).
+
+    Blank/NULL llm_backend values are folded into 'unknown'; busiest first.
+    """
+    _ensure_init()
+    where, params = _filters_sql(_use_pg(), since=since, until=until)
+    sql = (
+        "SELECT COALESCE(NULLIF(llm_backend, ''), 'unknown') AS backend,"
+        f" COUNT(*), AVG(confidence) FROM waste_entries{where}"
+        " GROUP BY backend ORDER BY COUNT(*) DESC"
+    )
+    try:
+        return [
+            {
+                "backend": r[0],
+                "count": int(r[1]),
+                "avg_confidence": float(r[2]) if r[2] is not None else None,
+            }
+            for r in _fetch_rows(sql, params)
+        ]
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return []
+
+
+def get_entry_by_id(entry_id: int) -> dict | None:
+    """Return one classification entry by primary key, or None."""
+    _ensure_init()
+    cols = list(_INSERT_COLS) + ["id"]
+    ph = "%(id)s" if _use_pg() else ":id"
+    sql = "SELECT " + ", ".join(cols) + f" FROM waste_entries WHERE id = {ph}"
+    try:
+        rows = _fetch_rows(sql, {"id": entry_id})
+        return dict(zip(cols, rows[0])) if rows else None
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return None

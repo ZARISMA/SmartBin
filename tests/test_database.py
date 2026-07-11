@@ -324,3 +324,149 @@ class TestLLMFieldsMigration:
         entry = db.get_entries()[0]
         assert "confidence" in entry
         assert "llm_backend" in entry
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Date-range analytics queries + entry filters
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _seed_range_data(db):
+    """Four entries across two days, mixed bins/backends/confidence."""
+    rows = [
+        ("Plastic", "2026-01-01 10:00:00", "bin-01", 0.9, "gemini", "A bottle", "Coca-Cola"),
+        ("Glass", "2026-01-01 11:30:00", "bin-01", None, "", "Green jar", ""),
+        ("Plastic", "2026-01-02 09:00:00", "bin-02", 0.7, "lmstudio", "Bag", "Jermuk wrap"),
+        ("Empty", "2026-01-02 12:00:00", "bin-02", 0.5, "gemini", "", ""),
+    ]
+    for label, ts, bin_id, conf, backend, desc, brand in rows:
+        e = _entry()
+        e.update(
+            {
+                "label": label,
+                "timestamp": ts,
+                "bin_id": bin_id,
+                "confidence": conf,
+                "llm_backend": backend,
+                "description": desc,
+                "brand_product": brand,
+            }
+        )
+        db.insert_entry(e, _env())
+
+
+class TestSummaryInRange:
+    def test_counts_and_averages_in_window(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        s = db.get_summary_in_range("2026-01-01 00:00:00", "2026-01-02 00:00:00")
+        assert s["total"] == 2
+        assert s["avg_confidence"] == pytest.approx(0.9)  # NULL confidence excluded
+
+    def test_range_is_half_open(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        # until == exact timestamp of the 09:00 entry → excluded
+        s = db.get_summary_in_range("2026-01-01 00:00:00", "2026-01-02 09:00:00")
+        assert s["total"] == 2
+
+    def test_empty_window(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        s = db.get_summary_in_range("2025-01-01 00:00:00", "2025-02-01 00:00:00")
+        assert s == {"total": 0, "avg_confidence": None}
+
+
+class TestLabelCountsInRange:
+    def test_scopes_to_window(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        counts = db.get_label_counts_in_range("2026-01-02 00:00:00", "2026-01-03 00:00:00")
+        assert counts == {"Plastic": 1, "Empty": 1}
+
+
+class TestTimeseriesInRange:
+    def test_day_buckets(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        rows = db.get_timeseries_in_range(
+            "2026-01-01 00:00:00", "2026-01-03 00:00:00", granularity="day"
+        )
+        assert {"bucket": "2026-01-01", "label": "Plastic", "count": 1} in rows
+        assert {"bucket": "2026-01-02", "label": "Empty", "count": 1} in rows
+
+    def test_hour_buckets(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        rows = db.get_timeseries_in_range(
+            "2026-01-01 00:00:00", "2026-01-02 00:00:00", granularity="hour"
+        )
+        buckets = {r["bucket"] for r in rows}
+        assert buckets == {"2026-01-01 10", "2026-01-01 11"}
+
+    def test_rejects_bad_granularity(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        with pytest.raises(ValueError):
+            db.get_timeseries_in_range("2026-01-01 00:00:00", "2026-01-02 00:00:00", "week")
+
+
+class TestBinCountsInRange:
+    def test_groups_by_bin(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        counts = db.get_bin_counts_in_range("2026-01-01 00:00:00", "2026-01-03 00:00:00")
+        assert counts == {"bin-01": 2, "bin-02": 2}
+
+
+class TestBackendStatsInRange:
+    def test_blank_backend_folds_to_unknown(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        stats = db.get_backend_stats_in_range("2026-01-01 00:00:00", "2026-01-03 00:00:00")
+        by_name = {s["backend"]: s for s in stats}
+        assert by_name["gemini"]["count"] == 2
+        assert by_name["gemini"]["avg_confidence"] == pytest.approx(0.7)
+        assert by_name["unknown"]["count"] == 1
+        assert by_name["unknown"]["avg_confidence"] is None
+
+
+class TestEntryFilters:
+    def test_label_filter(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        entries = db.get_entries(label="Plastic")
+        assert len(entries) == 2
+        assert all(e["label"] == "Plastic" for e in entries)
+
+    def test_q_matches_description_or_brand_case_insensitive(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        assert len(db.get_entries(q="bottle")) == 1  # description, lowercased
+        assert len(db.get_entries(q="jermuk")) == 1  # brand_product
+
+    def test_range_filter_on_entries(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        entries = db.get_entries(since="2026-01-02 00:00:00", until="2026-01-03 00:00:00")
+        assert len(entries) == 2
+
+    def test_combined_filters_and_count(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        assert db.get_entry_count(bin_id="bin-02", label="Plastic") == 1
+        assert db.get_entry_count(label="Plastic", q="bag") == 1
+        assert db.get_entry_count() == 4
+
+
+class TestGetEntryById:
+    def test_returns_row(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        _seed_range_data(db)
+        first = db.get_entries(limit=1, offset=3)[0]
+        row = db.get_entry_by_id(first["id"])
+        assert row is not None
+        assert row["label"] == first["label"]
+
+    def test_missing_id_returns_none(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        assert db.get_entry_by_id(999) is None
