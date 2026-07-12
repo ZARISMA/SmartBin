@@ -51,7 +51,7 @@ class TestIndex:
 
     def test_contains_title(self, client):
         r = client.get("/")
-        assert "SmartBin" in r.text and "Fleet Control" in r.text
+        assert "SmartBin" in r.text and "Devices" in r.text
 
 
 class TestApiState:

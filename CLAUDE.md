@@ -100,7 +100,7 @@ Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketin
 
 The authenticated admin UI is a multi-page **Control Center** built around a shared sidebar layout. All pages extend `smartwaste/web_templates/_cc_base.html`, which provides:
 
-- Left sidebar with SmartBin brand, nav (Fleet / Map / Analytics / Devices / Alerts / Classifications), server-health footer, signed-in operator chip, and a "Presentation site" link.
+- Left sidebar with SmartBin brand, nav (Devices / Map / Analytics / Alerts / Classifications), server-health footer, signed-in operator chip, and a "Presentation site" link.
 - Top bar with kicker + page title, plus page-specific actions injected via `{% block topbar_actions %}`.
 - Global toast host (`#toast-host`) and confirm-modal scaffolding (`#modal`) reused by all dashboard JS.
 
@@ -108,7 +108,7 @@ Routes (all require login; all redirect to `/login` otherwise):
 
 | Path | Template | JS | Purpose |
 |---|---|---|---|
-| `/` | `dashboard.html` | `dashboard.js` | Fleet Control (cards grid + filters) |
+| `/` | `dashboard.html` | `dashboard.js` | Devices (cards grid + filters) |
 | `/map` | `dashboard_map.html` | `dashboard_map.js` | Deployment map with Leaflet, legend, basemap switch, detail panel |
 | `/analytics` | `dashboard_analytics.html` | `dashboard_analytics.js` | KPI strip, charts, period switch, CSV export — all real data from `/api/analytics?period=24h\|7d\|30d\|90d\|ytd` |
 | `/alerts` | `dashboard_alerts.html` | `dashboard_alerts.js` | Camera-availability alerts from live heartbeats (`/api/alerts`: `camera_count` 0 → `NO_CAMERA` error, 1 → `SINGLE_CAMERA` warning; stale bins excluded) |
@@ -119,7 +119,7 @@ Routes (all require login; all redirect to `/login` otherwise):
 
 Each authenticated route passes `{ active, user }` into the base template so the sidebar highlights the current page and shows the logged-in operator.
 
-### Fleet Control page (`/`)
+### Devices page (`/`)
 
 Each online bin is rendered as a card with a live thumbnail (MJPEG proxied from the edge), status pill (`online` / `degraded` / `offline` / `stopped`), structured warnings, and these controls:
 
@@ -242,7 +242,7 @@ smartwaste/
   web.py             ← FastAPI web UI with auth, multi-bin dashboard, edge endpoints
   web_templates/         ← Jinja2 HTML templates
     _cc_base.html        ← Control Center shared layout (sidebar + topbar + modal/toast hosts)
-    dashboard.html       ← Fleet page  (`/`)  — bin cards, filters, stat strip
+    dashboard.html       ← Devices page (`/`) — bin cards, filters, stat strip
     dashboard_map.html   ← Map page    (`/map`) — Leaflet, legend, detail panel
     dashboard_analytics.html ← Analytics page (`/analytics`) — KPIs, charts, export
     dashboard_alerts.html    ← Alerts page (`/alerts`) — camera-availability alerts
@@ -253,7 +253,7 @@ smartwaste/
   web_static/            ← CSS/JS static files
     brand.css            ← brand design tokens (CSS variables)
     dashboard.css        ← Control Center styles (sidebar, cards, modals)
-    dashboard.js         ← Fleet page JS (polling, filters, commands)
+    dashboard.js         ← Devices page JS (polling, filters, commands)
     dashboard_map.js     ← Map page JS (Leaflet init, markers, basemap switch)
     dashboard_analytics.js ← Analytics page JS (charts, period switch, CSV)
     dashboard_alerts.js    ← Alerts page JS (5s polling, severity rows, badge)

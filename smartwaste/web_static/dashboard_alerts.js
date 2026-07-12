@@ -65,7 +65,7 @@
             list.innerHTML = `<div class="empty-state">
                 <h2>All clear</h2>
                 <p>Every reporting bin has healthy cameras. Bins without a recent heartbeat
-                   are not monitored here — see the Fleet page for offline detection.</p>
+                   are not monitored here — see the Devices page for offline detection.</p>
             </div>`;
             return;
         }

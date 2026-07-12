@@ -639,7 +639,7 @@ def dashboard(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"active": "fleet", "user": request.session.get("user", "admin")},
+        context={"active": "devices", "user": request.session.get("user", "admin")},
     )
 
 
