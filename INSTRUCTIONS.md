@@ -2,8 +2,8 @@
 
 Two machines:
 
-- **Laptop** (Windows, Docker Desktop) — runs the server (FastAPI + Postgres + Grafana) at `http://10.19.189.171:8000`.
-- **Raspberry Pi** (`hexabin@10.19.189.238`, pass `Hexa1234`) — edge device, reports to the laptop.
+- **Laptop** (Windows, Docker Desktop) — runs the server (FastAPI + Postgres + Grafana) at `http://10.172.194.199:8000`.
+- **Raspberry Pi** (`hexabin@10.172.194.238`, pass `Hexa1234`) — edge device, reports to the laptop.
 
 Shared edge API key: `smartbin-edge-2026-a7f3k9`. Admin login: `admin` / `password123`.
 
@@ -50,10 +50,10 @@ New-NetFirewallRule -DisplayName "SmartBin 8000" -Direction Inbound -LocalPort 8
 SSH in from the laptop (git-bash):
 
 ```bash
-plink -ssh -batch -pw "Hexa1234" -hostkey "SHA256:5kgrm96PgRykScn0pfXTzMBMmKP8spqr0T6pr/2aE9I" hexabin@10.19.189.238
+plink -ssh -batch -pw "Hexa1234" -hostkey "SHA256:5kgrm96PgRykScn0pfXTzMBMmKP8spqr0T6pr/2aE9I" hexabin@10.172.194.238
 ```
 
-Or use OpenSSH: `ssh hexabin@10.19.189.238` (password `Hexa1234`).
+Or use OpenSSH: `ssh hexabin@10.172.194.238` (password `Hexa1234`).
 
 ### 2a. With an OAK camera plugged in (normal operation)
 
@@ -76,7 +76,7 @@ docker compose -f docker-compose.edge.yml down 2>/dev/null
 cat > /tmp/hb.sh <<'EOF'
 #!/bin/bash
 while true; do
-  curl -s -o /dev/null -X POST http://10.19.189.171:8000/api/heartbeat \
+  curl -s -o /dev/null -X POST http://10.172.194.199:8000/api/heartbeat \
     -H "Authorization: Bearer smartbin-edge-2026-a7f3k9" \
     -H "Content-Type: application/json" \
     -d '{"bin_id":"bin-01","status":"online","camera_mode":"none","uptime_seconds":0}'
@@ -136,9 +136,9 @@ Expect `{"status":"ok","id":N,"result":{...,"backend":"lmstudio"|"gemini"},"comm
 |---|---|---|
 | `SMARTWASTE_EDGE_MODE` | `false` | `true` |
 | `SMARTWASTE_BIN_ID` | `server-01` | `bin-01` |
-| `SMARTWASTE_SERVER_URL` | — | `http://10.19.189.171:8000` |
+| `SMARTWASTE_SERVER_URL` | — | `http://10.172.194.199:8000` |
 | `SMARTWASTE_EDGE_API_KEY` | `smartbin-edge-2026-a7f3k9` | same |
 | `SMARTWASTE_CAMERA_MODE` | `none` (docker-compose.yml overrides) | `oak-native` with camera, `none` without |
 | `SMARTWASTE_DB_BACKEND` | `postgresql` (docker-compose.yml overrides) | n/a |
 
-Laptop IP `10.19.189.171` and Pi IP `10.19.189.238` are LAN addresses — re-check with `ipconfig` / `ip a` if either machine gets a new DHCP lease.
+Laptop IP `10.172.194.199` and Pi IP `10.172.194.238` are LAN addresses — re-check with `ipconfig` / `ip a` if either machine gets a new DHCP lease.
