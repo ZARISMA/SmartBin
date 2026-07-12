@@ -110,7 +110,9 @@ Routes (all require login; all redirect to `/login` otherwise):
 |---|---|---|---|
 | `/` | `dashboard.html` | `dashboard.js` | Fleet Control (cards grid + filters) |
 | `/map` | `dashboard_map.html` | `dashboard_map.js` | Deployment map with Leaflet, legend, basemap switch, detail panel |
-| `/analytics` | `dashboard_analytics.html` | `dashboard_analytics.js` | KPI strip, charts, period switch, CSV export |
+| `/analytics` | `dashboard_analytics.html` | `dashboard_analytics.js` | KPI strip, charts, period switch, CSV export — all real data from `/api/analytics?period=24h\|7d\|30d\|90d\|ytd` |
+| `/alerts` | `dashboard_alerts.html` | `dashboard_alerts.js` | Camera-availability alerts from live heartbeats (`/api/alerts`: `camera_count` 0 → `NO_CAMERA` error, 1 → `SINGLE_CAMERA` warning; stale bins excluded) |
+| `/classifications` | `dashboard_classifications.html` | `dashboard_classifications.js` | Browse classification records: bin/category/search filters, pagination (`/api/entries` + `/api/entries/count`), thumbnails + lightbox via authed `/api/entries/{id}/image` |
 | `/bin/{bin_id}` | `index.html` | — | Per-bin detail view (live stream, controls, stats) |
 | `/site` | `site.html` | `site.js` | Public marketing/presentation site |
 | `/login` | `login.html` | — | Authentication |
@@ -136,6 +138,7 @@ Warnings are structured (`code`, `severity`, `message`) and deduped by code in `
 
 - `brand.css` — design tokens (CSS variables for brand palette, typography, spacing); loaded first by `_cc_base.html`.
 - `dashboard.css` — Control Center layout, sidebar, cards, modals, toasts. (Supersedes the older `style.css`, which is kept for back-compat only.)
+- `cc_nav.js` — shared sidebar helper loaded by `_cc_base.html` on every page; polls `/api/alerts` and keeps the nav alerts badge (`#cc-alerts-badge`) current.
 - `sb-logo.svg` — SmartBin wordmark/logo.
 - `models/smartbin.glb` — 3D bin model used by the presentation site / hero. `web.py` registers `.glb` → `model/gltf-binary` and `.gltf` → `model/gltf+json` MIME types at import time so `StaticFiles` serves them with correct `Content-Type`.
 
@@ -213,6 +216,7 @@ mainauto.py          ← auto gate mode (presence-gated classifications)
 mainoak.py           ← OAK-D Native mode (depth + IMU + NN sensor fusion)
 smartwaste/
   actuator.py        ← pluggable bin-module actuation (log now, GPIO drops in later)
+  analytics.py       ← period windows + /api/analytics payload assembly (pure, unit-tested)
   app.py             ← shared OAK-camera run loop
   camera.py          ← OAK camera pipeline helper (single device)
   cameraOak.py       ← dual OAK pipeline setup and frame cropping
@@ -241,6 +245,8 @@ smartwaste/
     dashboard.html       ← Fleet page  (`/`)  — bin cards, filters, stat strip
     dashboard_map.html   ← Map page    (`/map`) — Leaflet, legend, detail panel
     dashboard_analytics.html ← Analytics page (`/analytics`) — KPIs, charts, export
+    dashboard_alerts.html    ← Alerts page (`/alerts`) — camera-availability alerts
+    dashboard_classifications.html ← Classifications page (`/classifications`) — record browser
     index.html           ← per-bin detail view (`/bin/{id}`)
     login.html           ← authentication page
     site.html            ← presentation/marketing website (public)
@@ -250,6 +256,9 @@ smartwaste/
     dashboard.js         ← Fleet page JS (polling, filters, commands)
     dashboard_map.js     ← Map page JS (Leaflet init, markers, basemap switch)
     dashboard_analytics.js ← Analytics page JS (charts, period switch, CSV)
+    dashboard_alerts.js    ← Alerts page JS (5s polling, severity rows, badge)
+    dashboard_classifications.js ← Classifications page JS (filters, pagination, lightbox)
+    cc_nav.js            ← shared sidebar alerts badge (all Control Center pages)
     site.css / site.js   ← presentation site assets
     sb-logo.svg          ← brand logo
     models/smartbin.glb  ← 3D bin model (served via StaticFiles)
