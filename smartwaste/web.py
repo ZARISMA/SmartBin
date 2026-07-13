@@ -72,6 +72,7 @@ from .config import (
     OAK_DISPLAY_W,
     OAK_EMPTY_CONFIRM_N,
     OAK_VOTES_NEEDED,
+    RECYCLABLE_CLASSES,
     SECRET_KEY,
     VALID_CLASSES,
     WEB_HOST,
@@ -1038,6 +1039,55 @@ def api_stats(request: Request, bin_id: str | None = None):
     return {
         "total": get_entry_count(bin_id=bin_id),
         "by_category": get_label_counts(bin_id=bin_id),
+    }
+
+
+@app.get("/api/public/stats")
+def api_public_stats():
+    """Fleet-wide aggregate for the public presentation site — no per-bin data."""
+    by_category = get_label_counts()
+    sorted_total = sum(n for label, n in by_category.items() if label != "Empty")
+    recyclable = sum(by_category.get(label, 0) for label in RECYCLABLE_CLASSES)
+    midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    bins = _get_bin_status()
+
+    latest = None
+    rows = get_entries(limit=1)
+    if rows:
+        row = rows[0]
+        item = (
+            row.get("brand_product") or row.get("description") or row.get("label") or ""
+        ).strip()
+        if len(item) > 60:
+            item = item[:59] + "…"
+        # SQLite stores timestamps as TEXT; PostgreSQL returns aware datetimes.
+        ago_seconds = None
+        seen = row.get("timestamp")
+        if isinstance(seen, str):
+            try:
+                seen = datetime.strptime(seen, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                seen = None
+        if isinstance(seen, datetime):
+            now = datetime.now(seen.tzinfo) if seen.tzinfo else datetime.now()
+            ago_seconds = max(0, int((now - seen).total_seconds()))
+        latest = {
+            "category": row.get("label"),
+            "item": item,
+            "confidence": row.get("confidence"),
+            "ago_seconds": ago_seconds,
+        }
+
+    return {
+        "total": get_entry_count(),
+        "today": get_entry_count(since=midnight.strftime("%Y-%m-%d %H:%M:%S")),
+        "by_category": by_category,
+        "recyclable_share": (recyclable / sorted_total) if sorted_total else None,
+        "bins": {
+            "online": sum(1 for b in bins if b["status"] != "offline"),
+            "total": len(bins),
+        },
+        "latest": latest,
     }
 
 

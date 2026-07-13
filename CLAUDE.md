@@ -85,14 +85,14 @@ Full-stack and edge modes require Linux host with cameras on USB.
 
 Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketing/presentation site showcasing the SmartBin product.
 
-**Sections:** Hero, About, Modules (6 waste categories), Live Statistics (from `/api/stats`), Deployment Map (Leaflet/OpenStreetMap, 8 Yerevan landmarks), Media/Video (placeholder for 3D renders and real-life footage), Contact/Footer.
+**Sections:** Hero, About, Modules (6 waste categories), Live Statistics (from `/api/public/stats` — unauthenticated fleet-wide aggregate `{total, today, by_category, recyclable_share, bins: {online, total}, latest}`, polled every 5 s; the admin `/api/stats` stays auth-gated), Deployment Map (Leaflet/OpenStreetMap, 8 Yerevan landmarks), Media/Video (interactive 3D model; footage/demo marked "Coming soon"), Contact/Footer. All numbers on the site are real (DB + live heartbeats) — unmeasured metrics (accuracy benchmark, CO₂, mean latency) say "Coming soon" instead of placeholder values.
 
 **Files:**
 - `smartwaste/web_templates/site.html` — Jinja2 template (single-page scrolling)
 - `smartwaste/web_static/site.css` — Dedicated glassmorphism dark theme, responsive (768px/1024px breakpoints)
 - `smartwaste/web_static/site.js` — Stats fetching, Leaflet map init, scroll animations, animated counters
 
-**External CDN deps:** Leaflet 1.9.4 (map tiles via CARTO dark basemap), Google Fonts Inter.
+**External CDN deps:** Leaflet 1.9.4 (map tiles via CARTO dark basemap), Google Fonts (Manrope + Chakra Petch + JetBrains Mono).
 
 **Contact placeholders:** Phone `+374 12 345 678`, email `info@smartbin.am` — update in `site.html` footer.
 
@@ -142,7 +142,7 @@ Warnings are structured (`code`, `severity`, `message`) and deduped by code in `
 - `sb-logo.svg` — SmartBin wordmark/logo.
 - `models/smartbin.glb` — 3D bin model used by the presentation site / hero. `web.py` registers `.glb` → `model/gltf-binary` and `.gltf` → `model/gltf+json` MIME types at import time so `StaticFiles` serves them with correct `Content-Type`.
 
-**External CDN deps (admin):** Manrope + Instrument Serif + JetBrains Mono (Google Fonts), Leaflet 1.9.4 (on `/map`).
+**External CDN deps (admin):** Manrope + Chakra Petch + JetBrains Mono (Google Fonts), Leaflet 1.9.4 (on `/map`).
 
 ## Database Backend
 

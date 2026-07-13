@@ -278,12 +278,11 @@
 }
 .stat-num {
     font-size: 36px;
-    font-weight: 700;
     color: var(--sb-ink);
     margin-top: 4px;
     letter-spacing: -0.02em;
     font-family: var(--sb-font-display);
-    font-weight: 400;
+    font-weight: 500;
     line-height: 1;
 }
 .stat-sub {
@@ -350,8 +349,8 @@
 }
 .empty-state h2 {
     font-family: var(--sb-font-display);
-    font-size: 32px;
-    font-weight: 400;
+    font-size: 30px;
+    font-weight: 500;
     color: var(--sb-ink);
     margin: 0 0 8px;
 }
@@ -786,7 +785,7 @@
 .kpi-num-big {
     font-family: var(--sb-font-display);
     font-size: 42px;
-    font-weight: 400;
+    font-weight: 500;
     color: var(--sb-ink);
     letter-spacing: -0.02em;
     line-height: 1;

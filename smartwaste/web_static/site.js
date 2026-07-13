@@ -59,30 +59,23 @@
 
     // ── Stats ─────────────────────────────────────────────────────────
     async function fetchStats() {
-        // /api/stats requires auth — fall back to a static "preview" demo when 401
+        // Public aggregate endpoint (no auth) — fall back to the preview demo on failure
         try {
-            const res = await fetch('/api/stats', { cache: 'no-store' });
-            if (res.status === 401) return null;
+            const res = await fetch('/api/public/stats', { cache: 'no-store' });
             if (!res.ok) return null;
             return await res.json();
         } catch (e) { return null; }
-    }
-
-    function previewStats() {
-        return {
-            total: 1408,
-            by_category: {
-                Plastic: 482, Paper: 396, Glass: 211,
-                Organic: 178, Aluminum: 94, Other: 47,
-            },
-        };
     }
 
     function renderBars(stats) {
         const host = document.getElementById('stats-bars');
         if (!host) return;
         const order = ['Plastic', 'Paper', 'Glass', 'Organic', 'Aluminum', 'Other'];
-        const data = order.map((name) => ({ name, value: stats.by_category[name] || 0 }));
+        const data = order.map((name) => ({ name, value: (stats.by_category || {})[name] || 0 }));
+        if (!data.some((d) => d.value > 0)) {
+            host.innerHTML = '<p class="stats-zero-state">No classifications recorded yet.</p>';
+            return;
+        }
         const max = Math.max(1, ...data.map((d) => d.value));
         const total = data.reduce((a, d) => a + d.value, 0) || 1;
 
@@ -115,12 +108,88 @@
         requestAnimationFrame(tick);
     }
 
-    async function bootStats() {
-        let stats = await fetchStats();
-        if (!stats || !stats.total) stats = previewStats();
+    function timeAgo(seconds) {
+        if (seconds == null) return '';
+        if (seconds < 60) return 'just now';
+        if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+        if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+        return Math.floor(seconds / 86400) + 'd ago';
+    }
+
+    function renderHero(stats) {
+        const badge = document.getElementById('hero-badge-text');
+        if (badge && stats.bins && stats.bins.total > 0) {
+            const b = stats.bins;
+            badge.textContent = `Live · ${b.online} of ${b.total} bin${b.total === 1 ? '' : 's'} online`;
+        }
+        const today = document.getElementById('hero-today');
+        if (today && typeof stats.today === 'number') {
+            today.textContent = `${stats.today.toLocaleString()} items sorted`;
+        }
+        const chip = document.getElementById('chip-classify');
+        if (chip && stats.latest && stats.latest.category) {
+            const l = stats.latest;
+            const swatch = document.getElementById('chip-classify-swatch');
+            swatch.textContent = l.category.slice(0, 2).toUpperCase();
+            swatch.style.background = COLORS[l.category] || '#E0E0E0';
+            swatch.style.color = LIGHT_TEXT.has(l.category) ? '#fff' : '';
+            document.getElementById('chip-classify-title').textContent = l.item || l.category;
+            const parts = [];
+            if (typeof l.confidence === 'number') {
+                parts.push(`${Math.round(l.confidence * 100)}% confidence`);
+            }
+            const ago = timeAgo(l.ago_seconds);
+            if (ago) parts.push(ago);
+            document.getElementById('chip-classify-sub').textContent =
+                parts.join(' · ') || l.category;
+            chip.style.display = '';
+        }
+    }
+
+    function renderKpis(stats) {
+        const bins = document.getElementById('stats-active-bins');
+        if (bins && stats.bins) bins.textContent = `${stats.bins.online} / ${stats.bins.total}`;
+        const rec = document.getElementById('stats-recyclable');
+        if (rec) {
+            rec.textContent = stats.recyclable_share == null
+                ? '—'
+                : Math.round(stats.recyclable_share * 100) + '%';
+        }
+    }
+
+    async function refreshStats() {
+        const stats = await fetchStats();
+        if (!stats) {
+            const host = document.getElementById('stats-bars');
+            if (host) host.innerHTML = '<p class="stats-zero-state">Live statistics are unavailable right now.</p>';
+            return;
+        }
         renderBars(stats);
+        renderHero(stats);
+        renderKpis(stats);
         const totalEl = document.getElementById('stats-total');
-        if (totalEl) animateNumber(totalEl, stats.total);
+        if (totalEl) animateNumber(totalEl, stats.total || 0);
+    }
+
+    function bootStats() {
+        refreshStats();
+        setInterval(refreshStats, 5000); // section copy promises 5-second updates
+    }
+
+    // ── 3D model viewer ───────────────────────────────────────────────
+    function initModelViewer() {
+        const mv = document.querySelector('model-viewer');
+        if (!mv) return;
+        // If the model fails to load/decode, degrade to the static poster
+        // instead of leaving a broken canvas in the card.
+        mv.addEventListener('error', () => {
+            const fallback = document.createElement('div');
+            fallback.className = 'model-poster';
+            fallback.innerHTML =
+                '<div class="media-stripes"></div>' +
+                '<div class="model-poster-label">3D preview unavailable</div>';
+            mv.replaceWith(fallback);
+        }, { once: true });
     }
 
     // ── Reveal-on-scroll polish (no-op when reduced motion) ──────────
@@ -142,6 +211,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         initMap();
         bootStats();
+        initModelViewer();
         initReveal();
     });
 })();

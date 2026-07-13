@@ -97,6 +97,27 @@ class TestApiStats:
         assert "total" in data
         assert "by_category" in data
 
+    def test_anon_rejected(self, anon_client):
+        assert anon_client.get("/api/stats").status_code == 401
+
+
+class TestApiPublicStats:
+    def test_anon_returns_aggregate(self, anon_client):
+        r = anon_client.get("/api/public/stats")
+        assert r.status_code == 200
+        data = r.json()
+        assert "total" in data
+        assert "by_category" in data
+        assert isinstance(data["today"], int)
+        assert set(data["bins"]) == {"online", "total"}
+        assert "recyclable_share" in data
+        assert "latest" in data
+
+    def test_latest_shape_when_present(self, anon_client):
+        data = anon_client.get("/api/public/stats").json()
+        if data["latest"] is not None:
+            assert {"category", "item", "confidence", "ago_seconds"} <= set(data["latest"])
+
 
 class TestApiAnalytics:
     def test_returns_full_payload(self, client):

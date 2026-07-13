@@ -1,5 +1,5 @@
 /* SmartBin marketing site — editorial biophilic
- * Off-White base, Forest Green ink, Instrument Serif display + Manrope UI + JetBrains Mono data.
+ * Off-White base, Forest Green ink, Chakra Petch display + Manrope UI + JetBrains Mono data.
  */
 
 .site-body {
@@ -25,11 +25,11 @@
 
 .display {
     font-family: var(--sb-font-display);
-    font-size: clamp(40px, 6vw, 64px);
-    font-weight: 400;
+    font-size: clamp(38px, 5.5vw, 58px);
+    font-weight: 500;
     color: var(--sb-ink);
-    letter-spacing: -0.03em;
-    line-height: 1.05;
+    letter-spacing: -0.02em;
+    line-height: 1.08;
     margin: 20px 0 0;
 }
 .display em {
@@ -61,7 +61,8 @@
 .site-nav {
     position: sticky;
     top: 0;
-    z-index: 50;
+    /* Above Leaflet's internal panes/controls (they go up to z-index 1000) */
+    z-index: 1100;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -174,12 +175,12 @@
 }
 .hero-title {
     font-family: var(--sb-font-display);
-    font-size: clamp(56px, 8vw, 96px);
-    line-height: 1.02;
-    letter-spacing: -0.04em;
+    font-size: clamp(44px, 7vw, 84px);
+    line-height: 1.06;
+    letter-spacing: -0.02em;
     margin: 32px 0 28px;
     color: var(--sb-ink);
-    font-weight: 400;
+    font-weight: 500;
 }
 .hero-title em { font-style: italic; color: var(--sb-forest); }
 .hero-underline { border-bottom: 3px solid var(--sb-taupe); }
@@ -223,9 +224,9 @@
 .hero-stat .n {
     font-family: var(--sb-font-display);
     font-size: 38px;
-    font-weight: 400;
+    font-weight: 500;
     color: var(--sb-ink);
-    letter-spacing: -0.03em;
+    letter-spacing: -0.01em;
 }
 .hero-stat .l {
     font-size: 11px;
@@ -443,9 +444,19 @@
 .cell-num {
     font-family: var(--sb-font-display);
     font-size: 36px;
+    font-weight: 500;
     color: var(--sb-ink);
     margin-top: 6px;
     letter-spacing: -0.02em;
+}
+.cell-num.cell-num-soon {
+    font-family: var(--sb-font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.55;
+    margin-top: 14px;
 }
 .cell-note {
     font-size: 13px;
@@ -516,8 +527,8 @@
 .module-chip-gradient { background: linear-gradient(135deg, #9370DB, #1E90FF); }
 .module-name {
     font-family: var(--sb-font-display);
-    font-size: 36px;
-    font-weight: 400;
+    font-size: 34px;
+    font-weight: 500;
     color: var(--sb-ink);
     letter-spacing: -0.02em;
     margin: 0 0 4px;
@@ -585,7 +596,7 @@
     font-size: 22px;
     font-family: var(--sb-font-display);
     color: var(--sb-ink);
-    font-weight: 400;
+    font-weight: 600;
 }
 .stat-bar-num.light { color: var(--sb-white); }
 .stat-bar-label {
@@ -610,10 +621,19 @@
 .kpi-num {
     font-family: var(--sb-font-display);
     font-size: 40px;
-    font-weight: 400;
+    font-weight: 500;
     letter-spacing: -0.02em;
     color: var(--sb-white);
     margin-top: 4px;
+}
+.kpi-num.kpi-soon {
+    font-family: var(--sb-font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    margin-top: 16px;
 }
 
 #stats-total {
@@ -640,6 +660,8 @@
 }
 .map-wrap {
     position: relative;
+    /* Stacking context so Leaflet's z-indexed panes stay inside the wrapper */
+    z-index: 0;
     height: 540px;
     border-radius: 24px;
     overflow: hidden;
@@ -724,19 +746,21 @@
     border-radius: 50%;
     background: var(--sb-white);
 }
-.media-play {
+.media-coming-soon {
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    width: 64px; height: 64px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.18);
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
     border: 1.5px solid rgba(255, 255, 255, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
     color: var(--sb-white);
-    font-size: 18px;
+    font-family: var(--sb-font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
 .media-foot {
     position: absolute;
@@ -750,8 +774,8 @@
 }
 .media-title {
     font-family: var(--sb-font-display);
-    font-size: 32px;
-    font-weight: 400;
+    font-size: 30px;
+    font-weight: 500;
     letter-spacing: -0.02em;
     margin-top: 8px;
 }
@@ -826,8 +850,8 @@
 .footer-logo svg { width: 100%; height: 100%; }
 .footer-name {
     font-family: var(--sb-font-display);
-    font-size: 48px;
-    font-weight: 400;
+    font-size: 44px;
+    font-weight: 500;
 }
 .footer-h {
     font-size: 11px;
@@ -889,6 +913,7 @@
     .nav-links { display: none; }
     .container { padding: 0 18px; }
     .hero { padding: 48px 18px 72px; }
+    .hero-actions { flex-wrap: wrap; }
     .hero-stats { grid-template-columns: repeat(2, 1fr); gap: 24px; }
     .hero-visual { height: 460px; }
     .modules-grid { grid-template-columns: 1fr; }

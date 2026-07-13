@@ -212,7 +212,7 @@
         host.innerHTML = `
             <svg viewBox="0 0 220 220" width="220" height="220">${slicesSvg}
                 <text x="110" y="105" text-anchor="middle" font-size="11" fill="#8C8C8C" font-family="Manrope" font-weight="700" letter-spacing="2">TOTAL</text>
-                <text x="110" y="130" text-anchor="middle" font-size="28" fill="#1d2722" font-family="Instrument Serif">${total.toLocaleString()}</text>
+                <text x="110" y="130" text-anchor="middle" font-size="28" fill="#1d2722" font-family="Chakra Petch" font-weight="600">${total.toLocaleString()}</text>
             </svg>
             <div class="donut-legend">${legend}</div>
         `;
