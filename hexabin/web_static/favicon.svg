@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 195 218" fill="none" role="img" aria-label="HexaBin">
+    <style>
+        path { stroke: #2D5A42; }
+        @media (prefers-color-scheme: dark) { path { stroke: #FFFFFF; } }
+    </style>
+    <defs>
+        <mask id="hexabin-gaps" maskUnits="userSpaceOnUse" x="0" y="0" width="195" height="218">
+            <rect x="0" y="0" width="195" height="218" fill="white"></rect>
+            <rect x="85.6" y="-8" width="20" height="42" fill="black"></rect>
+            <rect x="-9.2" y="140.7" width="45" height="19.2" fill="black" transform="rotate(-30 13.3 150.3)"></rect>
+        </mask>
+    </defs>
+    <path d="M 93 10.37 A 7 7 0 0 1 100 10.37 L 178 55.4 A 7 7 0 0 1 181.5 61.47 L 181.5 151.53 A 7 7 0 0 1 178 157.6 L 100 202.63 A 7 7 0 0 1 93 202.63 L 15 157.6 A 7 7 0 0 1 11.5 151.53 L 11.5 61.47 A 7 7 0 0 1 15 55.4 Z" fill="none" stroke-width="11" mask="url(#hexabin-gaps)"></path>
+</svg>

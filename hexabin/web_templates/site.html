@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <title>HexaBin — AI-Powered Waste Classification for Smart Cities</title>
+    <meta name="description" content="HexaBin pairs dual OAK-D depth cameras with Google Gemini vision to classify urban waste in real time — turning sorting into a civic ritual.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Chakra+Petch:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="/static/brand.css">
+    <link rel="stylesheet" href="/static/site.css">
+    <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+</head>
+<body class="site-body">
+
+<!-- ── Nav ──────────────────────────────────────────────────────────── -->
+<nav class="site-nav">
+    <a href="#hero" class="nav-brand">
+        <span class="nav-logo" aria-hidden="true">
+            <svg viewBox="0 0 195 218" fill="none">
+                <defs>
+                    <mask id="hx-nav" maskUnits="userSpaceOnUse" x="0" y="0" width="195" height="218">
+                        <rect x="0" y="0" width="195" height="218" fill="white"></rect>
+                        <rect x="85.6" y="-8" width="20" height="42" fill="black"></rect>
+                        <rect x="-9.2" y="140.7" width="45" height="19.2" fill="black" transform="rotate(-30 13.3 150.3)"></rect>
+                    </mask>
+                </defs>
+                <path d="M 93 10.37 A 7 7 0 0 1 100 10.37 L 178 55.4 A 7 7 0 0 1 181.5 61.47 L 181.5 151.53 A 7 7 0 0 1 178 157.6 L 100 202.63 A 7 7 0 0 1 93 202.63 L 15 157.6 A 7 7 0 0 1 11.5 151.53 L 11.5 61.47 A 7 7 0 0 1 15 55.4 Z" fill="none" stroke="currentColor" stroke-width="11" mask="url(#hx-nav)"></path>
+            </svg>
+        </span>
+        <span class="nav-title">HexaBin</span>
+        <span class="nav-badge">v1.0 · YEREVAN</span>
+    </a>
+    <ul class="nav-links">
+        <li><a href="#about">About</a></li>
+        <li><a href="#modules">Modules</a></li>
+        <li><a href="#statistics">Statistics</a></li>
+        <li><a href="#map">Map</a></li>
+        <li><a href="#media">Media</a></li>
+    </ul>
+    <div class="nav-cta">
+        <a href="/login" class="nav-signin">Sign in</a>
+        <a href="/" class="sb-btn sb-btn-primary nav-open">Open dashboard →</a>
+    </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────── -->
+<section class="hero" id="hero">
+    <div class="hero-grid-lines" aria-hidden="true"></div>
+    <div class="hero-wrap">
+        <div class="hero-copy">
+            <div class="hero-badge">
+                <span class="hero-badge-dot"></span>
+                <span id="hero-badge-text">Live · Yerevan pilot</span>
+            </div>
+            <h1 class="hero-title">
+                Waste, <em>recognised</em>.<br>
+                Sorted in <span class="hero-underline">under two seconds</span>.
+            </h1>
+            <p class="hero-lede">
+                HexaBin pairs dual OAK-D depth cameras with Google Gemini vision to classify urban waste into seven categories in real time — turning the act of sorting into a high-tech cultural ritual.
+            </p>
+            <div class="hero-actions">
+                <a href="#about" class="sb-btn sb-btn-primary hero-cta">Discover the system <span aria-hidden="true">→</span></a>
+                <a href="#media" class="hero-secondary">
+                    <span class="play-dot" aria-hidden="true">▶</span>
+                    See it in motion · 3D
+                </a>
+            </div>
+            <div class="hero-stats">
+                <div class="hero-stat"><div class="n">7</div><div class="l">AI categories</div></div>
+                <div class="hero-stat"><div class="n">2</div><div class="l">OAK-D cameras</div></div>
+                <div class="hero-stat"><div class="n">3</div><div class="l">AI backends</div></div>
+                <div class="hero-stat"><div class="n">24/7</div><div class="l">Always on</div></div>
+            </div>
+        </div>
+
+        <div class="hero-visual" aria-hidden="true">
+            <div class="halo"></div>
+            <div class="watermark">
+                <svg viewBox="0 0 195 218" fill="none">
+                    <defs>
+                        <mask id="hx-watermark" maskUnits="userSpaceOnUse" x="0" y="0" width="195" height="218">
+                            <rect x="0" y="0" width="195" height="218" fill="white"></rect>
+                            <rect x="85.6" y="-8" width="20" height="42" fill="black"></rect>
+                            <rect x="-9.2" y="140.7" width="45" height="19.2" fill="black" transform="rotate(-30 13.3 150.3)"></rect>
+                        </mask>
+                    </defs>
+                    <path d="M 93 10.37 A 7 7 0 0 1 100 10.37 L 178 55.4 A 7 7 0 0 1 181.5 61.47 L 181.5 151.53 A 7 7 0 0 1 178 157.6 L 100 202.63 A 7 7 0 0 1 93 202.63 L 15 157.6 A 7 7 0 0 1 11.5 151.53 L 11.5 61.47 A 7 7 0 0 1 15 55.4 Z" fill="none" stroke="currentColor" stroke-width="11" mask="url(#hx-watermark)"></path>
+                </svg>
+            </div>
+
+            <div class="bin-mock">
+                <div class="bin-mock-head">
+                    <span class="bin-mock-id">
+                        <span class="logo-tiny">
+                            <svg viewBox="0 0 195 218" fill="none">
+                                <defs>
+                                    <mask id="hx-tiny" maskUnits="userSpaceOnUse" x="0" y="0" width="195" height="218">
+                                        <rect x="0" y="0" width="195" height="218" fill="white"></rect>
+                                        <rect x="85.6" y="-8" width="20" height="42" fill="black"></rect>
+                                        <rect x="-9.2" y="140.7" width="45" height="19.2" fill="black" transform="rotate(-30 13.3 150.3)"></rect>
+                                    </mask>
+                                </defs>
+                                <path d="M 93 10.37 A 7 7 0 0 1 100 10.37 L 178 55.4 A 7 7 0 0 1 181.5 61.47 L 181.5 151.53 A 7 7 0 0 1 178 157.6 L 100 202.63 A 7 7 0 0 1 93 202.63 L 15 157.6 A 7 7 0 0 1 11.5 151.53 L 11.5 61.47 A 7 7 0 0 1 15 55.4 Z" fill="none" stroke="currentColor" stroke-width="11" mask="url(#hx-tiny)"></path>
+                            </svg>
+                        </span>
+                        BIN-04
+                    </span>
+                    <span class="bin-mock-status">
+                        <span class="bin-mock-dot"></span> ONLINE
+                    </span>
+                </div>
+                <div class="bin-mock-slats">
+                    <div class="slat" data-fill="5" style="background:#1E4D2B; color:#fff;"><span>ORGANIC</span><span class="bars b5"></span></div>
+                    <div class="slat" data-fill="4" style="background:#D2B48C;"><span>PAPER</span><span class="bars b4"></span></div>
+                    <div class="slat" data-fill="3" style="background:#87CEEB;"><span>PLASTIC</span><span class="bars b3"></span></div>
+                    <div class="slat" data-fill="2" style="background:#40E0D0;"><span>GLASS</span><span class="bars b2"></span></div>
+                    <div class="slat" data-fill="1" style="background:#A9A9A9;"><span>ALUMINUM</span><span class="bars b1"></span></div>
+                    <div class="slat" data-fill="0" style="background:#8C8C8C;"><span>EMPTY</span><span class="bars b0"></span></div>
+                </div>
+                <div class="bin-mock-coords">
+                    <span>40.1872°N</span>
+                    <span>44.5152°E</span>
+                </div>
+            </div>
+
+            <div class="float-chip float-chip-classify" id="chip-classify" style="display:none;">
+                <div class="chip-swatch" id="chip-classify-swatch">—</div>
+                <div>
+                    <div class="chip-kicker">LATEST CLASSIFICATION</div>
+                    <div class="chip-title" id="chip-classify-title">—</div>
+                    <div class="chip-sub" id="chip-classify-sub">—</div>
+                </div>
+            </div>
+            <div class="float-chip float-chip-today">
+                <div class="chip-kicker">TODAY</div>
+                <div class="chip-big" id="hero-today">— items sorted</div>
+                <div class="chip-bars">
+                    <span style="width:30px; background:#1E4D2B;"></span>
+                    <span style="width:22px; background:#D2B48C;"></span>
+                    <span style="width:28px; background:#87CEEB;"></span>
+                    <span style="width:18px; background:#40E0D0;"></span>
+                    <span style="width:12px; background:#A9A9A9;"></span>
+                    <span style="width:8px;  background:#9370DB;"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── About ────────────────────────────────────────────────────────── -->
+<section class="section section-light" id="about">
+    <div class="container about-grid">
+        <div class="about-headline">
+            <div class="kicker">§ 01 · The project</div>
+            <h2 class="display">
+                Living<br>landmarks<br><em>for the smart city.</em>
+            </h2>
+        </div>
+        <div class="about-body">
+            <p class="lede">HexaBin is a revolutionary urban waste system that fuses IoT-driven Smart City technology with biophilic, nature-inspired design — turning a mundane chore into a civic ritual.</p>
+            <p>Deploying first in <strong>Yerevan, Armenia</strong>, every unit uses dual OAK-D depth cameras and a Gemini-powered vision model to recognise items into six material streams plus an "Empty" state — with brand-aware accuracy on Armenian products like Jermuk and BOOM.</p>
+            <p>Our bins act as <em>visual landmarks</em> in the urban fabric — using colour, material and small rewards to signal that the user is participating in a global movement of sustainability. We bridge the gap for citizens currently unmotivated to sort.</p>
+            <div class="about-stat-grid">
+                <div class="about-stat-cell">
+                    <div class="cell-key">Classification accuracy</div>
+                    <div class="cell-num cell-num-soon">Coming soon</div>
+                    <div class="cell-note">Armenian product benchmark in progress</div>
+                </div>
+                <div class="about-stat-cell">
+                    <div class="cell-key">Heartbeat interval</div>
+                    <div class="cell-num">30s</div>
+                    <div class="cell-note">edge → server</div>
+                </div>
+                <div class="about-stat-cell">
+                    <div class="cell-key">Sensor stack</div>
+                    <div class="cell-num">Depth + IMU + NN</div>
+                    <div class="cell-note">OAK-D native voting</div>
+                </div>
+                <div class="about-stat-cell">
+                    <div class="cell-key">Edge runtime</div>
+                    <div class="cell-num">Raspberry Pi</div>
+                    <div class="cell-note">Docker, restart-safe</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Modules ──────────────────────────────────────────────────────── -->
+<section class="section section-cream" id="modules">
+    <div class="container">
+        <div class="section-head">
+            <div>
+                <div class="kicker">§ 02 · The modular system</div>
+                <h2 class="display">
+                    Six material streams,<br>one <em>elevated</em> language of colour.
+                </h2>
+            </div>
+            <p class="section-aside">Each module is visually intuitive yet architecturally sophisticated — premium tones reflecting urban civic space, not the trash room.</p>
+        </div>
+
+        <div class="modules-grid">
+            <article class="module-card" style="--accent:#D2B48C;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">01 / 06</span>
+                    <span class="module-chip" style="background:#D2B48C;"></span>
+                </div>
+                <h3 class="module-name">Paper</h3>
+                <div class="module-tag">Warm Cellulose · #D2B48C</div>
+                <p>Newspapers, cardboard, office paper, packaging. Sophisticated take on traditional fiber.</p>
+            </article>
+            <article class="module-card" style="--accent:#A9A9A9;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">02 / 06</span>
+                    <span class="module-chip" style="background:#A9A9A9;"></span>
+                </div>
+                <h3 class="module-name">Aluminum</h3>
+                <div class="module-tag">Brushed Metal · #A9A9A9</div>
+                <p>Beverage cans, foil, metal containers. Industrial circularity, detected by depth + vision.</p>
+            </article>
+            <article class="module-card" style="--accent:#1E4D2B;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">03 / 06</span>
+                    <span class="module-chip" style="background:#1E4D2B;"></span>
+                </div>
+                <h3 class="module-name">Organic</h3>
+                <div class="module-tag">Deep Biophilic · #1E4D2B</div>
+                <p>Food scraps, biodegradable packaging, garden waste — composted for circular sustainability.</p>
+            </article>
+            <article class="module-card" style="--accent:#40E0D0;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">04 / 06</span>
+                    <span class="module-chip" style="background:#40E0D0;"></span>
+                </div>
+                <h3 class="module-name">Glass</h3>
+                <div class="module-tag">Crystal Teal · #40E0D0</div>
+                <p>Bottles, jars, glass containers — identified by their unique transparency signatures.</p>
+            </article>
+            <article class="module-card" style="--accent:#87CEEB;">
+                <div class="module-accent"></div>
+                <div class="module-head">
+                    <span class="module-no">05 / 06</span>
+                    <span class="module-chip" style="background:#87CEEB;"></span>
+                </div>
+                <h3 class="module-name">Plastic</h3>
+                <div class="module-tag">Synthetic Tone · #87CEEB</div>
+                <p>PET, HDPE, films. Classified by brand-aware AI trained on local Armenian products.</p>
+            </article>
+            <article class="module-card module-card-other">
+                <div class="module-accent module-accent-gradient"></div>
+                <div class="module-head">
+                    <span class="module-no">06 / 06</span>
+                    <span class="module-chip module-chip-gradient"></span>
+                </div>
+                <h3 class="module-name">Other</h3>
+                <div class="module-tag">Dynamic Gradient · #9370DB → #1E90FF</div>
+                <p>The "brain" of the system. Adapts based on city-wide data, special collection, system signals.</p>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- ── Statistics ───────────────────────────────────────────────────── -->
+<section class="section section-dark" id="statistics">
+    <div class="dark-orb" aria-hidden="true"></div>
+    <div class="container">
+        <div class="kicker kicker-taupe">§ 03 · Live data</div>
+        <div class="stats-head">
+            <h2 class="display display-light">
+                <em id="stats-total" data-target="0">0</em><br>items sorted to date.
+            </h2>
+            <p class="stats-aside">Every classification is logged to PostgreSQL and streamed back to the central server. These numbers update every five seconds across all deployed units.</p>
+        </div>
+
+        <div class="stats-bars" id="stats-bars">
+            <p class="stats-zero-state">Loading statistics…</p>
+        </div>
+
+        <div class="stats-kpis">
+            <div class="stats-kpi">
+                <div class="cell-key">Recyclable share</div>
+                <div class="kpi-num" id="stats-recyclable">—</div>
+            </div>
+            <div class="stats-kpi">
+                <div class="cell-key">CO₂ avoided (est.)</div>
+                <div class="kpi-num kpi-soon">Coming soon</div>
+            </div>
+            <div class="stats-kpi">
+                <div class="cell-key">Active bins</div>
+                <div class="kpi-num" id="stats-active-bins">—</div>
+            </div>
+            <div class="stats-kpi">
+                <div class="cell-key">Mean latency</div>
+                <div class="kpi-num kpi-soon">Coming soon</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Map ──────────────────────────────────────────────────────────── -->
+<section class="section section-light" id="map">
+    <div class="container">
+        <div class="section-head">
+            <div>
+                <div class="kicker">§ 04 · Deployment map</div>
+                <h2 class="display">First eight landmarks in <em>Yerevan</em>.</h2>
+            </div>
+            <div class="map-legend-inline">
+                <span><span class="dot" style="background:var(--sb-forest);"></span> Planned location</span>
+                <span><span class="dot" style="background:var(--sb-taupe);"></span> 2026 wave</span>
+            </div>
+        </div>
+        <div class="map-wrap">
+            <div id="hexabin-map" aria-label="HexaBin deployment map"></div>
+            <div class="map-ribbon">YEREVAN · ARMENIA · 40.18°N 44.51°E</div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Media ────────────────────────────────────────────────────────── -->
+<section class="section section-cream" id="media">
+    <div class="container">
+        <div class="kicker">§ 05 · Media</div>
+        <h2 class="display">See HexaBin <em>in motion.</em></h2>
+
+        <div class="media-grid">
+            <article class="media-card media-card-large media-card-3d" style="background:#2D5A42;">
+                <model-viewer
+                    src="/static/models/hexabin.glb"
+                    alt="HexaBin 3D product model"
+                    camera-controls
+                    auto-rotate
+                    auto-rotate-delay="800"
+                    rotation-per-second="18deg"
+                    interaction-prompt="auto"
+                    interaction-prompt-style="basic"
+                    loading="lazy"
+                    reveal="auto"
+                    shadow-intensity="1"
+                    shadow-softness="0.7"
+                    exposure="1.1"
+                    environment-image="neutral"
+                    camera-orbit="35deg 75deg auto"
+                    min-camera-orbit="auto 0deg auto"
+                    max-camera-orbit="auto 180deg auto">
+                    <div slot="poster" class="model-poster">
+                        <div class="media-stripes"></div>
+                        <div class="model-poster-label">Loading 3D model…</div>
+                    </div>
+                </model-viewer>
+                <span class="media-tag"><span class="dot"></span>3D MODEL</span>
+                <div class="media-foot">
+                    <div class="media-placeholder">INTERACTIVE · GLB</div>
+                    <div class="media-title">3D product render</div>
+                    <div class="media-sub">Industrial design study · drag to orbit</div>
+                </div>
+            </article>
+            <article class="media-card" style="background:#1A4D6B;">
+                <div class="media-stripes"></div>
+                <span class="media-tag"><span class="dot"></span>FOOTAGE</span>
+                <div class="media-coming-soon">Coming soon</div>
+                <div class="media-foot">
+                    <div class="media-placeholder">B-ROLL · 4K</div>
+                    <div class="media-title">Real-life deployment</div>
+                    <div class="media-sub">Yerevan pilot, Q3 2026</div>
+                </div>
+            </article>
+            <article class="media-card" style="background:#BDB76B;">
+                <div class="media-stripes"></div>
+                <span class="media-tag"><span class="dot"></span>DEMO</span>
+                <div class="media-coming-soon">Coming soon</div>
+                <div class="media-foot">
+                    <div class="media-placeholder">SCREEN CAPTURE</div>
+                    <div class="media-title">AI classification</div>
+                    <div class="media-sub">Brand-aware vision in action</div>
+                </div>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- ── Footer ───────────────────────────────────────────────────────── -->
+<footer class="site-footer" id="contact">
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <div class="footer-brand-row">
+                    <span class="footer-logo" aria-hidden="true">
+                        <svg viewBox="0 0 195 218" fill="none">
+                            <defs>
+                                <mask id="hx-footer" maskUnits="userSpaceOnUse" x="0" y="0" width="195" height="218">
+                                    <rect x="0" y="0" width="195" height="218" fill="white"></rect>
+                                    <rect x="85.6" y="-8" width="20" height="42" fill="black"></rect>
+                                    <rect x="-9.2" y="140.7" width="45" height="19.2" fill="black" transform="rotate(-30 13.3 150.3)"></rect>
+                                </mask>
+                            </defs>
+                            <path d="M 93 10.37 A 7 7 0 0 1 100 10.37 L 178 55.4 A 7 7 0 0 1 181.5 61.47 L 181.5 151.53 A 7 7 0 0 1 178 157.6 L 100 202.63 A 7 7 0 0 1 93 202.63 L 15 157.6 A 7 7 0 0 1 11.5 151.53 L 11.5 61.47 A 7 7 0 0 1 15 55.4 Z" fill="none" stroke="currentColor" stroke-width="11" mask="url(#hx-footer)"></path>
+                        </svg>
+                    </span>
+                    <span class="footer-name">HexaBin</span>
+                </div>
+                <p>AI-powered waste classification for the smart city. Built in Yerevan; designed for everywhere.</p>
+            </div>
+            <div class="footer-col">
+                <div class="footer-h">Product</div>
+                <a href="#about">About</a>
+                <a href="#modules">Modules</a>
+                <a href="#statistics">Statistics</a>
+                <a href="#map">Map</a>
+                <a href="#media">Media</a>
+            </div>
+            <div class="footer-col">
+                <div class="footer-h">Contact</div>
+                <p>+374 12 345 678</p>
+                <p>info@hexabin.am</p>
+                <p>Yerevan, Armenia</p>
+            </div>
+            <div class="footer-col">
+                <div class="footer-h">For Operators</div>
+                <a href="/" class="footer-cta">Open Control Center →</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <span>&copy; 2026 HexaBin. All rights reserved.</span>
+            <span>Forest Green · Deep Smart Blue · Yerevan</span>
+        </div>
+    </div>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/site.js"></script>
+</body>
+</html>

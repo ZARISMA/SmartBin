@@ -1,9 +1,9 @@
-"""Tests for crop_sides() in smartwaste/cameraOak.py."""
+"""Tests for crop_sides() in hexabin/cameraOak.py."""
 
 import numpy as np
 import pytest
 
-from smartwaste.cameraOak import crop_sides
+from hexabin.cameraOak import crop_sides
 
 
 class TestNoCrop:

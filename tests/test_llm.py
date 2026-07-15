@@ -1,4 +1,4 @@
-"""Tests for smartwaste/llm.py — result parsing, backends, cascade, factory."""
+"""Tests for hexabin/llm.py — result parsing, backends, cascade, factory."""
 
 import json
 import urllib.error
@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import smartwaste.llm as llm
-from smartwaste.config import LMSTUDIO_MODEL
-from smartwaste.llm import (
+import hexabin.llm as llm
+from hexabin.config import LMSTUDIO_MODEL
+from hexabin.llm import (
     CascadeBackend,
     CircuitOpenError,
     ClassificationResult,
@@ -18,7 +18,7 @@ from smartwaste.llm import (
     build_backend,
     parse_result,
 )
-from smartwaste.prompt import PROMPT
+from hexabin.prompt import PROMPT
 
 
 @pytest.fixture(autouse=True)
@@ -114,7 +114,7 @@ def _lms_body(content: str) -> bytes:
 class TestLMStudioBackend:
     def test_happy_path(self):
         content = '{"category": "Aluminum", "description": "can", "brand_product": "BOOM", "confidence": 90}'
-        with patch("smartwaste.llm.urllib.request.urlopen") as mock_open:
+        with patch("hexabin.llm.urllib.request.urlopen") as mock_open:
             mock_open.return_value.__enter__.return_value.read.return_value = _lms_body(content)
             r = LMStudioBackend().classify(b"img")
         assert r.category == "Aluminum"
@@ -122,7 +122,7 @@ class TestLMStudioBackend:
         assert r.confidence == pytest.approx(0.90)
 
     def test_request_payload_shape(self):
-        with patch("smartwaste.llm.urllib.request.urlopen") as mock_open:
+        with patch("hexabin.llm.urllib.request.urlopen") as mock_open:
             mock_open.return_value.__enter__.return_value.read.return_value = _lms_body(
                 '{"category": "Glass"}'
             )
@@ -142,7 +142,7 @@ class TestLMStudioBackend:
 
     def test_connection_error_raises_llmerror(self):
         with patch(
-            "smartwaste.llm.urllib.request.urlopen",
+            "hexabin.llm.urllib.request.urlopen",
             side_effect=urllib.error.URLError("connection refused"),
         ):
             with pytest.raises(LLMError):
@@ -152,12 +152,12 @@ class TestLMStudioBackend:
         import io
 
         err = urllib.error.HTTPError("http://x/v1/chat/completions", 404, "nf", {}, io.BytesIO(b""))
-        with patch("smartwaste.llm.urllib.request.urlopen", side_effect=err):
+        with patch("hexabin.llm.urllib.request.urlopen", side_effect=err):
             with pytest.raises(LLMError, match="404"):
                 LMStudioBackend().classify(b"img")
 
     def test_unparseable_content_raises_llmerror(self):
-        with patch("smartwaste.llm.urllib.request.urlopen") as mock_open:
+        with patch("hexabin.llm.urllib.request.urlopen") as mock_open:
             mock_open.return_value.__enter__.return_value.read.return_value = _lms_body(
                 "sorry, no json"
             )
@@ -165,7 +165,7 @@ class TestLMStudioBackend:
                 LMStudioBackend().classify(b"img")
 
     def test_unexpected_response_shape_raises_llmerror(self):
-        with patch("smartwaste.llm.urllib.request.urlopen") as mock_open:
+        with patch("hexabin.llm.urllib.request.urlopen") as mock_open:
             mock_open.return_value.__enter__.return_value.read.return_value = b'{"oops": 1}'
             with pytest.raises(LLMError):
                 LMStudioBackend().classify(b"img")
@@ -187,14 +187,14 @@ class TestGeminiBackend:
 
     def test_classify_parses_response(self):
         raw = '{"category": "Glass", "description": "jar", "brand_product": "Jermuk", "confidence": 80}'
-        with patch("smartwaste.llm._call_gemini", return_value=raw):
+        with patch("hexabin.llm._call_gemini", return_value=raw):
             r = GeminiBackend().classify(b"img")
         assert r.category == "Glass"
         assert r.backend == "gemini"
         assert r.confidence == pytest.approx(0.80)
 
     def test_circuit_opens_after_repeated_failures(self):
-        with patch("smartwaste.llm._call_gemini", side_effect=Exception("boom")):
+        with patch("hexabin.llm._call_gemini", side_effect=Exception("boom")):
             for _ in range(llm.settings.cb_failure_threshold):
                 with pytest.raises(Exception):
                     GeminiBackend().classify(b"img")
@@ -203,10 +203,10 @@ class TestGeminiBackend:
 
     def test_success_resets_failure_count(self):
         raw = '{"category": "Paper"}'
-        with patch("smartwaste.llm._call_gemini", side_effect=Exception("boom")):
+        with patch("hexabin.llm._call_gemini", side_effect=Exception("boom")):
             with pytest.raises(Exception):
                 GeminiBackend().classify(b"img")
-        with patch("smartwaste.llm._call_gemini", return_value=raw):
+        with patch("hexabin.llm._call_gemini", return_value=raw):
             assert GeminiBackend().classify(b"img").category == "Paper"
         assert llm._cb_failures == 0
 

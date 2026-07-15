@@ -1,10 +1,10 @@
-"""Tests for smartwaste/analytics.py — period windows and payload assembly."""
+"""Tests for hexabin/analytics.py — period windows and payload assembly."""
 
 from datetime import datetime
 
 import pytest
 
-from smartwaste import analytics
+from hexabin import analytics
 
 NOW = datetime(2026, 7, 11, 14, 30, 7)
 

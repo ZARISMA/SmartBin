@@ -1,4 +1,4 @@
-"""Tests for smartwaste/web.py — FastAPI endpoints."""
+"""Tests for hexabin/web.py — FastAPI endpoints."""
 
 import base64
 from datetime import datetime, timedelta
@@ -7,18 +7,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
-from smartwaste.config import ADMIN_PASSWORD, ADMIN_USERNAME
-from smartwaste.llm import CircuitOpenError, ClassificationResult, LLMError
+from hexabin.config import ADMIN_PASSWORD, ADMIN_USERNAME
+from hexabin.llm import CircuitOpenError, ClassificationResult, LLMError
 
-# Matches SMARTWASTE_EDGE_API_KEY set in conftest.py before smartwaste imports.
+# Matches HEXABIN_EDGE_API_KEY set in conftest.py before hexabin imports.
 EDGE_HEADERS = {"Authorization": "Bearer test-edge-key"}
 
 
 @pytest.fixture
 def client():
     # Prevent camera thread from starting during tests
-    with patch("smartwaste.web._start_camera_thread"):
-        from smartwaste.web import app
+    with patch("hexabin.web._start_camera_thread"):
+        from hexabin.web import app
 
         with TestClient(app) as c:
             # Authenticate so protected routes return real responses
@@ -33,8 +33,8 @@ def client():
 @pytest.fixture
 def anon_client():
     """TestClient WITHOUT a session login — for bearer-token auth tests."""
-    with patch("smartwaste.web._start_camera_thread"):
-        from smartwaste.web import app
+    with patch("hexabin.web._start_camera_thread"):
+        from hexabin.web import app
 
         with TestClient(app) as c:
             yield c
@@ -51,7 +51,7 @@ class TestIndex:
 
     def test_contains_title(self, client):
         r = client.get("/")
-        assert "SmartBin" in r.text and "Devices" in r.text
+        assert "HexaBin" in r.text and "Devices" in r.text
 
 
 class TestApiState:
@@ -158,12 +158,12 @@ class TestApiAnalytics:
 
 class TestApiAnalyticsExport:
     def test_returns_csv_attachment(self, client):
-        from smartwaste import analytics
+        from hexabin import analytics
 
         r = client.get("/api/analytics/export?period=24h")
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/csv")
-        assert "smartbin-classifications-24h.csv" in r.headers["content-disposition"]
+        assert "hexabin-classifications-24h.csv" in r.headers["content-disposition"]
         assert r.text.splitlines()[0] == ",".join(analytics.EXPORT_COLUMNS)
 
     def test_invalid_period_returns_400(self, client):
@@ -181,7 +181,7 @@ class TestApiAnalyticsExport:
 class TestApiAlerts:
     def _seed_registry(self, monkeypatch, bins):
         """bins: iterable of (bin_id, camera_count, age_seconds)."""
-        import smartwaste.web as web
+        import hexabin.web as web
 
         registry = {}
         for bin_id, camera_count, age_seconds in bins:
@@ -274,8 +274,8 @@ class TestApiEntriesFilters:
 class TestApiEntryImage:
     def _get(self, client, tmp_path, entry, entry_id=1):
         with (
-            patch("smartwaste.web.get_entry_by_id", return_value=entry),
-            patch("smartwaste.web.DATASET_DIR", str(tmp_path)),
+            patch("hexabin.web.get_entry_by_id", return_value=entry),
+            patch("hexabin.web.DATASET_DIR", str(tmp_path)),
         ):
             return client.get(f"/api/entries/{entry_id}/image")
 
@@ -393,9 +393,9 @@ class TestEdgeClassify:
         else:
             backend.classify.return_value = result or _llm_result()
         with (
-            patch("smartwaste.web.build_backend", return_value=backend),
-            patch("smartwaste.web.DATASET_DIR", str(tmp_path)),
-            patch("smartwaste.web.insert_entry", return_value=insert_id) as mock_insert,
+            patch("hexabin.web.build_backend", return_value=backend),
+            patch("hexabin.web.DATASET_DIR", str(tmp_path)),
+            patch("hexabin.web.insert_entry", return_value=insert_id) as mock_insert,
         ):
             r = client.post(
                 "/api/edge/classify", json=payload or _classify_payload(), headers=EDGE_HEADERS
@@ -450,7 +450,7 @@ class TestEdgeClassify:
         assert r.status_code == 400
 
     def test_oversized_image_returns_413(self, anon_client, tmp_path):
-        with patch("smartwaste.web.MAX_UPLOAD_BYTES", 4):
+        with patch("hexabin.web.MAX_UPLOAD_BYTES", 4):
             r, _ = self._post(anon_client, tmp_path)
         assert r.status_code == 413
 
@@ -475,21 +475,21 @@ class TestApiReport:
         return p
 
     def test_insert_success_returns_id(self, anon_client):
-        with patch("smartwaste.web.insert_entry", return_value=7):
+        with patch("hexabin.web.insert_entry", return_value=7):
             r = anon_client.post("/api/report", json=self._payload(), headers=EDGE_HEADERS)
         assert r.status_code == 200
         assert r.json() == {"status": "ok", "id": 7}
 
     def test_insert_failure_returns_500(self, anon_client):
-        with patch("smartwaste.web.insert_entry", return_value=None):
+        with patch("hexabin.web.insert_entry", return_value=None):
             r = anon_client.post("/api/report", json=self._payload(), headers=EDGE_HEADERS)
         assert r.status_code == 500
 
     def test_traversal_fields_stay_inside_dataset_dir(self, anon_client, tmp_path):
         img = base64.b64encode(b"jpeg-bytes").decode()
         with (
-            patch("smartwaste.web.DATASET_DIR", str(tmp_path)),
-            patch("smartwaste.web.insert_entry", return_value=1),
+            patch("hexabin.web.DATASET_DIR", str(tmp_path)),
+            patch("hexabin.web.insert_entry", return_value=1),
         ):
             r = anon_client.post(
                 "/api/report",
@@ -504,7 +504,7 @@ class TestApiReport:
         assert files[0].parent == tmp_path
 
     def test_confidence_passed_through_to_db(self, anon_client):
-        with patch("smartwaste.web.insert_entry", return_value=1) as mock_insert:
+        with patch("hexabin.web.insert_entry", return_value=1) as mock_insert:
             anon_client.post(
                 "/api/report",
                 json=self._payload(confidence=0.66, llm_backend="gemini"),

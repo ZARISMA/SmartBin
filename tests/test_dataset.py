@@ -1,4 +1,4 @@
-"""Tests for smartwaste/dataset.py — environment data and save_entry."""
+"""Tests for hexabin/dataset.py — environment data and save_entry."""
 
 from unittest.mock import patch
 
@@ -13,12 +13,12 @@ import pytest
 
 class TestEnvironmentData:
     def test_returns_exactly_five_keys(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         assert len(ds._environment_data()) == 5
 
     def test_has_all_simulated_keys(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         expected = {
             "simulated_temperature",
@@ -30,55 +30,55 @@ class TestEnvironmentData:
         assert set(ds._environment_data().keys()) == expected
 
     def test_no_bare_keys(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         env = ds._environment_data()
         for key in ("temperature", "humidity", "vibration", "air_pollution", "smoke"):
             assert key not in env
 
     def test_temperature_in_range(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         for _ in range(30):
             v = ds._environment_data()["simulated_temperature"]
             assert 15 <= v <= 30
 
     def test_humidity_in_range(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         for _ in range(30):
             v = ds._environment_data()["simulated_humidity"]
             assert 30 <= v <= 70
 
     def test_vibration_in_range(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         for _ in range(30):
             v = ds._environment_data()["simulated_vibration"]
             assert 0 <= v <= 0.1
 
     def test_air_pollution_in_range(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         for _ in range(30):
             v = ds._environment_data()["simulated_air_pollution"]
             assert 5 <= v <= 50
 
     def test_smoke_in_range(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         for _ in range(30):
             v = ds._environment_data()["simulated_smoke"]
             assert 0 <= v <= 1
 
     def test_all_values_are_floats(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         for v in ds._environment_data().values():
             assert isinstance(v, float)
 
     def test_values_differ_across_calls(self):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         # Very unlikely all 5 values match twice in a row
         first = list(ds._environment_data().values())
@@ -93,7 +93,7 @@ class TestEnvironmentData:
 
 class TestSaveEntry:
     def _run(self, tmp_path, **kwargs):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         label = kwargs.get("label", "Plastic")
         description = kwargs.get("description", "A bottle")
@@ -102,7 +102,7 @@ class TestSaveEntry:
 
         with (
             patch.object(ds, "DATASET_DIR", str(tmp_path)),
-            patch("smartwaste.dataset.insert_entry") as mock_insert,
+            patch("hexabin.dataset.insert_entry") as mock_insert,
             patch("cv2.imwrite", return_value=True),
         ):
             ds.save_entry(label, frame, description, brand_product)
@@ -119,7 +119,7 @@ class TestSaveEntry:
         assert entry["description"] == "Green jar"
 
     def test_insert_entry_receives_env_with_simulated_keys(self, tmp_path):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         captured_env = {}
@@ -129,7 +129,7 @@ class TestSaveEntry:
 
         with (
             patch.object(ds, "DATASET_DIR", str(tmp_path)),
-            patch("smartwaste.dataset.insert_entry", side_effect=capture_insert),
+            patch("hexabin.dataset.insert_entry", side_effect=capture_insert),
             patch("cv2.imwrite", return_value=True),
         ):
             ds.save_entry("Paper", frame, "sheet", "N/A")
@@ -144,7 +144,7 @@ class TestSaveEntry:
             assert key in captured_env
 
     def test_label_in_filename(self, tmp_path):
-        import smartwaste.dataset as ds
+        import hexabin.dataset as ds
 
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         written_paths = []
@@ -155,7 +155,7 @@ class TestSaveEntry:
 
         with (
             patch.object(ds, "DATASET_DIR", str(tmp_path)),
-            patch("smartwaste.dataset.insert_entry"),
+            patch("hexabin.dataset.insert_entry"),
             patch("cv2.imwrite", side_effect=capture_write),
         ):
             ds.save_entry("Aluminum", frame, "can", "BOOM")

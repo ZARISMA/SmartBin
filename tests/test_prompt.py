@@ -1,6 +1,6 @@
-"""Tests for smartwaste/prompt.py — validate the Gemini prompt string."""
+"""Tests for hexabin/prompt.py — validate the Gemini prompt string."""
 
-from smartwaste.prompt import PROMPT
+from hexabin.prompt import PROMPT
 
 
 class TestPromptStructure:
@@ -17,7 +17,7 @@ class TestPromptStructure:
 
 class TestPromptCategories:
     def test_contains_all_valid_categories(self):
-        from smartwaste.config import VALID_CLASSES
+        from hexabin.config import VALID_CLASSES
 
         for category in VALID_CLASSES:
             assert category in PROMPT, f"Missing category '{category}' in prompt"

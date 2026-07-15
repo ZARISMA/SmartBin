@@ -1,15 +1,15 @@
-"""Tests for smartwaste/presence.py — PresenceDetector state machine."""
+"""Tests for hexabin/presence.py — PresenceDetector state machine."""
 
 import numpy as np
 import pytest
 
-from smartwaste.config import (
+from hexabin.config import (
     BG_WARMUP_FRAMES,
     DETECT_CONFIRM_N,
     EMPTY_CONFIRM_N,
     MOTION_THRESHOLD,
 )
-from smartwaste.presence import PresenceDetector
+from hexabin.presence import PresenceDetector
 
 
 def _gray(value: int, shape=(100, 100)) -> np.ndarray:

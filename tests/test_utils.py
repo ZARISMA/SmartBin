@@ -1,4 +1,4 @@
-"""Tests for smartwaste/utils.py — encode_frame() and launch_classify()."""
+"""Tests for hexabin/utils.py — encode_frame() and launch_classify()."""
 
 import threading
 from unittest.mock import MagicMock, patch
@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from smartwaste.state import AppState
-from smartwaste.utils import encode_frame, launch_classify
+from hexabin.state import AppState
+from hexabin.utils import encode_frame, launch_classify
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ class TestEncodeFrame:
     def test_higher_quality_produces_larger_output(self):
         """Verify encode_frame uses the configured JPEG_QUALITY."""
         import cv2
-        from smartwaste.config import JPEG_QUALITY
+        from hexabin.config import JPEG_QUALITY
 
         frame = np.random.randint(0, 256, (200, 200, 3), dtype=np.uint8)
         result = encode_frame(frame)
@@ -97,7 +97,7 @@ class TestLaunchClassify:
         img_bytes = b"\xff\xd8\xff" + b"\x00" * 50
 
         started = []
-        with patch("smartwaste.utils.threading.Thread") as mock_thread_cls:
+        with patch("hexabin.utils.threading.Thread") as mock_thread_cls:
             mock_instance = MagicMock()
             mock_thread_cls.return_value = mock_instance
             launch_classify(img_bytes, frame, state)
@@ -109,7 +109,7 @@ class TestLaunchClassify:
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         img_bytes = b"\xff\xd8\xff" + b"\x00" * 50
 
-        with patch("smartwaste.utils.threading.Thread") as mock_thread_cls:
+        with patch("hexabin.utils.threading.Thread") as mock_thread_cls:
             mock_instance = MagicMock()
             mock_thread_cls.return_value = mock_instance
             launch_classify(img_bytes, frame, state)
@@ -117,13 +117,13 @@ class TestLaunchClassify:
             assert kwargs.get("daemon") is True
 
     def test_valid_bytes_targets_classify(self):
-        from smartwaste.classifier import classify
+        from hexabin.classifier import classify
 
         state = AppState()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         img_bytes = b"\xff\xd8\xff" + b"\x00" * 50
 
-        with patch("smartwaste.utils.threading.Thread") as mock_thread_cls:
+        with patch("hexabin.utils.threading.Thread") as mock_thread_cls:
             mock_thread_cls.return_value = MagicMock()
             launch_classify(img_bytes, frame, state)
             _, kwargs = mock_thread_cls.call_args
@@ -134,7 +134,7 @@ class TestLaunchClassify:
         state = AppState()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
 
-        with patch("smartwaste.utils.threading.Thread") as mock_thread_cls:
+        with patch("hexabin.utils.threading.Thread") as mock_thread_cls:
             mock_thread_cls.return_value = MagicMock()
             launch_classify(b"", frame, state)
             assert not mock_thread_cls.called

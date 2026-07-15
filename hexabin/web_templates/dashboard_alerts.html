@@ -1,0 +1,43 @@
+{% extends "_cc_base.html" %}
+{% block title %}Alerts · HexaBin Control Center{% endblock %}
+{% block page_title %}Alerts{% endblock %}
+{% block kicker %}§ Monitor{% endblock %}
+
+{% block topbar_actions %}
+    <span class="cc-mono" id="alerts-refresh">updated —</span>
+    <span class="cc-mono cc-muted">· auto-refresh 5s</span>
+{% endblock %}
+
+{% block content %}
+<section class="stat-strip" style="grid-template-columns: repeat(3, 1fr);">
+    <article class="stat-card" style="--accent: var(--sb-error);">
+        <div class="stat-accent"></div>
+        <div class="cell-key">Errors</div>
+        <div class="stat-num" id="alert-stat-error">0</div>
+        <div class="stat-sub">bins with no camera</div>
+    </article>
+    <article class="stat-card" style="--accent: var(--sb-warning);">
+        <div class="stat-accent"></div>
+        <div class="cell-key">Warnings</div>
+        <div class="stat-num" id="alert-stat-warning">0</div>
+        <div class="stat-sub">bins on a single camera</div>
+    </article>
+    <article class="stat-card" style="--accent: var(--sb-forest);">
+        <div class="stat-accent"></div>
+        <div class="cell-key">Bins monitored</div>
+        <div class="stat-num" id="alert-stat-monitored">0</div>
+        <div class="stat-sub">reporting a heartbeat</div>
+    </article>
+</section>
+
+<section class="alerts-list" id="alerts-list">
+    <div class="empty-state">
+        <h2>Loading…</h2>
+        <p>Fetching alerts.</p>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dashboard_alerts.js"></script>
+{% endblock %}

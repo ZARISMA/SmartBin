@@ -3,11 +3,11 @@
 Smart Waste AI — real-time waste classification using dual OAK-D USB3 depth cameras and a pluggable LLM vision backend: Google Gemini (cloud), LM Studio (local, OpenAI-compatible API), or a **cascade** (local first, escalate to Gemini below a confidence threshold). Captures side-by-side frames, classifies into 7 categories, logs to PostgreSQL/SQLite and image files, and returns an "open module N" actuation command per classification.
 
 **Entry points:**
-- `python main.py` / `smartwaste` — manual mode, dual OAK cameras, OpenCV window
-- `python mainauto.py` / `smartwaste-auto` — auto gate mode with presence detection
-- `python mainoak.py` / `smartwaste-oak` — OAK-D Native mode (depth + IMU + NN voting)
-- `python -m smartwaste.control` / `smartwaste-run` — **unified edge runner** (used by Docker). Picks pipeline from `SMARTWASTE_CAMERA_MODE` and strategy from `SMARTWASTE_STRATEGY`. Supports hot strategy swaps and clean restarts triggered by the admin dashboard.
-- `python -m smartwaste.web` — Docker/web UI (FastAPI + MJPEG stream + fleet control)
+- `python main.py` / `hexabin` — manual mode, dual OAK cameras, OpenCV window
+- `python mainauto.py` / `hexabin-auto` — auto gate mode with presence detection
+- `python mainoak.py` / `hexabin-oak` — OAK-D Native mode (depth + IMU + NN voting)
+- `python -m hexabin.control` / `hexabin-run` — **unified edge runner** (used by Docker). Picks pipeline from `HEXABIN_CAMERA_MODE` and strategy from `HEXABIN_STRATEGY`. Supports hot strategy swaps and clean restarts triggered by the admin dashboard.
+- `python -m hexabin.web` — Docker/web UI (FastAPI + MJPEG stream + fleet control)
 
 CLI entry points are defined in `pyproject.toml`.
 
@@ -25,11 +25,11 @@ python main.py
 ## Authentication
 
 Dashboard and API require login. Default credentials: `admin` / `password123`.
-Override via `SMARTWASTE_ADMIN_USERNAME` and `SMARTWASTE_ADMIN_PASSWORD` env vars.
+Override via `HEXABIN_ADMIN_USERNAME` and `HEXABIN_ADMIN_PASSWORD` env vars.
 The presentation site at `/site` is public (no login required).
 
 Auth is **scoped**: the admin session/password opens everything; the edge API key
-(`SMARTWASTE_EDGE_API_KEY` as a Bearer token) is valid ONLY for the ingest endpoints
+(`HEXABIN_EDGE_API_KEY` as a Bearer token) is valid ONLY for the ingest endpoints
 `/api/report`, `/api/heartbeat`, and `/api/edge/classify` — it does not open admin routes.
 
 ## Deployment Roles
@@ -40,8 +40,8 @@ docker compose up -d
 ```
 Runs FastAPI + PostgreSQL + Grafana. Edge devices POST frames to `/api/edge/classify`
 (server-side classification) or finished results to `/api/report` (legacy local mode).
-Classification backend defaults to Gemini; point `SMARTWASTE_LMSTUDIO_URL` at a remote
-LLM host (role 3) and set `SMARTWASTE_LLM_BACKEND=lmstudio|cascade` to go local.
+Classification backend defaults to Gemini; point `HEXABIN_LMSTUDIO_URL` at a remote
+LLM host (role 3) and set `HEXABIN_LLM_BACKEND=lmstudio|cascade` to go local.
 
 ### 2. Server + LLM host (same machine)
 ```bash
@@ -55,10 +55,10 @@ Same server stack, pre-wired to LM Studio on the Docker host via
 confidence < 70% (or LM Studio failure) escalates the image to Gemini.
 
 ### 3. LLM host only
-No SmartBin code runs here. Install LM Studio on any machine, load
+No HexaBin code runs here. Install LM Studio on any machine, load
 `google/gemma-4-12b-qat`, start the server and enable **"Serve on Local Network"**.
-Verify with `curl http://<ip>:1234/v1/models`, then point the SmartBin server at it via
-`SMARTWASTE_LMSTUDIO_URL=http://<ip>:1234/v1`.
+Verify with `curl http://<ip>:1234/v1/models`, then point the HexaBin server at it via
+`HEXABIN_LMSTUDIO_URL=http://<ip>:1234/v1`.
 **LM Studio has no authentication — keep port 1234 LAN-only/firewalled, never internet-facing.**
 
 ### 4. Full stack on Raspberry Pi (cameras + dashboard)
@@ -69,13 +69,13 @@ Runs everything on the Pi: cameras, web UI, database, Grafana.
 
 ### 5. Lightweight edge (cameras only, classifies via server)
 ```bash
-SMARTWASTE_SERVER_URL=http://<server-ip>:8000 \
-SMARTWASTE_BIN_ID=bin-01 \
+HEXABIN_SERVER_URL=http://<server-ip>:8000 \
+HEXABIN_BIN_ID=bin-01 \
 docker compose -f docker-compose.edge.yml up -d
 ```
-Runs the camera pipeline on the Pi, no web UI. Default `SMARTWASTE_CLASSIFY_MODE=server`:
+Runs the camera pipeline on the Pi, no web UI. Default `HEXABIN_CLASSIFY_MODE=server`:
 each captured frame is POSTed to the server, which runs the LLM and replies with the
-classification + actuation command in the same response. Set `SMARTWASTE_CLASSIFY_MODE=local`
+classification + actuation command in the same response. Set `HEXABIN_CLASSIFY_MODE=local`
 for the original on-device Gemini behavior (needs `GEMINI_API_KEY` on the Pi).
 
 Services: Web UI `:8000`, Grafana `:3000` (admin/admin), PostgreSQL `:5433` (server) / `:5432` (edge-full), LM Studio `:1234`.
@@ -83,24 +83,24 @@ Full-stack and edge modes require Linux host with cameras on USB.
 
 ## Presentation Website
 
-Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketing/presentation site showcasing the SmartBin product.
+Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketing/presentation site showcasing the HexaBin product.
 
 **Sections:** Hero, About, Modules (6 waste categories), Live Statistics (from `/api/public/stats` — unauthenticated fleet-wide aggregate `{total, today, by_category, recyclable_share, bins: {online, total}, latest}`, polled every 5 s; the admin `/api/stats` stays auth-gated), Deployment Map (Leaflet/OpenStreetMap, 8 Yerevan landmarks), Media/Video (interactive 3D model; footage/demo marked "Coming soon"), Contact/Footer. All numbers on the site are real (DB + live heartbeats) — unmeasured metrics (accuracy benchmark, CO₂, mean latency) say "Coming soon" instead of placeholder values.
 
 **Files:**
-- `smartwaste/web_templates/site.html` — Jinja2 template (single-page scrolling)
-- `smartwaste/web_static/site.css` — Dedicated glassmorphism dark theme, responsive (768px/1024px breakpoints)
-- `smartwaste/web_static/site.js` — Stats fetching, Leaflet map init, scroll animations, animated counters
+- `hexabin/web_templates/site.html` — Jinja2 template (single-page scrolling)
+- `hexabin/web_static/site.css` — Dedicated glassmorphism dark theme, responsive (768px/1024px breakpoints)
+- `hexabin/web_static/site.js` — Stats fetching, Leaflet map init, scroll animations, animated counters
 
 **External CDN deps:** Leaflet 1.9.4 (map tiles via CARTO dark basemap), Google Fonts (Manrope + Chakra Petch + JetBrains Mono).
 
-**Contact placeholders:** Phone `+374 12 345 678`, email `info@smartbin.am` — update in `site.html` footer.
+**Contact placeholders:** Phone `+374 12 345 678`, email `info@hexabin.am` — update in `site.html` footer.
 
 ## Control Center (Admin UI)
 
-The authenticated admin UI is a multi-page **Control Center** built around a shared sidebar layout. All pages extend `smartwaste/web_templates/_cc_base.html`, which provides:
+The authenticated admin UI is a multi-page **Control Center** built around a shared sidebar layout. All pages extend `hexabin/web_templates/_cc_base.html`, which provides:
 
-- Left sidebar with SmartBin brand, nav (Devices / Map / Analytics / Alerts / Classifications), server-health footer, signed-in operator chip, and a "Presentation site" link.
+- Left sidebar with HexaBin brand, nav (Devices / Map / Analytics / Alerts / Classifications), server-health footer, signed-in operator chip, and a "Presentation site" link.
 - Top bar with kicker + page title, plus page-specific actions injected via `{% block topbar_actions %}`.
 - Global toast host (`#toast-host`) and confirm-modal scaffolding (`#modal`) reused by all dashboard JS.
 
@@ -126,33 +126,33 @@ Each online bin is rendered as a card with a live thumbnail (MJPEG proxied from 
 - **Start / Stop** — pause or resume classifications (in-process; no restart).
 - **Restart** — clean exit 0 so the container supervisor respawns with current env.
 - **Strategy dropdown** (Manual / Auto Gate) — hot-swaps inside the running dual-OAK process.
-- **Pipeline dropdown** (OAK Dual / OAK Native) — writes `SMARTWASTE_CAMERA_MODE` and triggers a restart.
+- **Pipeline dropdown** (OAK Dual / OAK Native) — writes `HEXABIN_CAMERA_MODE` and triggers a restart.
 - **Classify** — force a single classification on the current frame.
 - **Auto toggle** — toggle the auto-classify flag.
 
 Commands flow: browser → `POST /api/bin/{id}/command` (server, auth-gated, per-bin rate-limit) → edge sidecar `/command` (Bearer `EDGE_API_KEY`) → mutates `AppState`. Heartbeats carry the live `strategy`, `pipeline`, `camera_count`, `running`, `auto_classify`, and `warnings[]` so the dashboard reflects edge state within ~5 seconds.
 
-Warnings are structured (`code`, `severity`, `message`) and deduped by code in `smartwaste/warnings.py`. Known codes today: `CAMERA_COUNT_LOW`, `CAMERA_MISSING`, `SERVER_UNREACHABLE` (edge could not reach `/api/edge/classify` in server mode).
+Warnings are structured (`code`, `severity`, `message`) and deduped by code in `hexabin/warnings.py`. Known codes today: `CAMERA_COUNT_LOW`, `CAMERA_MISSING`, `SERVER_UNREACHABLE` (edge could not reach `/api/edge/classify` in server mode).
 
 ### Static assets
 
 - `brand.css` — design tokens (CSS variables for brand palette, typography, spacing); loaded first by `_cc_base.html`.
 - `dashboard.css` — Control Center layout, sidebar, cards, modals, toasts. (Supersedes the older `style.css`, which is kept for back-compat only.)
 - `cc_nav.js` — shared sidebar helper loaded by `_cc_base.html` on every page; polls `/api/alerts` and keeps the nav alerts badge (`#cc-alerts-badge`) current.
-- `sb-logo.svg` — SmartBin wordmark/logo.
-- `models/smartbin.glb` — 3D bin model used by the presentation site / hero. `web.py` registers `.glb` → `model/gltf-binary` and `.gltf` → `model/gltf+json` MIME types at import time so `StaticFiles` serves them with correct `Content-Type`.
+- `sb-logo.svg` — HexaBin wordmark/logo.
+- `models/hexabin.glb` — 3D bin model used by the presentation site / hero. `web.py` registers `.glb` → `model/gltf-binary` and `.gltf` → `model/gltf+json` MIME types at import time so `StaticFiles` serves them with correct `Content-Type`.
 
 **External CDN deps (admin):** Manrope + Chakra Petch + JetBrains Mono (Google Fonts), Leaflet 1.9.4 (on `/map`).
 
 ## Database Backend
 
-Set via `SMARTWASTE_DB_BACKEND`:
+Set via `HEXABIN_DB_BACKEND`:
 - `sqlite` (default) — `waste_dataset/waste.db`, no setup needed
 - `postgresql` — requires running PostgreSQL (Docker provides this)
 
 Migration: `python scripts/migrate_json_to_pg.py --source sqlite|json`
 
-## Key Configuration (`smartwaste/config.py` + `smartwaste/settings.py`)
+## Key Configuration (`hexabin/config.py` + `hexabin/settings.py`)
 
 | Constant | Default | Purpose |
 |---|---|---|
@@ -171,7 +171,7 @@ Migration: `python scripts/migrate_json_to_pg.py --source sqlite|json`
 | `CLASSIFY_MODE` | `local` | Edge classification: `local` (on-device) or `server` (via `/api/edge/classify`) |
 | `CLASSIFY_TIMEOUT` | `180` s | Edge → server classify HTTP timeout |
 | `MODULE_MAP` | built-in | JSON category→module override, e.g. `{"Plastic": 1}` ("Empty" never opens) |
-| `ACTUATOR` | `log` | Actuation driver: `log`, `none` (`gpio` reserved — see `smartwaste/actuator.py`) |
+| `ACTUATOR` | `log` | Actuation driver: `log`, `none` (`gpio` reserved — see `hexabin/actuator.py`) |
 | `MAX_UPLOAD_MB` | `10` | Max decoded image size accepted by ingest endpoints |
 | `JPEG_QUALITY` | 85 | Compression for API image uploads |
 | `DB_BACKEND` | `sqlite` | Database backend (`sqlite` or `postgresql`) |
@@ -193,7 +193,7 @@ All constants flow through `settings.py` (Pydantic BaseSettings) — override vi
 **Data flow (local mode, `CLASSIFY_MODE=local`):**
 1. Dual camera frames captured independently → synced by timestamp (`MAX_DT`)
 2. Frames concatenated horizontally → cropped → JPEG-encoded
-3. Bytes sent to the configured backend (`smartwaste/llm.py`) → strict JSON response parsed
+3. Bytes sent to the configured backend (`hexabin/llm.py`) → strict JSON response parsed
 4. Result logged to console, `logs/run_*.log`, database, and `waste_dataset/*.jpg`; `actuator.dispatch()` opens the mapped module
 
 **Data flow (server mode, `CLASSIFY_MODE=server` — the hub-and-spoke architecture):**
@@ -204,9 +204,9 @@ All constants flow through `settings.py` (Pydantic BaseSettings) — override vi
 5. Server → End Device: the same HTTP response carries `{result, command: {action: "open_module", module: N}}`; the edge applies it to `AppState` and calls `actuator.dispatch()`
 6. In parallel the server persists the row (+ `confidence`, `llm_backend`) and image, and the dashboard picks it up on its 5-second poll
 
-**Cascade semantics** (`CascadeBackend` in `smartwaste/llm.py`): LM Studio first; escalate to Gemini when it errors, reports no confidence, or confidence < `CONFIDENCE_THRESHOLD`. If Gemini then fails but LM Studio produced a parseable low-confidence result, that result is used (degraded beats erroring).
+**Cascade semantics** (`CascadeBackend` in `hexabin/llm.py`): LM Studio first; escalate to Gemini when it errors, reports no confidence, or confidence < `CONFIDENCE_THRESHOLD`. If Gemini then fails but LM Studio produced a parseable low-confidence result, that result is used (degraded beats erroring).
 
-**AI prompt** (`smartwaste/prompt.py`): Returns `{"category": ..., "description": ..., "brand_product": ..., "confidence": 0-100}`. Includes Armenian brand examples (Jermuk, BOOM, etc.) for Yerevan deployment.
+**AI prompt** (`hexabin/prompt.py`): Returns `{"category": ..., "description": ..., "brand_product": ..., "confidence": 0-100}`. Includes Armenian brand examples (Jermuk, BOOM, etc.) for Yerevan deployment.
 
 ## Module Structure
 
@@ -214,7 +214,7 @@ All constants flow through `settings.py` (Pydantic BaseSettings) — override vi
 main.py              ← manual OAK mode (OpenCV window)
 mainauto.py          ← auto gate mode (presence-gated classifications)
 mainoak.py           ← OAK-D Native mode (depth + IMU + NN sensor fusion)
-smartwaste/
+hexabin/
   actuator.py        ← pluggable bin-module actuation (log now, GPIO drops in later)
   analytics.py       ← period windows + /api/analytics payload assembly (pure, unit-tested)
   app.py             ← shared OAK-camera run loop
@@ -261,7 +261,7 @@ smartwaste/
     cc_nav.js            ← shared sidebar alerts badge (all Control Center pages)
     site.css / site.js   ← presentation site assets
     sb-logo.svg          ← brand logo
-    models/smartbin.glb  ← 3D bin model (served via StaticFiles)
+    models/hexabin.glb  ← 3D bin model (served via StaticFiles)
     style.css            ← legacy dashboard styles (kept for back-compat)
 scripts/
   migrate_json_to_pg.py  ← one-time data migration to PostgreSQL
@@ -308,7 +308,7 @@ All UI (web dashboard, overlays, Grafana) must use these project colors.
 
 ```bash
 python -m pytest tests/
-python -m pytest tests/ --cov=smartwaste --cov-report=term-missing
+python -m pytest tests/ --cov=hexabin --cov-report=term-missing
 ```
 
 Test files follow `tests/test_<module>.py`. Install deps: `pip install -r requirements-test.txt`.
