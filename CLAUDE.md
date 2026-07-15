@@ -211,6 +211,7 @@ All constants flow through `settings.py` (Pydantic BaseSettings) — override vi
 ## Module Structure
 
 ```
+DESIGN.md            ← design system contract (palette, tokens, shared component classes)
 main.py              ← manual OAK mode (OpenCV window)
 mainauto.py          ← auto gate mode (presence-gated classifications)
 mainoak.py           ← OAK-D Native mode (depth + IMU + NN sensor fusion)
@@ -269,40 +270,9 @@ scripts/
 grafana/             ← Grafana provisioning and dashboards
 ```
 
-## Brand Color Palette
+## Design System
 
-All UI (web dashboard, overlays, Grafana) must use these project colors.
-
-**Primary**
-- Forest Green: `#2D5A42`
-- Deep Smart Blue: `#1A4D6B`
-
-**Secondary**
-- Stone Gray: `#8C8C8C`
-- Taupe: `#BDB76B`
-
-**Modular System (waste category colors)**
-| Category | Color | Hex |
-|----------|-------|-----|
-| Paper | Warm Cellulose | `#D2B48C` |
-| Aluminum | Brushed Metallic Gray | `#A9A9A9` |
-| Organic | Deep Biophilic Green | `#1E4D2B` |
-| Glass | Translucent Aqua / Crystal Teal | `#40E0D0` |
-| Plastic | Refined Synthetic Tone | `#87CEEB` |
-| Other | Dynamic Module Gradient | `#9370DB` → `#1E90FF` |
-| Empty | Stone Gray | `#8C8C8C` |
-
-**Semantic**
-- Success: `#4CAF50`
-- Warning: `#FF9800`
-- Error: `#C62828`
-- Info: `#2196F3`
-
-**Neutral**
-- Pure White: `#FFFFFF`
-- Off-White: `#F5F5F7`
-- Light Gray: `#E0E0E0`
-- Dark Charcoal: `#333333`
+**IMPORTANT: Before building any UI, you MUST read `DESIGN.md`. Never invent new CSS classes or styles outside of this contract.** All colors, fonts, design tokens (`--sb-*` variables in `brand.css`), and shared component classes are defined there.
 
 ## Testing
 
