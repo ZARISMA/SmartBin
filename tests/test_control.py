@@ -1,9 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
-from smartwaste.schemas import BinCommand, BinHeartbeat, WarningInfo
-from smartwaste.state import AppState
-from smartwaste.strategies import (
+from hexabin.schemas import BinCommand, BinHeartbeat, WarningInfo
+from hexabin.state import AppState
+from hexabin.strategies import (
     STRATEGY_AUTO,
     STRATEGY_MANUAL,
     ManualStrategy,

@@ -7,9 +7,9 @@ Controls:
   q — quit
 
 CLI overrides (all also settable via env vars or .env):
-  --model NAME          Gemini model  (SMARTWASTE_MODEL_NAME)
-  --auto-interval SEC   Auto-classify interval  (SMARTWASTE_AUTO_INTERVAL)
-  --location NAME       Deployment location tag  (SMARTWASTE_LOCATION)
+  --model NAME          Gemini model  (HEXABIN_MODEL_NAME)
+  --auto-interval SEC   Auto-classify interval  (HEXABIN_AUTO_INTERVAL)
+  --location NAME       Deployment location tag  (HEXABIN_LOCATION)
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import os
 
 def _parse() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="SmartWaste AI — Manual mode (dual OAK cameras)",
+        description="HexaBin AI — Manual mode (dual OAK cameras)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--model", metavar="NAME", help="Gemini model name")
@@ -34,17 +34,17 @@ def _parse() -> argparse.Namespace:
 def main() -> None:
     args = _parse()
 
-    # Propagate CLI overrides as env vars BEFORE importing smartwaste so that
+    # Propagate CLI overrides as env vars BEFORE importing hexabin so that
     # Settings() picks them up when modules are first imported.
     if args.model:
-        os.environ["SMARTWASTE_MODEL_NAME"] = args.model
+        os.environ["HEXABIN_MODEL_NAME"] = args.model
     if args.auto_interval is not None:
-        os.environ["SMARTWASTE_AUTO_INTERVAL"] = str(args.auto_interval)
+        os.environ["HEXABIN_AUTO_INTERVAL"] = str(args.auto_interval)
     if args.location:
-        os.environ["SMARTWASTE_LOCATION"] = args.location
+        os.environ["HEXABIN_LOCATION"] = args.location
 
-    from smartwaste.app import run_loop
-    from smartwaste.strategies import ManualStrategy
+    from hexabin.app import run_loop
+    from hexabin.strategies import ManualStrategy
 
     run_loop(ManualStrategy())
 

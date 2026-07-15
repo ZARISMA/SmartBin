@@ -1,0 +1,67 @@
+{% extends "_cc_base.html" %}
+{% block title %}Map · HexaBin Control Center{% endblock %}
+{% block page_title %}Deployment Map{% endblock %}
+{% block kicker %}§ Operate{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
+
+{% block topbar_actions %}
+    <div class="basemap-switch" role="tablist" aria-label="Basemap">
+        <button class="bm-btn active" data-basemap="dark"      role="tab">Dark</button>
+        <button class="bm-btn"        data-basemap="streets"   role="tab">Streets</button>
+        <button class="bm-btn"        data-basemap="satellite" role="tab">Satellite</button>
+    </div>
+    <button class="sb-btn sb-btn-secondary" id="export-geojson" type="button">Export GeoJSON</button>
+{% endblock %}
+
+{% block content_class %}cc-content-flush{% endblock %}
+
+{% block content %}
+<div class="map-stage">
+    <div id="cc-map" aria-label="Operator map"></div>
+
+    <div class="map-panel map-panel-legend">
+        <div class="map-panel-title">Legend</div>
+        <div class="legend-row"><span class="dot" style="background:var(--sb-success);"></span><span class="lbl">Online</span><span class="n" id="legend-online">0</span></div>
+        <div class="legend-row"><span class="dot" style="background:var(--sb-warning);"></span><span class="lbl">Degraded</span><span class="n" id="legend-degraded">0</span></div>
+        <div class="legend-row"><span class="dot" style="background:var(--sb-error);"></span><span class="lbl">Offline</span><span class="n" id="legend-offline">0</span></div>
+        <div class="legend-row"><span class="dot" style="background:var(--sb-stone);"></span><span class="lbl">Stopped</span><span class="n" id="legend-stopped">0</span></div>
+    </div>
+
+    <div class="map-panel map-panel-zoom">
+        <button id="zoom-in"   aria-label="Zoom in">+</button>
+        <button id="zoom-out"  aria-label="Zoom out">−</button>
+        <button id="zoom-home" aria-label="Reset view">⌖</button>
+    </div>
+
+    <div class="map-panel map-panel-filter">
+        <button class="chip active" data-mapfilter="all"     >All bins</button>
+        <button class="chip"        data-mapfilter="needs"   >Needs collection</button>
+        <button class="chip"        data-mapfilter="alerts"  >Alerts</button>
+    </div>
+
+    <div class="map-panel map-panel-detail" id="map-detail" hidden>
+        <button class="detail-close" id="detail-close" aria-label="Close">×</button>
+        <span class="sb-pill" id="detail-status"><span class="dot"></span><span data-field="status">online</span></span>
+        <div class="detail-loc" id="detail-loc">—</div>
+        <div class="detail-id"  id="detail-id">—</div>
+        <div class="detail-mini">
+            <div class="mini"><div class="mini-key">Today</div><div class="mini-val" id="detail-today">0</div></div>
+            <div class="mini"><div class="mini-key">Pipeline</div><div class="mini-val" id="detail-pipeline">—</div></div>
+            <div class="mini"><div class="mini-key">Last beat</div><div class="mini-val" id="detail-last">—</div></div>
+        </div>
+        <div id="detail-warn" hidden></div>
+        <div class="detail-actions">
+            <a class="sb-btn sb-btn-primary" id="detail-open" href="#">Open detail →</a>
+            <button class="sb-btn sb-btn-secondary" id="detail-plan" type="button">Plan route</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/dashboard_map.js"></script>
+{% endblock %}

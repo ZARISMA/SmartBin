@@ -1,4 +1,4 @@
-"""Tests for smartwaste/strategies.py — ManualStrategy and PresenceGateStrategy."""
+"""Tests for hexabin/strategies.py — ManualStrategy and PresenceGateStrategy."""
 
 import time
 from unittest.mock import MagicMock, patch
@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from smartwaste.state import AppState
-from smartwaste.strategies import ManualStrategy, PresenceGateStrategy
+from hexabin.state import AppState
+from hexabin.strategies import ManualStrategy, PresenceGateStrategy
 
 
 def _combined() -> np.ndarray:
@@ -37,7 +37,7 @@ class TestManualStrategyOnCombinedFrame:
     def test_no_trigger_when_auto_off(self):
         state = AppState()
         state.auto_classify = False
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             ManualStrategy().on_combined_frame(_combined(), state)
         assert not mock.called
 
@@ -46,8 +46,8 @@ class TestManualStrategyOnCombinedFrame:
         state.auto_classify = True
         state.last_capture_time = 0.0  # far in the past
         with (
-            patch("smartwaste.strategies.launch_classify") as mock,
-            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+            patch("hexabin.strategies.launch_classify") as mock,
+            patch("hexabin.strategies.encode_frame", return_value=b"x"),
         ):
             ManualStrategy().on_combined_frame(_combined(), state)
         assert mock.called
@@ -56,7 +56,7 @@ class TestManualStrategyOnCombinedFrame:
         state = AppState()
         state.auto_classify = True
         state.last_capture_time = time.time()  # just now
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             ManualStrategy().on_combined_frame(_combined(), state)
         assert not mock.called
 
@@ -65,7 +65,7 @@ class TestManualStrategyOnCombinedFrame:
         state.auto_classify = True
         state.last_capture_time = 0.0
         state.start_classify()  # mark as busy
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             ManualStrategy().on_combined_frame(_combined(), state)
         assert not mock.called
 
@@ -75,8 +75,8 @@ class TestManualStrategyOnCombinedFrame:
         state.last_capture_time = 0.0
         before = time.time()
         with (
-            patch("smartwaste.strategies.launch_classify"),
-            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+            patch("hexabin.strategies.launch_classify"),
+            patch("hexabin.strategies.encode_frame", return_value=b"x"),
         ):
             ManualStrategy().on_combined_frame(_combined(), state)
         assert state.last_capture_time >= before
@@ -86,8 +86,8 @@ class TestManualStrategyOnKey:
     def test_c_key_triggers_classify(self):
         state = AppState()
         with (
-            patch("smartwaste.strategies.launch_classify") as mock,
-            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+            patch("hexabin.strategies.launch_classify") as mock,
+            patch("hexabin.strategies.encode_frame", return_value=b"x"),
         ):
             ManualStrategy().on_key(ord("c"), _combined(), state)
         assert mock.called
@@ -95,13 +95,13 @@ class TestManualStrategyOnKey:
     def test_c_key_does_nothing_when_busy(self):
         state = AppState()
         state.start_classify()  # mark busy
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             ManualStrategy().on_key(ord("c"), _combined(), state)
         assert not mock.called
 
     def test_c_key_does_nothing_when_combined_is_none(self):
         state = AppState()
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             ManualStrategy().on_key(ord("c"), None, state)
         assert not mock.called
 
@@ -155,8 +155,8 @@ class TestPresenceGateStrategyOnKey:
     def test_c_key_triggers_classify(self):
         state = AppState()
         with (
-            patch("smartwaste.strategies.launch_classify") as mock,
-            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+            patch("hexabin.strategies.launch_classify") as mock,
+            patch("hexabin.strategies.encode_frame", return_value=b"x"),
         ):
             PresenceGateStrategy().on_key(ord("c"), _combined(), state)
         assert mock.called
@@ -165,22 +165,22 @@ class TestPresenceGateStrategyOnKey:
         state = AppState()
         s = PresenceGateStrategy()
         with (
-            patch("smartwaste.strategies.launch_classify"),
-            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+            patch("hexabin.strategies.launch_classify"),
+            patch("hexabin.strategies.encode_frame", return_value=b"x"),
         ):
             s.on_key(ord("c"), _combined(), state)
         assert s._item_classified is True
 
     def test_c_key_does_nothing_when_combined_none(self):
         state = AppState()
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             PresenceGateStrategy().on_key(ord("c"), None, state)
         assert not mock.called
 
     def test_c_key_does_nothing_when_busy(self):
         state = AppState()
         state.start_classify()
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             PresenceGateStrategy().on_key(ord("c"), _combined(), state)
         assert not mock.called
 
@@ -217,7 +217,7 @@ class TestPresenceGateStrategyOnCombinedFrame:
         state = AppState()
         s = PresenceGateStrategy()
         s._last_check_time = time.time()  # just now — interval not passed
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             s.on_combined_frame(_combined(), state)
         assert not mock.called
 
@@ -242,7 +242,7 @@ class TestPresenceGateStrategyOnCombinedFrame:
         state = AppState()
         s = PresenceGateStrategy()
         s._last_check_time = 0.0
-        with patch("smartwaste.strategies.launch_classify") as mock:
+        with patch("hexabin.strategies.launch_classify") as mock:
             s.on_combined_frame(_combined(), state)
         assert not mock.called
 
@@ -259,11 +259,11 @@ class TestPresenceGateStrategyOnCombinedFrame:
         # Send a bright frame → large diff → occupied
         bright = np.full((480, 1280, 3), 200, dtype=np.uint8)
 
-        from smartwaste.config import DETECT_CONFIRM_N
+        from hexabin.config import DETECT_CONFIRM_N
 
         with (
-            patch("smartwaste.strategies.launch_classify") as mock,
-            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+            patch("hexabin.strategies.launch_classify") as mock,
+            patch("hexabin.strategies.encode_frame", return_value=b"x"),
         ):
             for _ in range(DETECT_CONFIRM_N + 1):
                 s._last_check_time = 0.0
@@ -280,15 +280,15 @@ class TestPresenceGateStrategyOnCombinedFrame:
         s._detector.reset(gray_seed)
         bright = np.full((480, 1280, 3), 200, dtype=np.uint8)
 
-        from smartwaste.config import DETECT_CONFIRM_N
+        from hexabin.config import DETECT_CONFIRM_N
 
         call_count = []
         with (
             patch(
-                "smartwaste.strategies.launch_classify",
+                "hexabin.strategies.launch_classify",
                 side_effect=lambda *a, **kw: call_count.append(1),
             ),
-            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+            patch("hexabin.strategies.encode_frame", return_value=b"x"),
         ):
             for _ in range(DETECT_CONFIRM_N + 5):
                 s._last_check_time = 0.0
@@ -309,12 +309,12 @@ class TestPresenceGateStrategyOnCombinedFrame:
         gray_seed = np.zeros((480, 1280), dtype=np.uint8)
         s._detector.reset(gray_seed)
 
-        from smartwaste.config import EMPTY_CONFIRM_N
+        from hexabin.config import EMPTY_CONFIRM_N
 
         black = np.zeros((480, 1280, 3), dtype=np.uint8)
         with (
-            patch("smartwaste.strategies.launch_classify"),
-            patch("smartwaste.strategies.encode_frame", return_value=b"x"),
+            patch("hexabin.strategies.launch_classify"),
+            patch("hexabin.strategies.encode_frame", return_value=b"x"),
         ):
             for _ in range(EMPTY_CONFIRM_N + 1):
                 s._last_check_time = 0.0

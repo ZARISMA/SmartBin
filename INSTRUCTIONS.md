@@ -1,4 +1,4 @@
-# SmartBin — Bring-up Instructions
+# HexaBin — Bring-up Instructions
 
 Two machines:
 
@@ -14,7 +14,7 @@ Shared edge API key: `smartbin-edge-2026-a7f3k9`. Admin login: `admin` / `passwo
 Open git-bash (or PowerShell) in the repo root and run:
 
 ```bash
-in /SmartBin
+in /HexaBin
 docker compose up -d
 ```
 
@@ -33,14 +33,14 @@ Open `http://localhost:8000` in a browser. Log in with `admin` / ``.
 docker compose up -d --build
 ```
 
-Code under `smartwaste/` is bind-mounted — for pure Python edits, `docker compose restart app` is enough.
+Code under `hexabin/` is bind-mounted — for pure Python edits, `docker compose restart app` is enough.
 
 **If port 5432 is already in use on the host** (another Postgres): already handled — `docker-compose.yml` maps Postgres to host port `5433`. Ignore.
 
 **Windows Firewall** (one-time, elevated PowerShell — only needed if the Pi can't reach the laptop):
 
 ```powershell
-New-NetFirewallRule -DisplayName "SmartBin 8000" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
+New-NetFirewallRule -DisplayName "HexaBin 8000" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
 ```
 
 ---
@@ -58,7 +58,7 @@ Or use OpenSSH: `ssh hexabin@10.172.194.238` (password `Hexa1234`).
 ### 2a. With an OAK camera plugged in (normal operation)
 
 ```bash
-cd ~/SmartBin
+cd ~/HexaBin
 docker compose -f docker-compose.edge.yml up -d
 docker compose -f docker-compose.edge.yml logs -f --tail 50
 ```
@@ -70,7 +70,7 @@ Ctrl-C detaches from logs; container keeps running (`restart: unless-stopped`).
 `mainoak.py` needs the OAK camera and will crash-loop without one. Run a pure-heartbeat process instead so the bin shows Online on the dashboard:
 
 ```bash
-cd ~/SmartBin
+cd ~/HexaBin
 docker compose -f docker-compose.edge.yml down 2>/dev/null
 
 cat > /tmp/hb.sh <<'EOF'
@@ -134,11 +134,11 @@ Expect `{"status":"ok","id":N,"result":{...,"backend":"lmstudio"|"gemini"},"comm
 
 | Setting | Laptop (.env) | Pi (.env) |
 |---|---|---|
-| `SMARTWASTE_EDGE_MODE` | `false` | `true` |
-| `SMARTWASTE_BIN_ID` | `server-01` | `bin-01` |
-| `SMARTWASTE_SERVER_URL` | — | `http://10.172.194.199:8000` |
-| `SMARTWASTE_EDGE_API_KEY` | `smartbin-edge-2026-a7f3k9` | same |
-| `SMARTWASTE_CAMERA_MODE` | `none` (docker-compose.yml overrides) | `oak-native` with camera, `none` without |
-| `SMARTWASTE_DB_BACKEND` | `postgresql` (docker-compose.yml overrides) | n/a |
+| `HEXABIN_EDGE_MODE` | `false` | `true` |
+| `HEXABIN_BIN_ID` | `server-01` | `bin-01` |
+| `HEXABIN_SERVER_URL` | — | `http://10.172.194.199:8000` |
+| `HEXABIN_EDGE_API_KEY` | `smartbin-edge-2026-a7f3k9` | same |
+| `HEXABIN_CAMERA_MODE` | `none` (docker-compose.yml overrides) | `oak-native` with camera, `none` without |
+| `HEXABIN_DB_BACKEND` | `postgresql` (docker-compose.yml overrides) | n/a |
 
 Laptop IP `10.172.194.199` and Pi IP `10.172.194.238` are LAN addresses — re-check with `ipconfig` / `ip a` if either machine gets a new DHCP lease.

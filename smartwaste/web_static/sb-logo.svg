@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-label="SmartBin">
-    <path d="M32 4 L57 18 L57 46 L32 60 L7 46 L7 18 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>
-    <path d="M32 4 L48 13 L48 25 L32 34 L16 25 L16 13 Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none" opacity="0.85"/>
-    <path d="M7 18 L16 13 M57 18 L48 13 M16 25 L7 18 M48 25 L57 18 M32 34 L32 60" stroke="currentColor" stroke-width="1" stroke-linejoin="round" opacity="0.55"/>
-</svg>

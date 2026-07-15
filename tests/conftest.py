@@ -1,7 +1,7 @@
 """
 conftest.py — shared fixtures and environment setup.
 
-Must run before any smartwaste module is imported, because several modules
+Must run before any hexabin module is imported, because several modules
 execute side-effects at import time (DB init, GEMINI_API_KEY check, etc.).
 """
 
@@ -16,10 +16,10 @@ import pytest
 os.environ.setdefault("GEMINI_API_KEY", "test-key-for-pytest")
 
 # ── 1a. Edge API key so auth-scoping tests can exercise the ingest endpoints ─
-os.environ.setdefault("SMARTWASTE_EDGE_API_KEY", "test-edge-key")
+os.environ.setdefault("HEXABIN_EDGE_API_KEY", "test-edge-key")
 
 # ── 1b. Default to SQLite for tests (no PostgreSQL required) ─────────────────
-os.environ.setdefault("SMARTWASTE_DB_BACKEND", "sqlite")
+os.environ.setdefault("HEXABIN_DB_BACKEND", "sqlite")
 
 # ── 2. Mock hardware-specific packages that may not be installed ──────────────
 for _mod in ("depthai", "picamera2"):
@@ -55,7 +55,7 @@ def white_gray():
 
 @pytest.fixture
 def app_state():
-    from smartwaste.state import AppState
+    from hexabin.state import AppState
 
     return AppState()
 
@@ -63,8 +63,8 @@ def app_state():
 @pytest.fixture
 def ready_detector():
     """PresenceDetector that has completed warmup on a black frame."""
-    from smartwaste.presence import PresenceDetector
-    from smartwaste.config import BG_WARMUP_FRAMES
+    from hexabin.presence import PresenceDetector
+    from hexabin.config import BG_WARMUP_FRAMES
     import numpy as np
 
     d = PresenceDetector()

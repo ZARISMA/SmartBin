@@ -1,11 +1,11 @@
-"""Tests for smartwaste/state.py — AppState thread-safety and API contract."""
+"""Tests for hexabin/state.py — AppState thread-safety and API contract."""
 
 import threading
 import time
 
 import pytest
 
-from smartwaste.state import AppState
+from hexabin.state import AppState
 
 
 class TestInitialValues:

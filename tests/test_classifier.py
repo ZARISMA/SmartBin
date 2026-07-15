@@ -1,5 +1,5 @@
 """
-Tests for smartwaste/classifier.py.
+Tests for hexabin/classifier.py.
 
 _extract_json  — tested directly (no network calls needed).
 classify()     — tested with a mocked LLM backend (local mode) and a mocked
@@ -12,9 +12,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from smartwaste.classifier import _extract_json
-from smartwaste.config import VALID_CLASSES
-from smartwaste.state import AppState
+from hexabin.classifier import _extract_json
+from hexabin.config import VALID_CLASSES
+from hexabin.state import AppState
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ class TestExtractJsonErrors:
 
 def _backend_for(response_text: str) -> MagicMock:
     """Stub backend whose classify() parses *response_text* like a real one."""
-    from smartwaste.llm import parse_result
+    from hexabin.llm import parse_result
 
     backend = MagicMock()
     backend.classify.side_effect = lambda img: parse_result(response_text, "gemini")
@@ -170,10 +170,10 @@ def _run_classify(response_text: str, state=None):
 
     frame = np.zeros((10, 10, 3), dtype=np.uint8)
     with (
-        patch("smartwaste.classifier.build_backend", return_value=_backend_for(response_text)),
-        patch("smartwaste.classifier.save_entry") as mock_save,
+        patch("hexabin.classifier.build_backend", return_value=_backend_for(response_text)),
+        patch("hexabin.classifier.save_entry") as mock_save,
     ):
-        from smartwaste.classifier import classify
+        from hexabin.classifier import classify
 
         classify(b"fake_bytes", frame, state)
         return state, mock_save
@@ -189,10 +189,10 @@ def _run_classify_error(error: Exception, state=None):
     backend = MagicMock()
     backend.classify.side_effect = error
     with (
-        patch("smartwaste.classifier.build_backend", return_value=backend),
-        patch("smartwaste.classifier.save_entry"),
+        patch("hexabin.classifier.build_backend", return_value=backend),
+        patch("hexabin.classifier.save_entry"),
     ):
-        from smartwaste.classifier import classify
+        from hexabin.classifier import classify
 
         classify(b"bytes", frame, state)
     return state
@@ -293,7 +293,7 @@ class TestClassifyErrorHandling:
         assert label == "Error"
 
     def test_circuit_open_sets_paused_label(self):
-        from smartwaste.llm import CircuitOpenError
+        from hexabin.llm import CircuitOpenError
 
         state = _run_classify_error(CircuitOpenError("circuit open — retrying later"))
         label, _, _ = state.get_display()
@@ -336,16 +336,16 @@ class TestClassifyServerMode:
             state.start_classify()
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         with (
-            patch("smartwaste.classifier.CLASSIFY_MODE", "server"),
-            patch("smartwaste.classifier.classify_remote") as mock_remote,
-            patch("smartwaste.classifier.save_entry") as mock_save,
-            patch("smartwaste.classifier.dispatch") as mock_dispatch,
+            patch("hexabin.classifier.CLASSIFY_MODE", "server"),
+            patch("hexabin.classifier.classify_remote") as mock_remote,
+            patch("hexabin.classifier.save_entry") as mock_save,
+            patch("hexabin.classifier.dispatch") as mock_dispatch,
         ):
             if error is not None:
                 mock_remote.side_effect = error
             else:
                 mock_remote.return_value = remote_response
-            from smartwaste.classifier import classify
+            from hexabin.classifier import classify
 
             classify(b"bytes", frame, state)
         return state, mock_save, mock_dispatch
@@ -374,7 +374,7 @@ class TestClassifyServerMode:
         assert not mock_dispatch.called
 
     def test_server_error_sets_status_and_warning(self):
-        from smartwaste.edge_client import EdgeServerError
+        from hexabin.edge_client import EdgeServerError
 
         state, _, _ = self._run(error=EdgeServerError("connection refused"))
         label, _, _ = state.get_display()

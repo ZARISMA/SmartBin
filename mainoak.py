@@ -27,10 +27,10 @@ Controls
   r — reset / recalibrate
 
 CLI overrides (all also settable via env vars or .env):
-  --model NAME              Gemini model  (SMARTWASTE_MODEL_NAME)
-  --threshold FLOAT         Presence motion threshold  (SMARTWASTE_MOTION_THRESHOLD)
-  --votes N                 Sensor votes needed  (SMARTWASTE_OAK_VOTES_NEEDED)
-  --location NAME           Deployment location tag  (SMARTWASTE_LOCATION)
+  --model NAME              Gemini model  (HEXABIN_MODEL_NAME)
+  --threshold FLOAT         Presence motion threshold  (HEXABIN_MOTION_THRESHOLD)
+  --votes N                 Sensor votes needed  (HEXABIN_OAK_VOTES_NEEDED)
+  --location NAME           Deployment location tag  (HEXABIN_LOCATION)
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ import sys
 import time
 
 
-# ── Early CLI parsing — sets env vars BEFORE smartwaste modules are imported ──
+# ── Early CLI parsing — sets env vars BEFORE hexabin modules are imported ──
 # This ensures Settings() sees CLI values when config constants are assigned.
 def _export_cli_overrides() -> None:
     p = argparse.ArgumentParser(add_help=False)
@@ -52,16 +52,16 @@ def _export_cli_overrides() -> None:
     p.add_argument("--location")
     known, _ = p.parse_known_args()
     if known.model:
-        os.environ["SMARTWASTE_MODEL_NAME"] = known.model
+        os.environ["HEXABIN_MODEL_NAME"] = known.model
     if known.threshold is not None:
-        os.environ["SMARTWASTE_MOTION_THRESHOLD"] = str(known.threshold)
+        os.environ["HEXABIN_MOTION_THRESHOLD"] = str(known.threshold)
     if known.votes is not None:
-        os.environ["SMARTWASTE_OAK_VOTES_NEEDED"] = str(known.votes)
+        os.environ["HEXABIN_OAK_VOTES_NEEDED"] = str(known.votes)
     if known.location:
-        os.environ["SMARTWASTE_LOCATION"] = known.location
+        os.environ["HEXABIN_LOCATION"] = known.location
 
 
-_export_cli_overrides()  # must run before the smartwaste imports below
+_export_cli_overrides()  # must run before the hexabin imports below
 
 import contextlib
 
@@ -69,8 +69,8 @@ import cv2
 import depthai as dai
 import numpy as np
 
-from smartwaste.cameraOak import crop_sides, make_pipeline
-from smartwaste.config import (
+from hexabin.cameraOak import crop_sides, make_pipeline
+from hexabin.config import (
     CROP_PERCENT,
     DISPLAY_SIZE,
     EDGE_MODE,
@@ -83,11 +83,11 @@ from smartwaste.config import (
     OAK_VOTES_NEEDED,
     OAK_WINDOW,
 )
-from smartwaste.log_setup import get_logger
-from smartwaste.oak_native import OAKOccupancyDetector, SensorVotes
-from smartwaste.state import AppState
-from smartwaste.ui import draw_nn_detections
-from smartwaste.utils import encode_frame, launch_classify
+from hexabin.log_setup import get_logger
+from hexabin.oak_native import OAKOccupancyDetector, SensorVotes
+from hexabin.state import AppState
+from hexabin.ui import draw_nn_detections
+from hexabin.utils import encode_frame, launch_classify
 
 logger = get_logger()
 
@@ -180,9 +180,9 @@ def _active_count(detector: OAKOccupancyDetector) -> int:
 
 def _detect_headless() -> bool:
     """True when no display is available — edge containers, SSH, etc."""
-    if os.environ.get("SMARTWASTE_HEADLESS", "").lower() in ("1", "true", "yes"):
+    if os.environ.get("HEXABIN_HEADLESS", "").lower() in ("1", "true", "yes"):
         return True
-    if os.environ.get("SMARTWASTE_EDGE_MODE", "").lower() in ("1", "true", "yes"):
+    if os.environ.get("HEXABIN_EDGE_MODE", "").lower() in ("1", "true", "yes"):
         return True
     if sys.platform.startswith(("linux", "darwin")) and not os.environ.get("DISPLAY"):
         return True
@@ -297,7 +297,7 @@ def _handle_key(
 def main(app_state: AppState | None = None) -> None:
     # Full parser — for --help and validation only (values already in env vars)
     p = argparse.ArgumentParser(
-        description="SmartWaste AI — OAK Native mode (1 or 2 cameras)",
+        description="HexaBin AI — OAK Native mode (1 or 2 cameras)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--model", metavar="NAME", help="Gemini model name")
@@ -324,8 +324,8 @@ def main(app_state: AppState | None = None) -> None:
     app_state.set_status("Calibrating", "Warming up sensors…")
 
     if EDGE_MODE:
-        from smartwaste.edge_client import start_heartbeat_thread
-        from smartwaste.edge_server import FrameBuffer, start_edge_server
+        from hexabin.edge_client import start_heartbeat_thread
+        from hexabin.edge_server import FrameBuffer, start_edge_server
 
         start_heartbeat_thread(app_state)
         frame_buf = FrameBuffer()
@@ -386,8 +386,8 @@ def main(app_state: AppState | None = None) -> None:
                 f"Cannot open display window: {exc}\n"
                 "On Linux/Raspberry Pi: a monitor must be connected and a desktop "
                 "session active. If using SSH, run: export DISPLAY=:0\n"
-                "For headless edge deployments set SMARTWASTE_HEADLESS=1 "
-                "or SMARTWASTE_EDGE_MODE=true."
+                "For headless edge deployments set HEXABIN_HEADLESS=1 "
+                "or HEXABIN_EDGE_MODE=true."
             ) from exc
 
     with contextlib.ExitStack() as exit_stack:

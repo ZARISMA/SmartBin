@@ -4,10 +4,10 @@
 # the admin dashboard can proxy the live stream and send control commands.
 #
 # Usage:
-#   SMARTWASTE_SERVER_URL=http://<server-ip>:8000 \
+#   HEXABIN_SERVER_URL=http://<server-ip>:8000 \
 #   docker compose -f docker-compose.edge.yml up -d
 #
-# Pipeline is selected via SMARTWASTE_CAMERA_MODE (oak | oak-native).
+# Pipeline is selected via HEXABIN_CAMERA_MODE (oak | oak-native).
 # Strategy (manual / auto) only applies to the dual-OAK pipeline and can be
 # changed at runtime from the admin dashboard without a restart.
 
@@ -20,30 +20,30 @@ services:
       - path: .env
         required: false
     environment:
-      - SMARTWASTE_EDGE_MODE=true
-      - SMARTWASTE_SERVER_URL=${SMARTWASTE_SERVER_URL:-http://192.168.1.100:8000}
-      # Must match the server's SMARTWASTE_EDGE_API_KEY. This key is scoped to
+      - HEXABIN_EDGE_MODE=true
+      - HEXABIN_SERVER_URL=${HEXABIN_SERVER_URL:-http://192.168.1.100:8000}
+      # Must match the server's HEXABIN_EDGE_API_KEY. This key is scoped to
       # the ingest endpoints only — it does not open the admin dashboard.
-      - SMARTWASTE_EDGE_API_KEY=${SMARTWASTE_EDGE_API_KEY:-edge-key-change-me}
+      - HEXABIN_EDGE_API_KEY=${HEXABIN_EDGE_API_KEY:-edge-key-change-me}
       # "server": send frames to the central server, which runs the LLM and
       # replies with the bin-module command. "local": classify on-device with
       # Gemini (the original behavior; needs GEMINI_API_KEY on the Pi).
-      - SMARTWASTE_CLASSIFY_MODE=${SMARTWASTE_CLASSIFY_MODE:-server}
-      - SMARTWASTE_BIN_ID=${SMARTWASTE_BIN_ID:-bin-01}
-      - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak-native}
-      - SMARTWASTE_STRATEGY=${SMARTWASTE_STRATEGY:-manual}
-      - SMARTWASTE_LOCATION=${SMARTWASTE_LOCATION:-Yerevan}
+      - HEXABIN_CLASSIFY_MODE=${HEXABIN_CLASSIFY_MODE:-server}
+      - HEXABIN_BIN_ID=${HEXABIN_BIN_ID:-bin-01}
+      - HEXABIN_CAMERA_MODE=${HEXABIN_CAMERA_MODE:-oak-native}
+      - HEXABIN_STRATEGY=${HEXABIN_STRATEGY:-manual}
+      - HEXABIN_LOCATION=${HEXABIN_LOCATION:-Yerevan}
       # LAN IP the laptop uses to reach this Pi (container IP is not routable).
       # Required so the server-side proxy routes (/api/bin/{id}/stream) work.
-      - SMARTWASTE_EDGE_HOST=${SMARTWASTE_EDGE_HOST:-}
+      - HEXABIN_EDGE_HOST=${HEXABIN_EDGE_HOST:-}
     privileged: true
     ports:
-      - "${SMARTWASTE_EDGE_PORT:-8000}:8000"
+      - "${HEXABIN_EDGE_PORT:-8000}:8000"
     volumes:
       - /dev/bus/usb:/dev/bus/usb
       - edge_images:/app/waste_dataset
     restart: unless-stopped
-    command: ["python", "-m", "smartwaste.control"]
+    command: ["python", "-m", "hexabin.control"]
 
 volumes:
   edge_images:

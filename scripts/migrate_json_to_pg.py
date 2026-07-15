@@ -3,7 +3,7 @@
 One-time migration: metadata.json and/or waste.db (SQLite) -> PostgreSQL.
 
 Usage:
-    # Ensure SMARTWASTE_DB_* env vars are set (or .env exists), then:
+    # Ensure HEXABIN_DB_* env vars are set (or .env exists), then:
     python scripts/migrate_json_to_pg.py
 
     # Or specify source explicitly:
@@ -21,12 +21,12 @@ import os
 import sqlite3
 import sys
 
-# Add project root to path so smartwaste can be imported
+# Add project root to path so hexabin can be imported
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import psycopg2
 
-from smartwaste.config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
+from hexabin.config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
 
 DATASET_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "waste_dataset"

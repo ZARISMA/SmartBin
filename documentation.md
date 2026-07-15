@@ -1,4 +1,4 @@
-# SmartBin Documentation
+# HexaBin Documentation
 
 **Version:** 0.1.0
 **Project:** Smart Waste AI
@@ -146,7 +146,7 @@ python mainoak.py --votes 2 --threshold 12.0
 python mainraspberry.py
 
 # Web/Docker mode — FastAPI dashboard
-python -m smartwaste.web
+python -m hexabin.web
 ```
 
 ### CLI Entry Points (via `pyproject.toml`)
@@ -154,9 +154,9 @@ python -m smartwaste.web
 After `pip install -e .`:
 
 ```bash
-smartwaste              # → main:main (manual mode)
-smartwaste-auto         # → mainauto:main (auto-gate mode)
-smartwaste-oak          # → mainoak:main (OAK native mode)
+hexabin                  # → main:main (manual mode)
+hexabin-auto         # → mainauto:main (auto-gate mode)
+hexabin-oak          # → mainoak:main (OAK native mode)
 ```
 
 ---
@@ -167,7 +167,7 @@ smartwaste-oak          # → mainoak:main (OAK native mode)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          SmartBin System                                │
+│                          HexaBin System                                │
 │                                                                         │
 │  ┌──────────┐  ┌──────────┐                                            │
 │  │ Camera A  │  │ Camera B  │   (OAK-D USB3 or Raspberry Pi)            │
@@ -229,7 +229,7 @@ Thread safety is managed through `threading.Lock` in:
 
 ### Strategy Pattern
 
-Classification triggers are decoupled from the capture loop via the Strategy pattern (`smartwaste/app.py`):
+Classification triggers are decoupled from the capture loop via the Strategy pattern (`hexabin/app.py`):
 
 ```
 Strategy (ABC)
@@ -243,36 +243,36 @@ The `run_loop()` function accepts any `Strategy` subclass. OAK Native mode (`mai
 
 ```
 main.py / mainauto.py
-    └── smartwaste/app.py (run_loop)
-        ├── smartwaste/strategies.py (ManualStrategy, PresenceGateStrategy)
-        │   ├── smartwaste/presence.py (PresenceDetector)
-        │   └── smartwaste/utils.py (encode_frame, launch_classify)
-        │       └── smartwaste/classifier.py (classify, Gemini API)
-        │           ├── smartwaste/prompt.py (PROMPT)
-        │           └── smartwaste/dataset.py (save_entry)
-        │               ├── smartwaste/database.py (insert_entry)
-        │               └── smartwaste/edge_client.py (report_classification)
-        ├── smartwaste/cameraOak.py (make_pipeline, crop_sides)
-        ├── smartwaste/state.py (AppState)
-        ├── smartwaste/ui.py (draw_overlay)
-        ├── smartwaste/config.py (constants)
-        │   └── smartwaste/settings.py (Pydantic BaseSettings)
-        └── smartwaste/log_setup.py (logging)
+    └── hexabin/app.py (run_loop)
+        ├── hexabin/strategies.py (ManualStrategy, PresenceGateStrategy)
+        │   ├── hexabin/presence.py (PresenceDetector)
+        │   └── hexabin/utils.py (encode_frame, launch_classify)
+        │       └── hexabin/classifier.py (classify, Gemini API)
+        │           ├── hexabin/prompt.py (PROMPT)
+        │           └── hexabin/dataset.py (save_entry)
+        │               ├── hexabin/database.py (insert_entry)
+        │               └── hexabin/edge_client.py (report_classification)
+        ├── hexabin/cameraOak.py (make_pipeline, crop_sides)
+        ├── hexabin/state.py (AppState)
+        ├── hexabin/ui.py (draw_overlay)
+        ├── hexabin/config.py (constants)
+        │   └── hexabin/settings.py (Pydantic BaseSettings)
+        └── hexabin/log_setup.py (logging)
 
 mainoak.py
-    ├── smartwaste/oak_native.py (OAKOccupancyDetector)
-    │   └── smartwaste/presence.py (PresenceDetector)
-    ├── smartwaste/cameraOak.py
-    ├── smartwaste/state.py
-    ├── smartwaste/ui.py (draw_nn_detections)
-    └── smartwaste/utils.py
+    ├── hexabin/oak_native.py (OAKOccupancyDetector)
+    │   └── hexabin/presence.py (PresenceDetector)
+    ├── hexabin/cameraOak.py
+    ├── hexabin/state.py
+    ├── hexabin/ui.py (draw_nn_detections)
+    └── hexabin/utils.py
 
-smartwaste/web.py (FastAPI)
-    ├── smartwaste/cameraOak.py / cameraraspberry.py / oak_native.py
-    ├── smartwaste/state.py
-    ├── smartwaste/database.py
-    ├── smartwaste/schemas.py (EdgeReport, BinHeartbeat)
-    └── smartwaste/edge_client.py (heartbeat thread)
+hexabin/web.py (FastAPI)
+    ├── hexabin/cameraOak.py / cameraraspberry.py / oak_native.py
+    ├── hexabin/state.py
+    ├── hexabin/database.py
+    ├── hexabin/schemas.py (EdgeReport, BinHeartbeat)
+    └── hexabin/edge_client.py (heartbeat thread)
 ```
 
 ---
@@ -281,15 +281,15 @@ smartwaste/web.py (FastAPI)
 
 ### Configuration Priority (highest to lowest)
 
-1. **CLI arguments** — entry points export CLI values as `SMARTWASTE_*` env vars before importing modules
-2. **Shell environment variables** — `SMARTWASTE_*` prefix
+1. **CLI arguments** — entry points export CLI values as `HEXABIN_*` env vars before importing modules
+2. **Shell environment variables** — `HEXABIN_*` prefix
 3. **`.env` file** — in the project root, loaded by Pydantic
-4. **Defaults** — defined in `smartwaste/settings.py`
+4. **Defaults** — defined in `hexabin/settings.py`
 
-### Settings Layer (`smartwaste/settings.py`)
+### Settings Layer (`hexabin/settings.py`)
 
 The `Settings` class uses `pydantic_settings.BaseSettings` with:
-- `env_prefix="SMARTWASTE_"` — all settings use this prefix except `GEMINI_API_KEY`
+- `env_prefix="HEXABIN_"` — all settings use this prefix except `GEMINI_API_KEY`
 - `env_file=".env"` — auto-loads from project root
 - `case_sensitive=False`
 - `extra="ignore"` — unknown env vars are silently ignored
@@ -300,110 +300,110 @@ The `Settings` class uses `pydantic_settings.BaseSettings` with:
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `gemini_api_key` | `GEMINI_API_KEY` or `SMARTWASTE_GEMINI_API_KEY` | str | `""` | Google Gemini API key (required) |
-| `model_name` | `SMARTWASTE_MODEL_NAME` | str | `"gemini-3-flash-preview"` | Gemini model to use for classification |
+| `gemini_api_key` | `GEMINI_API_KEY` or `HEXABIN_GEMINI_API_KEY` | str | `""` | Google Gemini API key (required) |
+| `model_name` | `HEXABIN_MODEL_NAME` | str | `"gemini-3-flash-preview"` | Gemini model to use for classification |
 
 #### Deployment
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `location` | `SMARTWASTE_LOCATION` | str | `"Yerevan"` | Location tag written to dataset entries |
+| `location` | `HEXABIN_LOCATION` | str | `"Yerevan"` | Location tag written to dataset entries |
 
 #### Camera and Capture
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `jpeg_quality` | `SMARTWASTE_JPEG_QUALITY` | int | `85` | JPEG compression quality (1-100) for Gemini API uploads |
-| `crop_percent` | `SMARTWASTE_CROP_PERCENT` | float | `0.20` | Fraction cropped from each side of frame (0.0-0.5) |
-| `max_dt` | `SMARTWASTE_MAX_DT` | float | `0.25` | Max seconds between dual camera frames for sync |
-| `auto_interval` | `SMARTWASTE_AUTO_INTERVAL` | int | `6` | Seconds between auto-classifications in manual mode |
+| `jpeg_quality` | `HEXABIN_JPEG_QUALITY` | int | `85` | JPEG compression quality (1-100) for Gemini API uploads |
+| `crop_percent` | `HEXABIN_CROP_PERCENT` | float | `0.20` | Fraction cropped from each side of frame (0.0-0.5) |
+| `max_dt` | `HEXABIN_MAX_DT` | float | `0.25` | Max seconds between dual camera frames for sync |
+| `auto_interval` | `HEXABIN_AUTO_INTERVAL` | int | `6` | Seconds between auto-classifications in manual mode |
 
 #### Auto-Gate Mode (mainauto.py)
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `motion_threshold` | `SMARTWASTE_MOTION_THRESHOLD` | float | `12.0` | Pixel-diff score to trigger object detection (0-255) |
-| `detect_confirm_n` | `SMARTWASTE_DETECT_CONFIRM_N` | int | `3` | Consecutive above-threshold checks to confirm presence |
-| `empty_confirm_n` | `SMARTWASTE_EMPTY_CONFIRM_N` | int | `6` | Consecutive below-threshold checks to confirm bin empty |
-| `bg_learning_rate` | `SMARTWASTE_BG_LEARNING_RATE` | float | `0.03` | Background model learning rate (0.0-1.0) |
-| `bg_warmup_frames` | `SMARTWASTE_BG_WARMUP_FRAMES` | int | `40` | Frames to warm up background model before detecting |
-| `check_interval` | `SMARTWASTE_CHECK_INTERVAL` | float | `0.5` | Seconds between presence checks |
+| `motion_threshold` | `HEXABIN_MOTION_THRESHOLD` | float | `12.0` | Pixel-diff score to trigger object detection (0-255) |
+| `detect_confirm_n` | `HEXABIN_DETECT_CONFIRM_N` | int | `3` | Consecutive above-threshold checks to confirm presence |
+| `empty_confirm_n` | `HEXABIN_EMPTY_CONFIRM_N` | int | `6` | Consecutive below-threshold checks to confirm bin empty |
+| `bg_learning_rate` | `HEXABIN_BG_LEARNING_RATE` | float | `0.03` | Background model learning rate (0.0-1.0) |
+| `bg_warmup_frames` | `HEXABIN_BG_WARMUP_FRAMES` | int | `40` | Frames to warm up background model before detecting |
+| `check_interval` | `HEXABIN_CHECK_INTERVAL` | float | `0.5` | Seconds between presence checks |
 
 #### OAK-D Native Mode (mainoak.py)
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `oak_display_w` | `SMARTWASTE_OAK_DISPLAY_W` | int | `960` | Display width for single-camera mode |
-| `oak_display_h` | `SMARTWASTE_OAK_DISPLAY_H` | int | `540` | Display height for single-camera mode |
-| `depth_roi_fraction` | `SMARTWASTE_DEPTH_ROI_FRACTION` | float | `0.4` | Region of interest fraction for depth sensor |
-| `depth_change_threshold` | `SMARTWASTE_DEPTH_CHANGE_THRESHOLD` | int | `150` | Minimum depth change (mm) to detect object |
-| `oak_calib_frames` | `SMARTWASTE_OAK_CALIB_FRAMES` | int | `30` | Frames for OAK sensor calibration |
-| `imu_sample_rate_hz` | `SMARTWASTE_IMU_SAMPLE_RATE_HZ` | int | `100` | IMU sampling rate |
-| `imu_shock_threshold` | `SMARTWASTE_IMU_SHOCK_THRESHOLD` | float | `1.3` | Accelerometer threshold for drop detection |
-| `imu_baseline_samples` | `SMARTWASTE_IMU_BASELINE_SAMPLES` | int | `50` | IMU samples to establish baseline |
-| `drop_flag_duration` | `SMARTWASTE_DROP_FLAG_DURATION` | float | `3.0` | Seconds to keep motion spike flag active |
-| `nn_model_name` | `SMARTWASTE_NN_MODEL_NAME` | str | `"mobilenet-ssd"` | Neural network model for on-device detection |
-| `nn_shaves` | `SMARTWASTE_NN_SHAVES` | int | `6` | Myriad X shaves allocated to NN |
-| `nn_confidence` | `SMARTWASTE_NN_CONFIDENCE` | float | `0.5` | Minimum confidence for NN detections |
-| `oak_votes_needed` | `SMARTWASTE_OAK_VOTES_NEEDED` | int | `2` | Sensor votes required to trigger classification |
-| `oak_detect_confirm_n` | `SMARTWASTE_OAK_DETECT_CONFIRM_N` | int | `3` | Consecutive vote-passing checks to confirm detection |
-| `oak_empty_confirm_n` | `SMARTWASTE_OAK_EMPTY_CONFIRM_N` | int | `5` | Consecutive zero-vote checks to confirm bin empty |
-| `oak_check_interval` | `SMARTWASTE_OAK_CHECK_INTERVAL` | float | `0.4` | Seconds between state-machine ticks |
-| `motion_spike_factor` | `SMARTWASTE_MOTION_SPIKE_FACTOR` | float | `3.0` | Presence score jump multiplier for drop event |
+| `oak_display_w` | `HEXABIN_OAK_DISPLAY_W` | int | `960` | Display width for single-camera mode |
+| `oak_display_h` | `HEXABIN_OAK_DISPLAY_H` | int | `540` | Display height for single-camera mode |
+| `depth_roi_fraction` | `HEXABIN_DEPTH_ROI_FRACTION` | float | `0.4` | Region of interest fraction for depth sensor |
+| `depth_change_threshold` | `HEXABIN_DEPTH_CHANGE_THRESHOLD` | int | `150` | Minimum depth change (mm) to detect object |
+| `oak_calib_frames` | `HEXABIN_OAK_CALIB_FRAMES` | int | `30` | Frames for OAK sensor calibration |
+| `imu_sample_rate_hz` | `HEXABIN_IMU_SAMPLE_RATE_HZ` | int | `100` | IMU sampling rate |
+| `imu_shock_threshold` | `HEXABIN_IMU_SHOCK_THRESHOLD` | float | `1.3` | Accelerometer threshold for drop detection |
+| `imu_baseline_samples` | `HEXABIN_IMU_BASELINE_SAMPLES` | int | `50` | IMU samples to establish baseline |
+| `drop_flag_duration` | `HEXABIN_DROP_FLAG_DURATION` | float | `3.0` | Seconds to keep motion spike flag active |
+| `nn_model_name` | `HEXABIN_NN_MODEL_NAME` | str | `"mobilenet-ssd"` | Neural network model for on-device detection |
+| `nn_shaves` | `HEXABIN_NN_SHAVES` | int | `6` | Myriad X shaves allocated to NN |
+| `nn_confidence` | `HEXABIN_NN_CONFIDENCE` | float | `0.5` | Minimum confidence for NN detections |
+| `oak_votes_needed` | `HEXABIN_OAK_VOTES_NEEDED` | int | `2` | Sensor votes required to trigger classification |
+| `oak_detect_confirm_n` | `HEXABIN_OAK_DETECT_CONFIRM_N` | int | `3` | Consecutive vote-passing checks to confirm detection |
+| `oak_empty_confirm_n` | `HEXABIN_OAK_EMPTY_CONFIRM_N` | int | `5` | Consecutive zero-vote checks to confirm bin empty |
+| `oak_check_interval` | `HEXABIN_OAK_CHECK_INTERVAL` | float | `0.4` | Seconds between state-machine ticks |
+| `motion_spike_factor` | `HEXABIN_MOTION_SPIKE_FACTOR` | float | `3.0` | Presence score jump multiplier for drop event |
 
 #### API Retry and Circuit Breaker
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `api_retry_attempts` | `SMARTWASTE_API_RETRY_ATTEMPTS` | int | `3` | Max tenacity retry attempts per classify call |
-| `api_retry_min_wait` | `SMARTWASTE_API_RETRY_MIN_WAIT` | float | `1.0` | First backoff wait in seconds |
-| `api_retry_max_wait` | `SMARTWASTE_API_RETRY_MAX_WAIT` | float | `8.0` | Max backoff wait in seconds |
-| `cb_failure_threshold` | `SMARTWASTE_CB_FAILURE_THRESHOLD` | int | `5` | Consecutive final failures to open circuit |
-| `cb_recovery_sec` | `SMARTWASTE_CB_RECOVERY_SEC` | float | `60.0` | Seconds to keep circuit open before recovery |
+| `api_retry_attempts` | `HEXABIN_API_RETRY_ATTEMPTS` | int | `3` | Max tenacity retry attempts per classify call |
+| `api_retry_min_wait` | `HEXABIN_API_RETRY_MIN_WAIT` | float | `1.0` | First backoff wait in seconds |
+| `api_retry_max_wait` | `HEXABIN_API_RETRY_MAX_WAIT` | float | `8.0` | Max backoff wait in seconds |
+| `cb_failure_threshold` | `HEXABIN_CB_FAILURE_THRESHOLD` | int | `5` | Consecutive final failures to open circuit |
+| `cb_recovery_sec` | `HEXABIN_CB_RECOVERY_SEC` | float | `60.0` | Seconds to keep circuit open before recovery |
 
 #### Database
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `db_backend` | `SMARTWASTE_DB_BACKEND` | str | `"sqlite"` | Database backend: `"sqlite"` or `"postgresql"` |
-| `db_host` | `SMARTWASTE_DB_HOST` | str | `"localhost"` | PostgreSQL host |
-| `db_port` | `SMARTWASTE_DB_PORT` | int | `5432` | PostgreSQL port |
-| `db_name` | `SMARTWASTE_DB_NAME` | str | `"smartwaste"` | PostgreSQL database name |
-| `db_user` | `SMARTWASTE_DB_USER` | str | `"smartwaste"` | PostgreSQL username |
-| `db_password` | `SMARTWASTE_DB_PASSWORD` | str | `"smartwaste"` | PostgreSQL password |
+| `db_backend` | `HEXABIN_DB_BACKEND` | str | `"sqlite"` | Database backend: `"sqlite"` or `"postgresql"` |
+| `db_host` | `HEXABIN_DB_HOST` | str | `"localhost"` | PostgreSQL host |
+| `db_port` | `HEXABIN_DB_PORT` | int | `5432` | PostgreSQL port |
+| `db_name` | `HEXABIN_DB_NAME` | str | `"smartwaste"` | PostgreSQL database name |
+| `db_user` | `HEXABIN_DB_USER` | str | `"smartwaste"` | PostgreSQL username |
+| `db_password` | `HEXABIN_DB_PASSWORD` | str | `"smartwaste"` | PostgreSQL password |
 
 #### Web UI
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `web_host` | `SMARTWASTE_WEB_HOST` | str | `"0.0.0.0"` | FastAPI bind host |
-| `web_port` | `SMARTWASTE_WEB_PORT` | int | `8000` | FastAPI bind port |
-| `camera_mode` | `SMARTWASTE_CAMERA_MODE` | str | `"oak"` | Camera backend: `"oak"`, `"raspberry"`, `"oak-native"`, or `"none"` |
+| `web_host` | `HEXABIN_WEB_HOST` | str | `"0.0.0.0"` | FastAPI bind host |
+| `web_port` | `HEXABIN_WEB_PORT` | int | `8000` | FastAPI bind port |
+| `camera_mode` | `HEXABIN_CAMERA_MODE` | str | `"oak"` | Camera backend: `"oak"`, `"raspberry"`, `"oak-native"`, or `"none"` |
 
 #### Authentication
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `admin_username` | `SMARTWASTE_ADMIN_USERNAME` | str | `"admin"` | Dashboard login username |
-| `admin_password` | `SMARTWASTE_ADMIN_PASSWORD` | str | `"password123"` | Dashboard login password |
-| `secret_key` | `SMARTWASTE_SECRET_KEY` | str | `"smartwaste-session-secret-change-in-prod"` | Session cookie signing secret |
+| `admin_username` | `HEXABIN_ADMIN_USERNAME` | str | `"admin"` | Dashboard login username |
+| `admin_password` | `HEXABIN_ADMIN_PASSWORD` | str | `"password123"` | Dashboard login password |
+| `secret_key` | `HEXABIN_SECRET_KEY` | str | `"hexabin-session-secret-change-in-prod"` | Session cookie signing secret |
 
 #### Bin Identity
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `bin_id` | `SMARTWASTE_BIN_ID` | str | `"bin-01"` | Unique identifier for this bin device |
+| `bin_id` | `HEXABIN_BIN_ID` | str | `"bin-01"` | Unique identifier for this bin device |
 
 #### Edge Mode
 
 | Setting | Env Var | Type | Default | Description |
 |---------|---------|------|---------|-------------|
-| `edge_mode` | `SMARTWASTE_EDGE_MODE` | bool | `False` | Enable edge mode (POST results to central server) |
-| `server_url` | `SMARTWASTE_SERVER_URL` | str | `""` | Central server URL (e.g. `http://192.168.1.100:8000`) |
-| `edge_api_key` | `SMARTWASTE_EDGE_API_KEY` | str | `""` | Shared secret for edge-to-server authentication |
-| `heartbeat_interval` | `SMARTWASTE_HEARTBEAT_INTERVAL` | int | `30` | Seconds between edge heartbeat signals |
+| `edge_mode` | `HEXABIN_EDGE_MODE` | bool | `False` | Enable edge mode (POST results to central server) |
+| `server_url` | `HEXABIN_SERVER_URL` | str | `""` | Central server URL (e.g. `http://192.168.1.100:8000`) |
+| `edge_api_key` | `HEXABIN_EDGE_API_KEY` | str | `""` | Shared secret for edge-to-server authentication |
+| `heartbeat_interval` | `HEXABIN_HEARTBEAT_INTERVAL` | int | `30` | Seconds between edge heartbeat signals |
 
-### Derived Constants (`smartwaste/config.py`)
+### Derived Constants (`hexabin/config.py`)
 
 Constants not overridable (derived from install location):
 
@@ -422,33 +422,33 @@ Constants not overridable (derived from install location):
 
 ```env
 GEMINI_API_KEY=your_api_key_here
-SMARTWASTE_LOCATION=Yerevan
-SMARTWASTE_MODEL_NAME=gemini-3-flash-preview
-SMARTWASTE_CAMERA_MODE=oak-native
-SMARTWASTE_JPEG_QUALITY=85
-SMARTWASTE_CROP_PERCENT=0.20
-SMARTWASTE_AUTO_INTERVAL=6
-SMARTWASTE_MOTION_THRESHOLD=12.0
-SMARTWASTE_DETECT_CONFIRM_N=3
-SMARTWASTE_EMPTY_CONFIRM_N=6
-SMARTWASTE_CHECK_INTERVAL=0.5
-SMARTWASTE_DEPTH_CHANGE_THRESHOLD=150
-SMARTWASTE_IMU_SHOCK_THRESHOLD=1.3
-SMARTWASTE_OAK_VOTES_NEEDED=2
-SMARTWASTE_NN_CONFIDENCE=0.5
-SMARTWASTE_API_RETRY_ATTEMPTS=3
-SMARTWASTE_API_RETRY_MIN_WAIT=1.0
-SMARTWASTE_API_RETRY_MAX_WAIT=8.0
-SMARTWASTE_CB_FAILURE_THRESHOLD=5
-SMARTWASTE_CB_RECOVERY_SEC=60
-SMARTWASTE_DB_BACKEND=sqlite
-SMARTWASTE_DB_HOST=localhost
-SMARTWASTE_DB_PORT=5432
-SMARTWASTE_DB_NAME=smartwaste
-SMARTWASTE_DB_USER=smartwaste
-SMARTWASTE_DB_PASSWORD=smartwaste
-SMARTWASTE_WEB_HOST=0.0.0.0
-SMARTWASTE_WEB_PORT=8000
+HEXABIN_LOCATION=Yerevan
+HEXABIN_MODEL_NAME=gemini-3-flash-preview
+HEXABIN_CAMERA_MODE=oak-native
+HEXABIN_JPEG_QUALITY=85
+HEXABIN_CROP_PERCENT=0.20
+HEXABIN_AUTO_INTERVAL=6
+HEXABIN_MOTION_THRESHOLD=12.0
+HEXABIN_DETECT_CONFIRM_N=3
+HEXABIN_EMPTY_CONFIRM_N=6
+HEXABIN_CHECK_INTERVAL=0.5
+HEXABIN_DEPTH_CHANGE_THRESHOLD=150
+HEXABIN_IMU_SHOCK_THRESHOLD=1.3
+HEXABIN_OAK_VOTES_NEEDED=2
+HEXABIN_NN_CONFIDENCE=0.5
+HEXABIN_API_RETRY_ATTEMPTS=3
+HEXABIN_API_RETRY_MIN_WAIT=1.0
+HEXABIN_API_RETRY_MAX_WAIT=8.0
+HEXABIN_CB_FAILURE_THRESHOLD=5
+HEXABIN_CB_RECOVERY_SEC=60
+HEXABIN_DB_BACKEND=sqlite
+HEXABIN_DB_HOST=localhost
+HEXABIN_DB_PORT=5432
+HEXABIN_DB_NAME=smartwaste
+HEXABIN_DB_USER=smartwaste
+HEXABIN_DB_PASSWORD=smartwaste
+HEXABIN_WEB_HOST=0.0.0.0
+HEXABIN_WEB_PORT=8000
 ```
 
 ---
@@ -457,7 +457,7 @@ SMARTWASTE_WEB_PORT=8000
 
 ### `main.py` — Manual Mode (Dual OAK Cameras)
 
-**CLI command:** `python main.py` or `smartwaste`
+**CLI command:** `python main.py` or `hexabin`
 
 **Description:** Manual classification mode using two OAK-D USB3 cameras. Frames from both cameras are displayed in an OpenCV window. The user triggers classification by pressing `c`, or enables auto-classify with `a`.
 
@@ -465,9 +465,9 @@ SMARTWASTE_WEB_PORT=8000
 
 | Argument | Env Var | Description |
 |----------|---------|-------------|
-| `--model NAME` | `SMARTWASTE_MODEL_NAME` | Gemini model name |
-| `--auto-interval SEC` | `SMARTWASTE_AUTO_INTERVAL` | Seconds between auto-classifications |
-| `--location NAME` | `SMARTWASTE_LOCATION` | Deployment location tag |
+| `--model NAME` | `HEXABIN_MODEL_NAME` | Gemini model name |
+| `--auto-interval SEC` | `HEXABIN_AUTO_INTERVAL` | Seconds between auto-classifications |
+| `--location NAME` | `HEXABIN_LOCATION` | Deployment location tag |
 
 **Functions:**
 - `_parse() -> argparse.Namespace` — Parses CLI arguments
@@ -480,7 +480,7 @@ SMARTWASTE_WEB_PORT=8000
 
 ### `mainauto.py` — Auto-Gate Mode (Dual OAK Cameras)
 
-**CLI command:** `python mainauto.py` or `smartwaste-auto`
+**CLI command:** `python mainauto.py` or `hexabin-auto`
 
 **Description:** Automatic presence-detection gate mode. A rolling background model detects when an object enters the bin and fires a single Gemini API call per item. The user does not need to press keys for normal operation.
 
@@ -488,11 +488,11 @@ SMARTWASTE_WEB_PORT=8000
 
 | Argument | Env Var | Description |
 |----------|---------|-------------|
-| `--model NAME` | `SMARTWASTE_MODEL_NAME` | Gemini model |
-| `--threshold FLOAT` | `SMARTWASTE_MOTION_THRESHOLD` | Pixel-diff threshold (0-255) |
-| `--detect-n INT` | `SMARTWASTE_DETECT_CONFIRM_N` | Consecutive detections to confirm |
-| `--empty-n INT` | `SMARTWASTE_EMPTY_CONFIRM_N` | Consecutive empties to clear |
-| `--location NAME` | `SMARTWASTE_LOCATION` | Location tag |
+| `--model NAME` | `HEXABIN_MODEL_NAME` | Gemini model |
+| `--threshold FLOAT` | `HEXABIN_MOTION_THRESHOLD` | Pixel-diff threshold (0-255) |
+| `--detect-n INT` | `HEXABIN_DETECT_CONFIRM_N` | Consecutive detections to confirm |
+| `--empty-n INT` | `HEXABIN_EMPTY_CONFIRM_N` | Consecutive empties to clear |
+| `--location NAME` | `HEXABIN_LOCATION` | Location tag |
 
 **State machine:** Calibrating -> Ready/IDLE -> Detected -> Classified -> Ready/IDLE
 
@@ -502,7 +502,7 @@ SMARTWASTE_WEB_PORT=8000
 
 ### `mainoak.py` — OAK-D Native Mode (Sensor Fusion)
 
-**CLI command:** `python mainoak.py` or `smartwaste-oak`
+**CLI command:** `python mainoak.py` or `hexabin-oak`
 
 **Description:** Sensor fusion mode supporting 1 or 2 OAK cameras. The primary camera runs three sensors (presence, motion spike, MobileNetSSD) that vote on bin occupancy. A second camera (optional) provides a second viewing angle for the Gemini dual-view prompt.
 
@@ -510,10 +510,10 @@ SMARTWASTE_WEB_PORT=8000
 
 | Argument | Env Var | Description |
 |----------|---------|-------------|
-| `--model NAME` | `SMARTWASTE_MODEL_NAME` | Gemini model |
-| `--threshold FLOAT` | `SMARTWASTE_MOTION_THRESHOLD` | Presence motion threshold |
-| `--votes N` | `SMARTWASTE_OAK_VOTES_NEEDED` | Sensor votes needed |
-| `--location NAME` | `SMARTWASTE_LOCATION` | Location tag |
+| `--model NAME` | `HEXABIN_MODEL_NAME` | Gemini model |
+| `--threshold FLOAT` | `HEXABIN_MOTION_THRESHOLD` | Presence motion threshold |
+| `--votes N` | `HEXABIN_OAK_VOTES_NEEDED` | Sensor votes needed |
+| `--location NAME` | `HEXABIN_LOCATION` | Location tag |
 
 **State machine (`OakState` enum):**
 
@@ -559,7 +559,7 @@ Calibrating → Ready → Detected → Classifying → Classified → Ready
 - Captures 1280x720 BGR888 frames
 - Supports same `c`/`a`/`q` keyboard controls as manual mode
 
-### `python -m smartwaste.web` — Web/Docker Mode
+### `python -m hexabin.web` — Web/Docker Mode
 
 **Description:** Runs the FastAPI web dashboard and API server. Used in Docker deployments and for remote access.
 
@@ -573,7 +573,7 @@ Calibrating → Ready → Detected → Classifying → Classified → Ready
 
 ## 6. Module Reference
 
-### `smartwaste/settings.py` — Layered Configuration
+### `hexabin/settings.py` — Layered Configuration
 
 **Purpose:** Centralized configuration using Pydantic BaseSettings with environment variable overrides.
 
@@ -581,7 +581,7 @@ Calibrating → Ready → Detected → Classifying → Classified → Ready
 
 | Attribute | Description |
 |-----------|-------------|
-| `model_config` | `SettingsConfigDict` with `env_prefix="SMARTWASTE_"`, `.env` file loading |
+| `model_config` | `SettingsConfigDict` with `env_prefix="HEXABIN_"`, `.env` file loading |
 | All settings | See [Configuration Reference](#4-configuration-reference) |
 
 **Module-level singleton:**
@@ -591,7 +591,7 @@ settings = Settings()  # imported by config.py and classifier.py
 
 The `.env` file path is resolved relative to the package directory: `Path(__file__).parent.parent / ".env"`.
 
-### `smartwaste/config.py` — Runtime Constants
+### `hexabin/config.py` — Runtime Constants
 
 **Purpose:** Provides flat module-level constants derived from the `settings` singleton. Existing code imports constants from here:
 
@@ -601,7 +601,7 @@ from .config import MODEL_NAME, VALID_CLASSES
 
 All values are read from `settings.*` at module load time. File/directory paths (`BASE_DIR`, `LOG_DIR`, `DATASET_DIR`, `DB_FILE`) are computed from the install location and are not overridable.
 
-### `smartwaste/state.py` — Thread-Safe Application State
+### `hexabin/state.py` — Thread-Safe Application State
 
 **Purpose:** Coordinates shared flags and display state between the main thread and classifier daemon threads.
 
@@ -621,7 +621,7 @@ All values are read from `settings.*` at module load time. File/directory paths 
 
 **Thread safety:** `_lock` (threading.Lock) protects `_label`, `_detail`, `_is_classifying`, and `_history`. `auto_classify` and `last_capture_time` are main-thread-only.
 
-### `smartwaste/app.py` — Shared OAK Camera Run Loop
+### `hexabin/app.py` — Shared OAK Camera Run Loop
 
 **Purpose:** Generic capture/display/classify loop for dual OAK cameras, parameterized by a Strategy.
 
@@ -646,7 +646,7 @@ All values are read from `settings.*` at module load time. File/directory paths 
    - Handle `q` key (quit), pass other keys to `strategy.on_key()`
 5. Cleanup: destroy windows, stop pipelines
 
-### `smartwaste/strategies.py` — Classification Trigger Strategies
+### `hexabin/strategies.py` — Classification Trigger Strategies
 
 **Purpose:** Concrete Strategy implementations for manual and auto-gate modes.
 
@@ -670,7 +670,7 @@ All values are read from `settings.*` at module load time. File/directory paths 
 - `is_occupied and not _bin_occupied` -> mark occupied, set "Detected"
 - `_bin_occupied and not _item_classified` -> fire API, mark classified
 
-### `smartwaste/classifier.py` — Gemini Classification Worker
+### `hexabin/classifier.py` — Gemini Classification Worker
 
 **Purpose:** Calls the Gemini Vision API with retry logic and circuit breaker protection.
 
@@ -718,7 +718,7 @@ Main worker (runs in daemon thread):
 | Open | After `cb_failure_threshold` (5) consecutive failures, circuit opens for `cb_recovery_sec` (60s). All calls skip during this period. |
 | Half-open | After recovery window elapses, one call is allowed. Success closes circuit; failure re-opens it. |
 
-### `smartwaste/prompt.py` — Gemini Prompt
+### `hexabin/prompt.py` — Gemini Prompt
 
 **Purpose:** Contains the exact prompt string sent to Gemini with every classification request.
 
@@ -733,7 +733,7 @@ The prompt instructs Gemini to:
 6. Recognize Armenian brands (Jermuk, Bjni, BOOM)
 7. Return `category="Empty"` if pipe is empty
 
-### `smartwaste/presence.py` — Pixel-Diff Presence Detector
+### `hexabin/presence.py` — Pixel-Diff Presence Detector
 
 **Purpose:** Local bin-occupancy detection using a rolling background model. No API calls.
 
@@ -755,7 +755,7 @@ The prompt instructs Gemini to:
 3. `is_occupied = _detect_streak >= DETECT_CONFIRM_N`
 4. `is_empty = _empty_streak >= EMPTY_CONFIRM_N`
 
-### `smartwaste/oak_native.py` — OAK Multi-Sensor Occupancy Detector
+### `hexabin/oak_native.py` — OAK Multi-Sensor Occupancy Detector
 
 **Purpose:** Builds a DepthAI 3.x pipeline with presence detection, motion spike detection, and MobileNetSSD on the Myriad X VPU.
 
@@ -804,7 +804,7 @@ Creates DepthAI pipeline:
 
 **Motion spike detection:** Replaces physical IMU. Detects when `(current_score - previous_score) > MOTION_THRESHOLD * MOTION_SPIKE_FACTOR`. The spike flag auto-expires after `DROP_FLAG_DURATION` seconds.
 
-### `smartwaste/camera.py` — Single OAK Camera Pipeline
+### `hexabin/camera.py` — Single OAK Camera Pipeline
 
 **Purpose:** Creates and starts a camera pipeline for one OAK device.
 
@@ -816,11 +816,11 @@ Creates a DepthAI pipeline with a single camera node on `CAM_A`, outputting full
 
 Removes `crop_percent` fraction from both left and right sides of the frame. Returns the frame unchanged if `crop_percent <= 0`.
 
-### `smartwaste/cameraOak.py` — Dual OAK Camera Pipeline
+### `hexabin/cameraOak.py` — Dual OAK Camera Pipeline
 
 Identical to `camera.py`. Contains the same `make_pipeline()` and `crop_sides()` functions. Used by `main.py`, `mainauto.py`, and `mainoak.py`.
 
-### `smartwaste/cameraraspberry.py` — Raspberry Pi Camera Module
+### `hexabin/cameraraspberry.py` — Raspberry Pi Camera Module
 
 **Purpose:** Manages Raspberry Pi cameras via `picamera2`.
 
@@ -833,7 +833,7 @@ Identical to `camera.py`. Contains the same `make_pipeline()` and `crop_sides()`
 | `stop_cameras` | `(cameras: list) -> None` | Stops all cameras cleanly |
 | `crop_sides` | `(frame, crop_percent) -> np.ndarray` | Same cropping as OAK module |
 
-### `smartwaste/database.py` — Dual-Backend Persistence Layer
+### `hexabin/database.py` — Dual-Backend Persistence Layer
 
 **Purpose:** SQLite and PostgreSQL database operations with automatic backend selection.
 
@@ -903,7 +903,7 @@ CREATE INDEX IF NOT EXISTS idx_waste_bin_id ON waste_entries(bin_id);
 
 **Migration:** `_migrate_add_bin_id()` adds `bin_id` column to existing tables that lack it.
 
-### `smartwaste/dataset.py` — Dataset Entry Management
+### `hexabin/dataset.py` — Dataset Entry Management
 
 **Purpose:** Saves classified images and inserts database entries. Optionally reports to central server in edge mode.
 
@@ -927,7 +927,7 @@ Generates simulated sensor data:
 4. Calls `insert_entry(entry, _environment_data())`
 5. If `EDGE_MODE and SERVER_URL`: imports and calls `report_classification()` with image bytes
 
-### `smartwaste/edge_client.py` — Edge-to-Server HTTP Client
+### `hexabin/edge_client.py` — Edge-to-Server HTTP Client
 
 **Purpose:** HTTP client for edge devices to report classifications and send heartbeats to a central server. Uses `urllib` (stdlib) to minimize dependencies.
 
@@ -943,7 +943,7 @@ Generates simulated sensor data:
 
 **Uptime tracking:** `_start_time = time.monotonic()` captured at module load.
 
-### `smartwaste/schemas.py` — Pydantic Request Models
+### `hexabin/schemas.py` — Pydantic Request Models
 
 **Purpose:** Request body models for edge communication endpoints.
 
@@ -974,11 +974,11 @@ Generates simulated sensor data:
 | `camera_mode` | str | `""` | Camera backend type |
 | `uptime_seconds` | float | `0.0` | Seconds since process start |
 
-### `smartwaste/web.py` — FastAPI Web Application
+### `hexabin/web.py` — FastAPI Web Application
 
 See [Section 7: Web Application and API Reference](#7-web-application-and-api-reference) for complete documentation.
 
-### `smartwaste/ui.py` — OpenCV Overlay Rendering
+### `hexabin/ui.py` — OpenCV Overlay Rendering
 
 **Purpose:** Draws status overlays on OpenCV frames.
 
@@ -1027,7 +1027,7 @@ chair, cow, diningtable, dog, horse, motorbike, person, pottedplant,
 sheep, sofa, train, tvmonitor
 ```
 
-### `smartwaste/utils.py` — Shared Frame Helpers
+### `hexabin/utils.py` — Shared Frame Helpers
 
 **Function: `encode_frame(frame) -> bytes | None`**
 
@@ -1037,9 +1037,9 @@ JPEG-encodes a BGR frame using `cv2.imencode()` with `JPEG_QUALITY`. Returns byt
 
 If `img_bytes` is truthy, starts a daemon thread running `classify(img_bytes, frame_copy, state)`. If bytes are None/empty, sets error status and calls `finish_classify()`.
 
-### `smartwaste/log_setup.py` — Logging Configuration
+### `hexabin/log_setup.py` — Logging Configuration
 
-**Purpose:** Configures the "smartwaste" logger with file and console handlers.
+**Purpose:** Configures the "hexabin" logger with file and console handlers.
 
 **Constants:**
 - `RUN_ID` — Timestamp string `YYYYMMDD_HHMMSS` (set at import time)
@@ -1048,7 +1048,7 @@ If `img_bytes` is truthy, starts a daemon thread running `classify(img_bytes, fr
 
 **Function: `get_logger() -> logging.Logger`**
 
-Returns the "smartwaste" logger. On first call, configures:
+Returns the "hexabin" logger. On first call, configures:
 - Level: `INFO`
 - Format: `[%(asctime)s] %(levelname)s %(message)s`
 - Handlers: `FileHandler(LOG_FILE)` + `StreamHandler(stderr)`
@@ -1063,8 +1063,8 @@ Creates `logs/` directory automatically.
 
 - **Framework:** FastAPI
 - **Server:** Uvicorn
-- **Templates:** Jinja2 (`smartwaste/web_templates/`)
-- **Static files:** Mounted at `/static` from `smartwaste/web_static/`
+- **Templates:** Jinja2 (`hexabin/web_templates/`)
+- **Static files:** Mounted at `/static` from `hexabin/web_static/`
 - **Session middleware:** Starlette `SessionMiddleware` with `SECRET_KEY`
 
 ### Authentication
@@ -1226,7 +1226,7 @@ const CAT_COLORS = {
 5. **Statistics** — Large animated total count, category bars loaded from `/api/stats`. Counter animation with ease-out cubic easing.
 6. **Map** — Leaflet map centered on Yerevan `[40.1792, 44.4991]` zoom 13. CARTO dark basemap tiles. 8 marker locations with popups (Yerevan landmarks).
 7. **Media** — 3 placeholder cards for coming-soon content (3D renders, real-life footage).
-8. **Footer** — Grid layout: brand info, quick links, contact (`+374 12 345 678`, `info@smartbin.am`), social icons.
+8. **Footer** — Grid layout: brand info, quick links, contact (`+374 12 345 678`, `info@hexabin.am`), social icons.
 
 **External CDN dependencies:**
 - Leaflet 1.9.4 (JS + CSS)
@@ -1587,7 +1587,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8000
-CMD ["python", "-m", "smartwaste.web"]
+CMD ["python", "-m", "hexabin.web"]
 ```
 
 **Volumes:** `pgdata`, `waste_images`, `grafana_data`
@@ -1614,8 +1614,8 @@ docker compose -f docker-compose.edge-full.yml up -d
 **Use case:** Run camera + classifier on the Pi. No web UI. POSTs results to a central server.
 
 ```bash
-SMARTWASTE_SERVER_URL=http://<server-ip>:8000 \
-SMARTWASTE_BIN_ID=bin-01 \
+HEXABIN_SERVER_URL=http://<server-ip>:8000 \
+HEXABIN_BIN_ID=bin-01 \
 docker compose -f docker-compose.edge.yml up -d
 ```
 
@@ -1634,11 +1634,11 @@ CMD ["python", "mainoak.py"]
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `SMARTWASTE_EDGE_MODE` | `true` | Enable edge reporting |
-| `SMARTWASTE_SERVER_URL` | `http://192.168.1.100:8000` | Central server URL |
-| `SMARTWASTE_EDGE_API_KEY` | `password123` | Auth token for server |
-| `SMARTWASTE_BIN_ID` | `bin-01` | Unique bin identifier |
-| `SMARTWASTE_EDGE_ENTRYPOINT` | `mainoak.py` | Python script to run |
+| `HEXABIN_EDGE_MODE` | `true` | Enable edge reporting |
+| `HEXABIN_SERVER_URL` | `http://192.168.1.100:8000` | Central server URL |
+| `HEXABIN_EDGE_API_KEY` | `password123` | Auth token for server |
+| `HEXABIN_BIN_ID` | `bin-01` | Unique bin identifier |
+| `HEXABIN_EDGE_ENTRYPOINT` | `mainoak.py` | Python script to run |
 
 **Features:** `privileged: true`, `/dev/bus/usb` mount, `restart: unless-stopped`
 
@@ -1706,14 +1706,14 @@ The server maintains an in-memory `_bin_registry` dict:
 
 - **URL:** `http://<host>:3000`
 - **Credentials:** admin / admin (default)
-- **Dashboard:** "Smart Waste AI" (UID: `smartwaste-main`)
+- **Dashboard:** "Smart Waste AI" (UID: `hexabin-main`)
 
 ### Datasource
 
 PostgreSQL provisioned via `grafana/provisioning/datasources/postgres.yml`:
 ```yaml
 datasources:
-  - name: SmartWaste PostgreSQL
+  - name: HexaBin PostgreSQL
     type: postgres
     url: postgres:5432
     database: smartwaste
@@ -1753,7 +1753,7 @@ Available at `/site` (e.g., `http://localhost:8000/site`). No authentication req
 | **Statistics** | Live data from `/api/stats`, animated counter, category bars sorted descending |
 | **Map** | Leaflet map with 8 Yerevan deployment markers on CARTO dark basemap |
 | **Media** | 3 placeholder cards for upcoming video/3D content |
-| **Footer** | Brand info, links, contact (+374 12 345 678, info@smartbin.am), social icons |
+| **Footer** | Brand info, links, contact (+374 12 345 678, info@hexabin.am), social icons |
 
 ### Map Locations
 
@@ -1845,7 +1845,7 @@ Available at `/site` (e.g., `http://localhost:8000/site`). No authentication req
 
 ### OpenCV BGR Equivalents
 
-For use in `smartwaste/ui.py` (OpenCV uses BGR, not RGB):
+For use in `hexabin/ui.py` (OpenCV uses BGR, not RGB):
 
 | Category | BGR Tuple |
 |----------|-----------|
@@ -1863,7 +1863,7 @@ For use in `smartwaste/ui.py` (OpenCV uses BGR, not RGB):
 
 ### Configuration
 
-- **Logger name:** `"smartwaste"`
+- **Logger name:** `"hexabin"`
 - **Level:** `INFO`
 - **Format:** `[%(asctime)s] %(levelname)s %(message)s`
 
@@ -1897,7 +1897,7 @@ The `logs/` directory is automatically created by `log_setup.py`. The `waste_dat
 python -m pytest tests/
 
 # Run with coverage
-python -m pytest tests/ --cov=smartwaste --cov-report=term-missing
+python -m pytest tests/ --cov=hexabin --cov-report=term-missing
 
 # Run specific test file
 python -m pytest tests/test_classifier.py -v
@@ -1912,7 +1912,7 @@ pythonpath = ["."]
 addopts = "--tb=short -q"
 
 [tool.coverage.run]
-source = ["smartwaste"]
+source = ["hexabin"]
 omit = ["tests/*"]
 ```
 
@@ -1986,7 +1986,7 @@ build-backend = "setuptools.backends.legacy:build"
 ## 21. Project File Tree
 
 ```
-SmartBin/
+HexaBin/
 ├── main.py                     # Manual mode entry point (dual OAK cameras)
 ├── mainauto.py                 # Auto-gate mode entry point (presence detection)
 ├── mainoak.py                  # OAK-D Native mode entry point (sensor fusion)
@@ -2006,7 +2006,7 @@ SmartBin/
 ├── .gitignore                  # Git ignore rules
 ├── .dockerignore               # Docker build exclusions
 │
-├── smartwaste/                 # Main Python package
+├── hexabin/                 # Main Python package
 │   ├── settings.py             # Pydantic BaseSettings (layered config)
 │   ├── config.py               # Runtime constants from settings
 │   ├── state.py                # Thread-safe AppState class
@@ -2064,7 +2064,7 @@ SmartBin/
 │   │   └── dashboards/
 │   │       └── dashboard.yml   # Dashboard provisioning config
 │   └── dashboards/
-│       └── smartwaste.json     # Dashboard definition (5 panels)
+│       └── hexabin.json     # Dashboard definition (5 panels)
 │
 ├── logs/                       # Runtime logs (auto-created)
 │   ├── run_*.log               # Session logs

@@ -1,9 +1,9 @@
-"""Tests for smartwaste/config.py — validate constant types and ranges."""
+"""Tests for hexabin/config.py — validate constant types and ranges."""
 
 import os
 import pytest
 
-from smartwaste.config import (
+from hexabin.config import (
     AUTO_INTERVAL,
     BASE_DIR,
     BG_LEARNING_RATE,

@@ -1,4 +1,4 @@
-"""Tests for smartwaste/database.py — SQLite backend and query functions."""
+"""Tests for hexabin/database.py — SQLite backend and query functions."""
 
 import sqlite3
 
@@ -29,7 +29,7 @@ def _env():
 
 def _setup_db(tmp_path, monkeypatch):
     """Set up a fresh SQLite database for testing."""
-    import smartwaste.database as db
+    import hexabin.database as db
 
     db_path = str(tmp_path / "test.db")
     monkeypatch.setattr(db, "DB_FILE", db_path)
@@ -283,7 +283,7 @@ class TestLLMFieldsMigration:
 
     def test_migration_upgrades_old_table(self, tmp_path, monkeypatch):
         """A pre-existing table without the new columns gains them on init."""
-        import smartwaste.database as db
+        import hexabin.database as db
 
         db_path = str(tmp_path / "old.db")
         with sqlite3.connect(db_path) as conn:

@@ -1,12 +1,12 @@
-"""Tests for smartwaste/actuator.py and the module-map config parsing."""
+"""Tests for hexabin/actuator.py and the module-map config parsing."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-import smartwaste.actuator as actuator
-from smartwaste.actuator import LogActuator, dispatch, get_actuator, resolve_module
-from smartwaste.config import DEFAULT_MODULE_MAP, _parse_module_map
+import hexabin.actuator as actuator
+from hexabin.actuator import LogActuator, dispatch, get_actuator, resolve_module
+from hexabin.config import DEFAULT_MODULE_MAP, _parse_module_map
 
 
 @pytest.fixture(autouse=True)
@@ -79,33 +79,33 @@ class TestGetActuator:
         assert get_actuator() is get_actuator()
 
     def test_unknown_name_falls_back_to_log(self):
-        with patch("smartwaste.actuator.ACTUATOR", "warp-drive"):
+        with patch("hexabin.actuator.ACTUATOR", "warp-drive"):
             assert isinstance(get_actuator(), LogActuator)
 
 
 class TestDispatch:
     def test_resolves_module_from_category(self):
         mock = MagicMock()
-        with patch("smartwaste.actuator.get_actuator", return_value=mock):
+        with patch("hexabin.actuator.get_actuator", return_value=mock):
             dispatch("Plastic")
         mock.open_module.assert_called_once_with(1, "Plastic")
 
     def test_explicit_module_wins(self):
         mock = MagicMock()
-        with patch("smartwaste.actuator.get_actuator", return_value=mock):
+        with patch("hexabin.actuator.get_actuator", return_value=mock):
             dispatch("Glass", module=5)
         mock.open_module.assert_called_once_with(5, "Glass")
 
     def test_empty_category_is_noop(self):
         mock = MagicMock()
-        with patch("smartwaste.actuator.get_actuator", return_value=mock):
+        with patch("hexabin.actuator.get_actuator", return_value=mock):
             dispatch("Empty")
         assert not mock.open_module.called
 
     def test_actuator_exception_never_propagates(self):
         mock = MagicMock()
         mock.open_module.side_effect = RuntimeError("servo jam")
-        with patch("smartwaste.actuator.get_actuator", return_value=mock):
+        with patch("hexabin.actuator.get_actuator", return_value=mock):
             dispatch("Plastic")  # must not raise
 
     def test_non_int_module_never_propagates(self):

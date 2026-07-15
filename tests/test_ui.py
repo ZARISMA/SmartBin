@@ -1,9 +1,9 @@
-"""Tests for smartwaste/ui.py — draw_overlay()."""
+"""Tests for hexabin/ui.py — draw_overlay()."""
 
 import numpy as np
 import pytest
 
-from smartwaste.ui import draw_overlay
+from hexabin.ui import draw_overlay
 
 
 def _img(h=200, w=1600):
@@ -24,7 +24,7 @@ class TestDrawOverlayBasic:
         draw_overlay(_img(), "X" * 200, "Y" * 200, True)
 
     def test_does_not_raise_for_every_valid_category(self):
-        from smartwaste.config import VALID_CLASSES
+        from hexabin.config import VALID_CLASSES
 
         for cat in VALID_CLASSES:
             draw_overlay(_img(), cat, "detail", False)

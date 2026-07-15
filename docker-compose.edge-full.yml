@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_DB: smartwaste
       POSTGRES_USER: smartwaste
-      POSTGRES_PASSWORD: ${SMARTWASTE_DB_PASSWORD:-smartwaste}
+      POSTGRES_PASSWORD: ${HEXABIN_DB_PASSWORD:-smartwaste}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -27,15 +27,15 @@ services:
       - path: .env
         required: false
     environment:
-      - SMARTWASTE_DB_BACKEND=postgresql
-      - SMARTWASTE_DB_HOST=postgres
-      - SMARTWASTE_CAMERA_MODE=${SMARTWASTE_CAMERA_MODE:-oak-native}
-      - SMARTWASTE_BIN_ID=${SMARTWASTE_BIN_ID:-bin-01}
-      - SMARTWASTE_LOCATION=${SMARTWASTE_LOCATION:-Yerevan}
+      - HEXABIN_DB_BACKEND=postgresql
+      - HEXABIN_DB_HOST=postgres
+      - HEXABIN_CAMERA_MODE=${HEXABIN_CAMERA_MODE:-oak-native}
+      - HEXABIN_BIN_ID=${HEXABIN_BIN_ID:-bin-01}
+      - HEXABIN_LOCATION=${HEXABIN_LOCATION:-Yerevan}
       # In-process classification backend: gemini (default) | lmstudio | cascade
-      - SMARTWASTE_LLM_BACKEND=${SMARTWASTE_LLM_BACKEND:-gemini}
-      - SMARTWASTE_LMSTUDIO_URL=${SMARTWASTE_LMSTUDIO_URL:-http://localhost:1234/v1}
-      - SMARTWASTE_LMSTUDIO_MODEL=${SMARTWASTE_LMSTUDIO_MODEL:-google/gemma-4-12b-qat}
+      - HEXABIN_LLM_BACKEND=${HEXABIN_LLM_BACKEND:-gemini}
+      - HEXABIN_LMSTUDIO_URL=${HEXABIN_LMSTUDIO_URL:-http://localhost:1234/v1}
+      - HEXABIN_LMSTUDIO_MODEL=${HEXABIN_LMSTUDIO_MODEL:-google/gemma-4-12b-qat}
     ports:
       - "8000:8000"
     privileged: true
@@ -45,7 +45,7 @@ services:
     volumes:
       - /dev/bus/usb:/dev/bus/usb
       - waste_images:/app/waste_dataset
-      - ./smartwaste:/app/smartwaste
+      - ./hexabin:/app/hexabin
 
   grafana:
     image: grafana/grafana:11.0.0

@@ -1,4 +1,4 @@
-from smartwaste.warnings import (
+from hexabin.warnings import (
     SEVERITY_ERROR,
     SEVERITY_INFO,
     SEVERITY_WARNING,

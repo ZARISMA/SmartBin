@@ -14,4 +14,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["python", "-m", "smartwaste.web"]
+CMD ["python", "-m", "hexabin.web"]

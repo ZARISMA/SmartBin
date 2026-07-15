@@ -1,4 +1,4 @@
-"""Tests for smartwaste/edge_client.py — classify_remote (edge → server RPC)."""
+"""Tests for hexabin/edge_client.py — classify_remote (edge → server RPC)."""
 
 import base64
 import io
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from smartwaste.edge_client import EdgeServerError, classify_remote
+from hexabin.edge_client import EdgeServerError, classify_remote
 
 
 def _ok_response(body) -> MagicMock:
@@ -19,15 +19,15 @@ def _ok_response(body) -> MagicMock:
 
 class TestClassifyRemote:
     def test_missing_server_url_raises(self):
-        with patch("smartwaste.edge_client.SERVER_URL", ""):
+        with patch("hexabin.edge_client.SERVER_URL", ""):
             with pytest.raises(EdgeServerError, match="SERVER_URL"):
                 classify_remote(b"img")
 
     def test_success_returns_parsed_body(self):
         body = {"status": "ok", "id": 1, "result": {"category": "Glass"}, "command": {}}
         with (
-            patch("smartwaste.edge_client.SERVER_URL", "http://server:8000"),
-            patch("smartwaste.edge_client.urllib.request.urlopen") as mock_open,
+            patch("hexabin.edge_client.SERVER_URL", "http://server:8000"),
+            patch("hexabin.edge_client.urllib.request.urlopen") as mock_open,
         ):
             mock_open.return_value.__enter__.return_value = _ok_response(body)
             assert classify_remote(b"img") == body
@@ -35,8 +35,8 @@ class TestClassifyRemote:
     def test_payload_and_url(self):
         env = {"simulated_temperature": 21.0, "simulated_smoke": 0.3}
         with (
-            patch("smartwaste.edge_client.SERVER_URL", "http://server:8000/"),
-            patch("smartwaste.edge_client.urllib.request.urlopen") as mock_open,
+            patch("hexabin.edge_client.SERVER_URL", "http://server:8000/"),
+            patch("hexabin.edge_client.urllib.request.urlopen") as mock_open,
         ):
             mock_open.return_value.__enter__.return_value = _ok_response({"status": "ok"})
             classify_remote(b"img-bytes", env=env)
@@ -60,17 +60,17 @@ class TestClassifyRemote:
             io.BytesIO(b'{"error": "classification failed"}'),
         )
         with (
-            patch("smartwaste.edge_client.SERVER_URL", "http://server:8000"),
-            patch("smartwaste.edge_client.urllib.request.urlopen", side_effect=err),
+            patch("hexabin.edge_client.SERVER_URL", "http://server:8000"),
+            patch("hexabin.edge_client.urllib.request.urlopen", side_effect=err),
         ):
             with pytest.raises(EdgeServerError, match="502"):
                 classify_remote(b"img")
 
     def test_network_error_raises(self):
         with (
-            patch("smartwaste.edge_client.SERVER_URL", "http://server:8000"),
+            patch("hexabin.edge_client.SERVER_URL", "http://server:8000"),
             patch(
-                "smartwaste.edge_client.urllib.request.urlopen",
+                "hexabin.edge_client.urllib.request.urlopen",
                 side_effect=urllib.error.URLError("connection refused"),
             ),
         ):
@@ -79,9 +79,9 @@ class TestClassifyRemote:
 
     def test_timeout_raises(self):
         with (
-            patch("smartwaste.edge_client.SERVER_URL", "http://server:8000"),
+            patch("hexabin.edge_client.SERVER_URL", "http://server:8000"),
             patch(
-                "smartwaste.edge_client.urllib.request.urlopen",
+                "hexabin.edge_client.urllib.request.urlopen",
                 side_effect=TimeoutError("timed out"),
             ),
         ):
@@ -90,8 +90,8 @@ class TestClassifyRemote:
 
     def test_non_dict_response_raises(self):
         with (
-            patch("smartwaste.edge_client.SERVER_URL", "http://server:8000"),
-            patch("smartwaste.edge_client.urllib.request.urlopen") as mock_open,
+            patch("hexabin.edge_client.SERVER_URL", "http://server:8000"),
+            patch("hexabin.edge_client.urllib.request.urlopen") as mock_open,
         ):
             mock_open.return_value.__enter__.return_value = _ok_response(["not", "a", "dict"])
             with pytest.raises(EdgeServerError):

@@ -11,7 +11,7 @@
 # for Windows/macOS; the extra_hosts entry makes it work on Linux too).
 #
 # Default backend is "cascade": LM Studio classifies first; results with
-# confidence below SMARTWASTE_CONFIDENCE_THRESHOLD (70%) — or LM Studio
+# confidence below HEXABIN_CONFIDENCE_THRESHOLD (70%) — or LM Studio
 # failures — escalate to Gemini (set GEMINI_API_KEY in .env for that).
 #
 # SECURITY: LM Studio's server has no authentication — keep port 1234 on a
@@ -23,7 +23,7 @@ services:
     environment:
       POSTGRES_DB: smartwaste
       POSTGRES_USER: smartwaste
-      POSTGRES_PASSWORD: ${SMARTWASTE_DB_PASSWORD:-smartwaste}
+      POSTGRES_PASSWORD: ${HEXABIN_DB_PASSWORD:-smartwaste}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -40,13 +40,13 @@ services:
       - path: .env
         required: false
     environment:
-      - SMARTWASTE_DB_BACKEND=postgresql
-      - SMARTWASTE_DB_HOST=postgres
-      - SMARTWASTE_CAMERA_MODE=none
-      - SMARTWASTE_LLM_BACKEND=${SMARTWASTE_LLM_BACKEND:-cascade}
-      - SMARTWASTE_LMSTUDIO_URL=${SMARTWASTE_LMSTUDIO_URL:-http://host.docker.internal:1234/v1}
-      - SMARTWASTE_LMSTUDIO_MODEL=${SMARTWASTE_LMSTUDIO_MODEL:-google/gemma-4-12b-qat}
-      - SMARTWASTE_CONFIDENCE_THRESHOLD=${SMARTWASTE_CONFIDENCE_THRESHOLD:-0.70}
+      - HEXABIN_DB_BACKEND=postgresql
+      - HEXABIN_DB_HOST=postgres
+      - HEXABIN_CAMERA_MODE=none
+      - HEXABIN_LLM_BACKEND=${HEXABIN_LLM_BACKEND:-cascade}
+      - HEXABIN_LMSTUDIO_URL=${HEXABIN_LMSTUDIO_URL:-http://host.docker.internal:1234/v1}
+      - HEXABIN_LMSTUDIO_MODEL=${HEXABIN_LMSTUDIO_MODEL:-google/gemma-4-12b-qat}
+      - HEXABIN_CONFIDENCE_THRESHOLD=${HEXABIN_CONFIDENCE_THRESHOLD:-0.70}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -56,7 +56,7 @@ services:
         condition: service_healthy
     volumes:
       - waste_images:/app/waste_dataset
-      - ./smartwaste:/app/smartwaste
+      - ./hexabin:/app/hexabin
     restart: unless-stopped
 
   grafana:
