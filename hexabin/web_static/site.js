@@ -75,55 +75,15 @@
         });
     }
 
-    // ── Stats ─────────────────────────────────────────────────────────
+    // ── Stats (feeds only the hero badge + latest-classification chip;
+    //    the Statistics section is capability framing until launch) ────
     async function fetchStats() {
-        // Public aggregate endpoint (no auth) — fall back to the preview demo on failure
+        // Public aggregate endpoint (no auth) — hero keeps its static example on failure
         try {
             const res = await fetch('/api/public/stats', { cache: 'no-store' });
             if (!res.ok) return null;
             return await res.json();
         } catch (e) { return null; }
-    }
-
-    function renderBars(stats) {
-        const host = document.getElementById('stats-bars');
-        if (!host) return;
-        const order = ['Plastic', 'Paper', 'Glass', 'Organic', 'Aluminum', 'Other'];
-        const data = order.map((name) => ({ name, value: (stats.by_category || {})[name] || 0 }));
-        if (!data.some((d) => d.value > 0)) {
-            host.innerHTML = '<p class="stats-zero-state">No classifications recorded yet.</p>';
-            return;
-        }
-        const max = Math.max(1, ...data.map((d) => d.value));
-        const total = data.reduce((a, d) => a + d.value, 0) || 1;
-
-        host.innerHTML = data.map((d) => {
-            const pct = Math.max(8, Math.round((d.value / max) * 100));
-            const portion = Math.round((d.value / total) * 100);
-            const txtLight = LIGHT_TEXT.has(d.name) ? 'light' : '';
-            return `<div class="stat-bar">
-                <div class="stat-bar-fill" style="height:${pct}%; background:${catColor(d.name)};">
-                    <span class="stat-bar-num ${txtLight}">${d.value}</span>
-                </div>
-                <div class="stat-bar-label">
-                    <span class="name">${d.name}</span>
-                    <span class="pct">${portion}%</span>
-                </div>
-            </div>`;
-        }).join('');
-    }
-
-    function animateNumber(el, target, duration = 1600) {
-        const start = parseInt(el.dataset.target || '0', 10) || 0;
-        const t0 = performance.now();
-        function tick(now) {
-            const p = Math.min(1, (now - t0) / duration);
-            const e = 1 - Math.pow(1 - p, 3); // easeOutCubic
-            el.textContent = Math.round(start + (target - start) * e).toLocaleString();
-            if (p < 1) requestAnimationFrame(tick);
-            else el.dataset.target = String(target);
-        }
-        requestAnimationFrame(tick);
     }
 
     function timeAgo(seconds) {
@@ -139,10 +99,6 @@
         if (badge && stats.bins && stats.bins.total > 0) {
             const b = stats.bins;
             badge.textContent = `Live · ${b.online} of ${b.total} bin${b.total === 1 ? '' : 's'} online`;
-        }
-        const today = document.getElementById('hero-today');
-        if (today && typeof stats.today === 'number') {
-            today.textContent = `${stats.today.toLocaleString()} items sorted`;
         }
         const chip = document.getElementById('chip-classify');
         if (chip && stats.latest && stats.latest.category) {
@@ -164,49 +120,27 @@
         }
     }
 
-    function renderKpis(stats) {
-        const bins = document.getElementById('stats-active-bins');
-        if (bins && stats.bins) bins.textContent = `${stats.bins.online} / ${stats.bins.total}`;
-        const rec = document.getElementById('stats-recyclable');
-        if (rec) {
-            rec.textContent = stats.recyclable_share == null
-                ? '—'
-                : Math.round(stats.recyclable_share * 100) + '%';
-        }
-    }
-
     let lastStats = null;
 
     async function refreshStats() {
         const stats = await fetchStats();
-        if (!stats) {
-            const host = document.getElementById('stats-bars');
-            if (host) host.innerHTML = '<p class="stats-zero-state">Live statistics are unavailable right now.</p>';
-            return;
-        }
+        if (!stats) return;
         lastStats = stats;
-        renderBars(stats);
         renderHero(stats);
-        renderKpis(stats);
-        const totalEl = document.getElementById('stats-total');
-        if (totalEl) animateNumber(totalEl, stats.total || 0);
     }
 
     function bootStats() {
         refreshStats();
-        setInterval(refreshStats, 5000); // section copy promises 5-second updates
+        setInterval(refreshStats, 5000);
         // Repaint category-colored elements immediately on theme switch.
         window.addEventListener('hexabin:themechange', () => {
-            if (lastStats) {
-                renderBars(lastStats);
-                renderHero(lastStats);
-            }
+            if (lastStats) renderHero(lastStats);
         });
     }
 
     // ── 3D model viewer ───────────────────────────────────────────────
     function initModelViewer() {
-        const mv = document.querySelector('model-viewer');
+        const mv = document.querySelector('.media-card-3d model-viewer');
         if (!mv) return;
         // If the model fails to load/decode, degrade to the static poster
         // instead of leaving a broken canvas in the card.
@@ -217,7 +151,69 @@
                 '<div class="media-stripes"></div>' +
                 '<div class="model-poster-label">3D preview unavailable</div>';
             mv.replaceWith(fallback);
+            const ctrls = document.getElementById('model-ctrls');
+            if (ctrls) ctrls.hidden = true;
         }, { once: true });
+    }
+
+    function resetViewer(mv) {
+        if (!mv) return;
+        // Interaction moves the camera without touching the attributes, so
+        // re-applying them animates the view back to its authored default.
+        // 'auto' is the spec default for attributes the markup never set.
+        ['camera-orbit', 'camera-target', 'field-of-view'].forEach((name) => {
+            const v = mv.getAttribute(name);
+            mv.setAttribute(name, v !== null ? v : 'auto');
+        });
+        if (typeof mv.resetTurntableRotation === 'function') mv.resetTurntableRotation();
+    }
+
+    // ── 3D model popup (expand button on the media card) ─────────────
+    function initModelModal() {
+        const btn = document.getElementById('model-expand');
+        const modal = document.getElementById('model-modal');
+        const stage = document.getElementById('model-modal-stage');
+        if (!btn || !modal || !stage) return;
+
+        function open() {
+            const cardViewer = document.querySelector('.media-card-3d model-viewer');
+            if (!cardViewer) return;
+            if (!stage.querySelector('model-viewer')) {
+                // Clone attributes from the card viewer (GLB comes from HTTP cache).
+                const mv = cardViewer.cloneNode(false);
+                mv.removeAttribute('loading');
+                stage.appendChild(mv);
+            }
+            modal.hidden = false;
+            document.body.style.overflow = 'hidden';
+        }
+        function close() {
+            modal.hidden = true;
+            document.body.style.overflow = '';
+            const mv = stage.querySelector('model-viewer');
+            if (mv) mv.remove(); // free the WebGL context while closed
+        }
+
+        btn.addEventListener('click', open);
+        modal.querySelectorAll('[data-model-close]').forEach((el) => {
+            el.addEventListener('click', close);
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.hidden) close();
+        });
+
+        const cardReset = document.getElementById('model-reset');
+        if (cardReset) {
+            cardReset.addEventListener('click', () => {
+                resetViewer(document.querySelector('.media-card-3d model-viewer'));
+            });
+        }
+        const modalReset = document.getElementById('model-modal-reset');
+        if (modalReset) {
+            modalReset.addEventListener('click', () => {
+                resetViewer(stage.querySelector('model-viewer'));
+            });
+        }
     }
 
     // ── Reveal-on-scroll polish (no-op when reduced motion) ──────────
@@ -240,6 +236,7 @@
         initMap();
         bootStats();
         initModelViewer();
+        initModelModal();
         initReveal();
     });
 })();

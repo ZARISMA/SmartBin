@@ -15,6 +15,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="/static/brand.css">
     <link rel="stylesheet" href="/static/site.css">
+    <!-- Start the 3D model download immediately, in parallel with fonts/scripts -->
+    <link rel="preload" href="/static/models/hexabin.glb" as="fetch" type="model/gltf-binary" crossorigin>
     <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 </head>
 <body class="site-body">
@@ -61,14 +63,14 @@
         <div class="hero-copy">
             <div class="hero-badge">
                 <span class="hero-badge-dot"></span>
-                <span id="hero-badge-text">Live · Yerevan pilot</span>
+                <span id="hero-badge-text">Yerevan pilot · launching 2026</span>
             </div>
             <h1 class="hero-title">
                 Waste, <em>recognised</em>.<br>
                 Sorted in <span class="hero-underline">under two seconds</span>.
             </h1>
             <p class="hero-lede">
-                HexaBin pairs dual OAK-D depth cameras with Google Gemini vision to classify urban waste into seven categories in real time — turning the act of sorting into a high-tech cultural ritual.
+                HexaBin pairs dual OAK-D depth cameras with Google Gemini vision to classify urban waste into six material streams in real time — turning the act of sorting into a high-tech cultural ritual.
             </p>
             <div class="hero-actions">
                 <a href="#about" class="sb-btn sb-btn-primary hero-cta">Discover the system <span aria-hidden="true">→</span></a>
@@ -78,9 +80,9 @@
                 </a>
             </div>
             <div class="hero-stats">
-                <div class="hero-stat"><div class="n">7</div><div class="l">AI categories</div></div>
+                <div class="hero-stat"><div class="n">6</div><div class="l">AI categories</div></div>
                 <div class="hero-stat"><div class="n">2</div><div class="l">OAK-D cameras</div></div>
-                <div class="hero-stat"><div class="n">3</div><div class="l">AI backends</div></div>
+                <div class="hero-stat"><div class="n">8</div><div class="l">Planned locations</div></div>
                 <div class="hero-stat"><div class="n">24/7</div><div class="l">Always on</div></div>
             </div>
         </div>
@@ -122,16 +124,15 @@
                     </span>
                 </div>
                 <div class="bin-mock-slats">
-                    <div class="slat" data-fill="5" style="background:#1E4D2B; color:#fff;"><span>ORGANIC</span><span class="bars b5"></span></div>
+                    <div class="slat" data-fill="5" style="background:#87CEEB;"><span>PLASTIC</span><span class="bars b5"></span></div>
                     <div class="slat" data-fill="4" style="background:#D2B48C;"><span>PAPER</span><span class="bars b4"></span></div>
-                    <div class="slat" data-fill="3" style="background:#87CEEB;"><span>PLASTIC</span><span class="bars b3"></span></div>
-                    <div class="slat" data-fill="2" style="background:#40E0D0;"><span>GLASS</span><span class="bars b2"></span></div>
-                    <div class="slat" data-fill="1" style="background:#A9A9A9;"><span>ALUMINUM</span><span class="bars b1"></span></div>
+                    <div class="slat" data-fill="3" style="background:#40E0D0;"><span>GLASS</span><span class="bars b3"></span></div>
+                    <div class="slat" data-fill="2" style="background:#A9A9A9;"><span>ALUMINUM</span><span class="bars b2"></span></div>
+                    <div class="slat" data-fill="1" style="background:#1E4D2B; color:#fff;"><span>ORGANIC</span><span class="bars b1"></span></div>
                     <div class="slat" data-fill="0" style="background:#8C8C8C;"><span>EMPTY</span><span class="bars b0"></span></div>
                 </div>
                 <div class="bin-mock-coords">
                     <span>40.1872°N</span>
-                    <span>44.5152°E</span>
                 </div>
             </div>
 
@@ -145,13 +146,13 @@
             </div>
             <div class="float-chip float-chip-today">
                 <div class="chip-kicker">TODAY</div>
-                <div class="chip-big" id="hero-today">— items sorted</div>
+                <div class="chip-big">57 items sorted</div>
                 <div class="chip-bars">
-                    <span style="width:30px; background:#1E4D2B;"></span>
-                    <span style="width:22px; background:#D2B48C;"></span>
-                    <span style="width:28px; background:#87CEEB;"></span>
-                    <span style="width:18px; background:#40E0D0;"></span>
-                    <span style="width:12px; background:#A9A9A9;"></span>
+                    <span style="width:30px; background:#87CEEB;"></span>
+                    <span style="width:26px; background:#D2B48C;"></span>
+                    <span style="width:20px; background:#40E0D0;"></span>
+                    <span style="width:14px; background:#A9A9A9;"></span>
+                    <span style="width:10px; background:#1E4D2B;"></span>
                     <span style="width:8px;  background:#9370DB;"></span>
                 </div>
             </div>
@@ -170,7 +171,7 @@
         </div>
         <div class="about-body">
             <p class="lede">HexaBin is a revolutionary urban waste system that fuses IoT-driven Smart City technology with biophilic, nature-inspired design — turning a mundane chore into a civic ritual.</p>
-            <p>Deploying first in <strong>Yerevan, Armenia</strong>, every unit uses dual OAK-D depth cameras and a Gemini-powered vision model to recognise items into six material streams plus an "Empty" state — with brand-aware accuracy on Armenian products like Jermuk and BOOM.</p>
+            <p>Deploying first in <strong>Yerevan, Armenia</strong>, every unit uses dual OAK-D depth cameras and a Gemini-powered vision model to recognise items into six material streams plus an "Empty" state — with brand-aware accuracy on Armenian products like Jermuk and BJNI.</p>
             <p>Our bins act as <em>visual landmarks</em> in the urban fabric — using colour, material and small rewards to signal that the user is participating in a global movement of sustainability. We bridge the gap for citizens currently unmotivated to sort.</p>
             <div class="about-stat-grid">
                 <div class="about-stat-cell">
@@ -219,7 +220,7 @@
                     <span class="module-chip" style="background:#D2B48C;"></span>
                 </div>
                 <h3 class="module-name">Paper</h3>
-                <div class="module-tag">Warm Cellulose · #D2B48C</div>
+                <div class="module-tag">Warm Cellulose</div>
                 <p>Newspapers, cardboard, office paper, packaging. Sophisticated take on traditional fiber.</p>
             </article>
             <article class="module-card" style="--accent:#A9A9A9;">
@@ -229,7 +230,7 @@
                     <span class="module-chip" style="background:#A9A9A9;"></span>
                 </div>
                 <h3 class="module-name">Aluminum</h3>
-                <div class="module-tag">Brushed Metal · #A9A9A9</div>
+                <div class="module-tag">Brushed Metal</div>
                 <p>Beverage cans, foil, metal containers. Industrial circularity, detected by depth + vision.</p>
             </article>
             <article class="module-card" style="--accent:#1E4D2B;">
@@ -239,7 +240,7 @@
                     <span class="module-chip" style="background:#1E4D2B;"></span>
                 </div>
                 <h3 class="module-name">Organic</h3>
-                <div class="module-tag">Deep Biophilic · #1E4D2B</div>
+                <div class="module-tag">Deep Biophilic</div>
                 <p>Food scraps, biodegradable packaging, garden waste — composted for circular sustainability.</p>
             </article>
             <article class="module-card" style="--accent:#40E0D0;">
@@ -249,7 +250,7 @@
                     <span class="module-chip" style="background:#40E0D0;"></span>
                 </div>
                 <h3 class="module-name">Glass</h3>
-                <div class="module-tag">Crystal Teal · #40E0D0</div>
+                <div class="module-tag">Crystal Teal</div>
                 <p>Bottles, jars, glass containers — identified by their unique transparency signatures.</p>
             </article>
             <article class="module-card" style="--accent:#87CEEB;">
@@ -259,7 +260,7 @@
                     <span class="module-chip" style="background:#87CEEB;"></span>
                 </div>
                 <h3 class="module-name">Plastic</h3>
-                <div class="module-tag">Synthetic Tone · #87CEEB</div>
+                <div class="module-tag">Synthetic Tone</div>
                 <p>PET, HDPE, films. Classified by brand-aware AI trained on local Armenian products.</p>
             </article>
             <article class="module-card module-card-other">
@@ -269,7 +270,7 @@
                     <span class="module-chip module-chip-gradient"></span>
                 </div>
                 <h3 class="module-name">Other</h3>
-                <div class="module-tag">Dynamic Gradient · #9370DB → #1E90FF</div>
+                <div class="module-tag">Dynamic Gradient</div>
                 <p>The "brain" of the system. Adapts based on city-wide data, special collection, system signals.</p>
             </article>
         </div>
@@ -280,36 +281,38 @@
 <section class="section section-dark" id="statistics">
     <div class="dark-orb" aria-hidden="true"></div>
     <div class="container">
-        <div class="kicker kicker-taupe">§ 03 · Live data</div>
+        <div class="kicker kicker-taupe">§ 03 · Transparency by design</div>
         <div class="stats-head">
             <h2 class="display display-light">
-                <em id="stats-total" data-target="0">0</em><br>items sorted to date.
+                Every sort, <em>measured</em>.<br>Published from day one.
             </h2>
-            <p class="stats-aside">Every classification is logged to PostgreSQL and streamed back to the central server. These numbers update every five seconds across all deployed units.</p>
+            <p class="stats-aside">Each HexaBin logs every classification to the central fleet server. When the Yerevan pilot goes live, this section becomes a public real-time dashboard — updated every five seconds across all deployed units.</p>
         </div>
 
-        <div class="stats-bars" id="stats-bars">
-            <p class="stats-zero-state">Loading statistics…</p>
+        <div class="stats-capabilities">
+            <div class="stats-capability">
+                <div class="capability-key">Items sorted</div>
+                <p class="capability-desc">Every classification counted — per bin, per material stream.</p>
+            </div>
+            <div class="stats-capability">
+                <div class="capability-key">Recyclable share</div>
+                <p class="capability-desc">How much of the city's waste gets a second life, across the whole fleet.</p>
+            </div>
+            <div class="stats-capability">
+                <div class="capability-key">CO₂ avoided (est.)</div>
+                <p class="capability-desc">Emissions saved by diversion, modelled per material stream.</p>
+            </div>
+            <div class="stats-capability">
+                <div class="capability-key">Fleet health</div>
+                <p class="capability-desc">Live heartbeats from every unit — cameras, sensors, uptime.</p>
+            </div>
+            <div class="stats-capability">
+                <div class="capability-key">Sort latency</div>
+                <p class="capability-desc">From camera capture to sorting decision, measured end to end.</p>
+            </div>
         </div>
 
-        <div class="stats-kpis">
-            <div class="stats-kpi">
-                <div class="cell-key">Recyclable share</div>
-                <div class="kpi-num" id="stats-recyclable">—</div>
-            </div>
-            <div class="stats-kpi">
-                <div class="cell-key">CO₂ avoided (est.)</div>
-                <div class="kpi-num kpi-soon">Coming soon</div>
-            </div>
-            <div class="stats-kpi">
-                <div class="cell-key">Active bins</div>
-                <div class="kpi-num" id="stats-active-bins">—</div>
-            </div>
-            <div class="stats-kpi">
-                <div class="cell-key">Mean latency</div>
-                <div class="kpi-num kpi-soon">Coming soon</div>
-            </div>
-        </div>
+        <div class="stats-footnote">Live with the first deployment · 2026</div>
     </div>
 </section>
 
@@ -319,11 +322,11 @@
         <div class="section-head">
             <div>
                 <div class="kicker">§ 04 · Deployment map</div>
-                <h2 class="display">First eight landmarks in <em>Yerevan</em>.</h2>
+                <h2 class="display">Eight planned landmarks in <em>Yerevan</em>.</h2>
             </div>
             <div class="map-legend-inline">
-                <span><span class="dot" style="background:var(--sb-forest);"></span> Planned location</span>
-                <span><span class="dot" style="background:var(--sb-taupe);"></span> 2026 wave</span>
+                <span><span class="dot" style="background:var(--sb-forest);"></span> Planned · first wave</span>
+                <span><span class="dot" style="background:var(--sb-taupe);"></span> Planned · second wave</span>
             </div>
         </div>
         <div class="map-wrap">
@@ -350,7 +353,7 @@
                     rotation-per-second="18deg"
                     interaction-prompt="auto"
                     interaction-prompt-style="basic"
-                    loading="lazy"
+                    loading="eager"
                     reveal="auto"
                     shadow-intensity="1"
                     shadow-softness="0.7"
@@ -364,6 +367,14 @@
                         <div class="model-poster-label">Loading 3D model…</div>
                     </div>
                 </model-viewer>
+                <div class="media-ctrls" id="model-ctrls">
+                    <button type="button" class="media-ctrl" id="model-reset" aria-label="Reset 3D view" title="Reset view">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+                    </button>
+                    <button type="button" class="media-ctrl" id="model-expand" aria-label="View 3D model larger" title="View larger">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    </button>
+                </div>
                 <span class="media-tag"><span class="dot"></span>3D MODEL</span>
                 <div class="media-foot">
                     <div class="media-placeholder">INTERACTIVE · GLB</div>
@@ -442,6 +453,18 @@
         </div>
     </div>
 </footer>
+
+<!-- ── 3D model popup ───────────────────────────────────────────────── -->
+<div class="model-modal" id="model-modal" hidden>
+    <div class="model-modal-backdrop" data-model-close></div>
+    <div class="model-modal-panel" role="dialog" aria-modal="true" aria-label="HexaBin 3D model">
+        <button type="button" class="model-modal-close" data-model-close aria-label="Close 3D viewer">✕</button>
+        <button type="button" class="model-modal-reset" id="model-modal-reset" aria-label="Reset 3D view" title="Reset view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        </button>
+        <div class="model-modal-stage" id="model-modal-stage"></div>
+    </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/theme.js"></script>

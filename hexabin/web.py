@@ -103,6 +103,23 @@ logger = get_logger()
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+#: Browser cache lifetime for heavy, rarely-changing static assets (3D models).
+MODEL_CACHE_MAX_AGE = 86400  # 1 day; ETag revalidation still applies after expiry
+
+
+class CachedStaticFiles(StaticFiles):
+    """StaticFiles that lets browsers cache 3D model assets without revalidating.
+
+    Plain StaticFiles sends ETag/Last-Modified but no Cache-Control, so every
+    <model-viewer> instance (card + fullscreen popup) re-negotiates the ~MB GLB.
+    """
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        if str(full_path).lower().endswith((".glb", ".gltf")):
+            response.headers["Cache-Control"] = f"public, max-age={MODEL_CACHE_MAX_AGE}"
+        return response
+
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -116,7 +133,7 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(title="HexaBin", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-app.mount("/static", StaticFiles(directory=os.path.join(_MODULE_DIR, "web_static")), name="static")
+app.mount("/static", CachedStaticFiles(directory=os.path.join(_MODULE_DIR, "web_static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(_MODULE_DIR, "web_templates"))
 
 

@@ -85,12 +85,14 @@ Full-stack and edge modes require Linux host with cameras on USB.
 
 Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketing/presentation site showcasing the HexaBin product.
 
-**Sections:** Hero, About, Modules (6 waste categories), Live Statistics (from `/api/public/stats` — unauthenticated fleet-wide aggregate `{total, today, by_category, recyclable_share, bins: {online, total}, latest}`, polled every 5 s; the admin `/api/stats` stays auth-gated), Deployment Map (Leaflet/OpenStreetMap, 8 Yerevan landmarks), Media/Video (interactive 3D model; footage/demo marked "Coming soon"), Contact/Footer. All numbers on the site are real (DB + live heartbeats) — unmeasured metrics (accuracy benchmark, CO₂, mean latency) say "Coming soon" instead of placeholder values.
+**Sections:** Hero, About, Modules (6 waste categories), Statistics ("Transparency by design" — pre-launch capability framing with **no live numbers**; flip back to live data at launch), Deployment Map (Leaflet/OpenStreetMap, 8 Yerevan landmarks — all marked *planned*, none deployed), Media/Video (interactive 3D model with a fullscreen popup via the corner expand button; footage/demo marked "Coming soon"), Contact/Footer.
+
+**Truth policy:** everything on the site is either real or clearly an example. The hero bin mock (slats, "57 items sorted" chip, coordinates) is decorative example data and is never overwritten by JS. `/api/public/stats` (unauthenticated fleet aggregate `{total, today, by_category, recyclable_share, bins: {online, total}, latest}`, polled every 5 s; admin `/api/stats` stays auth-gated) now feeds **only** the hero badge ("Live · N of M bins online" once real bins heartbeat) and the latest-classification chip (hidden until real data exists). Unmeasured metrics say "Coming soon" — never placeholder values; real-but-embarrassing zeros are never shown.
 
 **Files:**
 - `hexabin/web_templates/site.html` — Jinja2 template (single-page scrolling)
 - `hexabin/web_static/site.css` — Editorial biophilic design, light/dark theme-aware, responsive (700px/1024px breakpoints)
-- `hexabin/web_static/site.js` — Stats fetching, Leaflet map init, scroll animations, animated counters
+- `hexabin/web_static/site.js` — Stats fetching (hero badge + latest chip only), Leaflet map init, 3D model popup, scroll animations
 
 **External CDN deps:** Leaflet 1.9.4 (map tiles via CARTO dark basemap), Google Fonts (Manrope + Chakra Petch + JetBrains Mono).
 
@@ -140,7 +142,7 @@ Warnings are structured (`code`, `severity`, `message`) and deduped by code in `
 - `dashboard.css` — Control Center layout, sidebar, cards, modals, toasts. (Supersedes the older `style.css`, which is kept for back-compat only.)
 - `cc_nav.js` — shared sidebar helper loaded by `_cc_base.html` on every page; polls `/api/alerts` and keeps the nav alerts badge (`#cc-alerts-badge`) current.
 - `sb-logo.svg` — HexaBin wordmark/logo.
-- `models/hexabin.glb` — 3D bin model used by the presentation site / hero. `web.py` registers `.glb` → `model/gltf-binary` and `.gltf` → `model/gltf+json` MIME types at import time so `StaticFiles` serves them with correct `Content-Type`.
+- `models/hexabin.glb` — 3D bin model (Draco-compressed; re-optimize losslessly with `npx @gltf-transform/cli optimize --simplify false --texture-compress false --compress draco`). `web.py` registers `.glb` → `model/gltf-binary` and `.gltf` → `model/gltf+json` MIME types at import time, and serves `/static` via `CachedStaticFiles`, which adds `Cache-Control: public, max-age=86400` to model files so the card viewer, fullscreen popup, and revisits share one download. `site.html` preloads the GLB (`<link rel="preload" as="fetch">`) and the card viewer uses `loading="eager"` so the download starts at page load, not on scroll.
 
 **External CDN deps (admin):** Manrope + Chakra Petch + JetBrains Mono (Google Fonts), Leaflet 1.9.4 (on `/map`).
 
