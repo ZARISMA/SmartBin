@@ -2,16 +2,25 @@
 (function () {
     'use strict';
 
-    // ── Palette (mirrors brand.css) ──────────────────────────────────
-    const COLORS = {
-        Plastic:  '#87CEEB',
-        Paper:    '#D2B48C',
-        Glass:    '#40E0D0',
-        Organic:  '#1E4D2B',
-        Aluminum: '#A9A9A9',
-        Other:    '#9370DB',
-        Empty:    '#8C8C8C',
+    // ── Palette (reads brand.css tokens so dark-theme remaps apply) ──
+    const CAT_TOKENS = {
+        Plastic:  '--sb-plastic',
+        Paper:    '--sb-paper',
+        Glass:    '--sb-glass',
+        Organic:  '--sb-organic',
+        Aluminum: '--sb-aluminum',
+        Other:    '--sb-other-1',
+        Empty:    '--sb-empty',
     };
+    function cssVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    function catColor(name) {
+        return cssVar(CAT_TOKENS[name] || '--sb-empty') || '#8C8C8C';
+    }
+    function currentTheme() {
+        return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    }
     const LIGHT_TEXT = new Set(['Organic']); // bars where the serif number should be white
 
     // ── Yerevan landmark pins ─────────────────────────────────────────
@@ -36,11 +45,20 @@
             zoomControl: true,
             scrollWheelZoom: false,
         });
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        const BASEMAPS = {
+            light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+            dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        };
+        const TILE_OPTS = {
             attribution: '&copy; OpenStreetMap &copy; CARTO',
             subdomains: 'abcd',
             maxZoom: 19,
-        }).addTo(map);
+        };
+        let tiles = L.tileLayer(BASEMAPS[currentTheme()], TILE_OPTS).addTo(map);
+        window.addEventListener('hexabin:themechange', () => {
+            map.removeLayer(tiles);
+            tiles = L.tileLayer(BASEMAPS[currentTheme()], TILE_OPTS).addTo(map);
+        });
 
         PINS.forEach((p) => {
             const color = p.wave === 1 ? '#2D5A42' : '#BDB76B';
@@ -84,7 +102,7 @@
             const portion = Math.round((d.value / total) * 100);
             const txtLight = LIGHT_TEXT.has(d.name) ? 'light' : '';
             return `<div class="stat-bar">
-                <div class="stat-bar-fill" style="height:${pct}%; background:${COLORS[d.name]};">
+                <div class="stat-bar-fill" style="height:${pct}%; background:${catColor(d.name)};">
                     <span class="stat-bar-num ${txtLight}">${d.value}</span>
                 </div>
                 <div class="stat-bar-label">
@@ -131,7 +149,7 @@
             const l = stats.latest;
             const swatch = document.getElementById('chip-classify-swatch');
             swatch.textContent = l.category.slice(0, 2).toUpperCase();
-            swatch.style.background = COLORS[l.category] || '#E0E0E0';
+            swatch.style.background = l.category in CAT_TOKENS ? catColor(l.category) : '#E0E0E0';
             swatch.style.color = LIGHT_TEXT.has(l.category) ? '#fff' : '';
             document.getElementById('chip-classify-title').textContent = l.item || l.category;
             const parts = [];
@@ -157,6 +175,8 @@
         }
     }
 
+    let lastStats = null;
+
     async function refreshStats() {
         const stats = await fetchStats();
         if (!stats) {
@@ -164,6 +184,7 @@
             if (host) host.innerHTML = '<p class="stats-zero-state">Live statistics are unavailable right now.</p>';
             return;
         }
+        lastStats = stats;
         renderBars(stats);
         renderHero(stats);
         renderKpis(stats);
@@ -174,6 +195,13 @@
     function bootStats() {
         refreshStats();
         setInterval(refreshStats, 5000); // section copy promises 5-second updates
+        // Repaint category-colored elements immediately on theme switch.
+        window.addEventListener('hexabin:themechange', () => {
+            if (lastStats) {
+                renderBars(lastStats);
+                renderHero(lastStats);
+            }
+        });
     }
 
     // ── 3D model viewer ───────────────────────────────────────────────

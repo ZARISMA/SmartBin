@@ -89,7 +89,7 @@ Available at `/site` (e.g. `http://localhost:8000/site`). A single-page marketin
 
 **Files:**
 - `hexabin/web_templates/site.html` — Jinja2 template (single-page scrolling)
-- `hexabin/web_static/site.css` — Dedicated glassmorphism dark theme, responsive (768px/1024px breakpoints)
+- `hexabin/web_static/site.css` — Editorial biophilic design, light/dark theme-aware, responsive (700px/1024px breakpoints)
 - `hexabin/web_static/site.js` — Stats fetching, Leaflet map init, scroll animations, animated counters
 
 **External CDN deps:** Leaflet 1.9.4 (map tiles via CARTO dark basemap), Google Fonts (Manrope + Chakra Petch + JetBrains Mono).
@@ -136,7 +136,7 @@ Warnings are structured (`code`, `severity`, `message`) and deduped by code in `
 
 ### Static assets
 
-- `brand.css` — design tokens (CSS variables for brand palette, typography, spacing); loaded first by `_cc_base.html`.
+- `brand.css` — design tokens (CSS variables for brand palette, typography, spacing, light/dark semantic tokens); loaded first by `_cc_base.html`.
 - `dashboard.css` — Control Center layout, sidebar, cards, modals, toasts. (Supersedes the older `style.css`, which is kept for back-compat only.)
 - `cc_nav.js` — shared sidebar helper loaded by `_cc_base.html` on every page; polls `/api/alerts` and keeps the nav alerts badge (`#cc-alerts-badge`) current.
 - `sb-logo.svg` — HexaBin wordmark/logo.
@@ -260,6 +260,7 @@ hexabin/
     dashboard_alerts.js    ← Alerts page JS (5s polling, severity rows, badge)
     dashboard_classifications.js ← Classifications page JS (filters, pagination, lightbox)
     cc_nav.js            ← shared sidebar alerts badge (all Control Center pages)
+    theme.js             ← light/dark theme toggle + persistence (all pages)
     site.css / site.js   ← presentation site assets
     sb-logo.svg          ← brand logo
     models/hexabin.glb  ← 3D bin model (served via StaticFiles)
@@ -273,6 +274,8 @@ grafana/             ← Grafana provisioning and dashboards
 ## Design System
 
 **IMPORTANT: Before building any UI, you MUST read `DESIGN.md`. Never invent new CSS classes or styles outside of this contract.** All colors, fonts, design tokens (`--sb-*` variables in `brand.css`), and shared component classes are defined there.
+
+All pages support **light and dark themes**: semantic tokens remap under `<html data-theme="dark">`, toggled by `theme.js` and persisted in `localStorage['hexabin-theme']` (OS preference is the default). Surfaces/text/borders must use the semantic tokens (`--sb-surface`, `--sb-text`, `--sb-border`, …) — see DESIGN.md → Theming.
 
 ## Testing
 

@@ -7,15 +7,28 @@
     'use strict';
 
     const CAT = ['Plastic', 'Paper', 'Glass', 'Organic', 'Aluminum', 'Other'];
-    const COLORS = {
-        Plastic:  '#87CEEB',
-        Paper:    '#D2B48C',
-        Glass:    '#40E0D0',
-        Organic:  '#1E4D2B',
-        Aluminum: '#A9A9A9',
-        Other:    '#9370DB',
-        Empty:    '#8C8C8C',
+    // Colors are read from the brand tokens at render time so theme remaps
+    // (e.g. the dark-theme --sb-organic) reach the SVG charts.
+    const CAT_TOKENS = {
+        Plastic:  '--sb-plastic',
+        Paper:    '--sb-paper',
+        Glass:    '--sb-glass',
+        Organic:  '--sb-organic',
+        Aluminum: '--sb-aluminum',
+        Other:    '--sb-other-1',
+        Empty:    '--sb-empty',
     };
+    const COLORS = {};
+    const CHROME = {};
+    function cssVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    function refreshColors() {
+        Object.entries(CAT_TOKENS).forEach(([cat, tok]) => { COLORS[cat] = cssVar(tok) || '#8C8C8C'; });
+        CHROME.grid = cssVar('--sb-border-strong') || 'rgba(29,39,34,0.08)';
+        CHROME.axis = cssVar('--sb-text-muted') || '#8C8C8C';
+        CHROME.text = cssVar('--sb-text') || '#1d2722';
+    }
 
     let period = '7d';
 
@@ -152,12 +165,12 @@
             });
         }
         const grid = [0.25, 0.5, 0.75, 1].map((t) =>
-            `<line x1="${P}" x2="${W - P}" y1="${H - P - t * (H - 2 * P)}" y2="${H - P - t * (H - 2 * P)}" stroke="rgba(29,39,34,0.08)" stroke-width="1"/>`
+            `<line x1="${P}" x2="${W - P}" y1="${H - P - t * (H - 2 * P)}" y2="${H - P - t * (H - 2 * P)}" stroke="${CHROME.grid}" stroke-width="1"/>`
         ).join('');
         const labelStep = Math.max(1, Math.ceil(n / 10));
         const labels = buckets.map((b, i) => {
             if (i % labelStep !== 0 && i !== n - 1) return '';
-            return `<text x="${xs(i)}" y="${H - 1}" font-size="10" fill="#8C8C8C" text-anchor="middle" font-family="Manrope">${escapeHtml(b.label)}</text>`;
+            return `<text x="${xs(i)}" y="${H - 1}" font-size="10" fill="${CHROME.axis}" text-anchor="middle" font-family="Manrope">${escapeHtml(b.label)}</text>`;
         }).join('');
 
         host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" width="100%" height="${H}">${grid}${marks.join('')}${labels}</svg>`;
@@ -211,8 +224,8 @@
 
         host.innerHTML = `
             <svg viewBox="0 0 220 220" width="220" height="220">${slicesSvg}
-                <text x="110" y="105" text-anchor="middle" font-size="11" fill="#8C8C8C" font-family="Manrope" font-weight="700" letter-spacing="2">TOTAL</text>
-                <text x="110" y="130" text-anchor="middle" font-size="28" fill="#1d2722" font-family="Chakra Petch" font-weight="600">${total.toLocaleString()}</text>
+                <text x="110" y="105" text-anchor="middle" font-size="11" fill="${CHROME.axis}" font-family="Manrope" font-weight="700" letter-spacing="2">TOTAL</text>
+                <text x="110" y="130" text-anchor="middle" font-size="28" fill="${CHROME.text}" font-family="Chakra Petch" font-weight="600">${total.toLocaleString()}</text>
             </svg>
             <div class="donut-legend">${legend}</div>
         `;
@@ -299,6 +312,7 @@
 
     // ── Boot ──────────────────────────────────────────────────────────
     async function boot() {
+        refreshColors();
         renderAreaLegend();
 
         const [payload, entries] = await Promise.all([
@@ -337,4 +351,6 @@
 
     boot();
     setInterval(boot, 15000);
+    // Re-render charts with the new token values on theme switch.
+    window.addEventListener('hexabin:themechange', boot);
 })();

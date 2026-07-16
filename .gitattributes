@@ -1,0 +1,8 @@
+# Binary assets — never apply newline conversion (a CRLF/LF pass truncated
+# hexabin.glb by 23 bytes during the rebrand and broke the 3D viewer).
+*.glb binary
+*.db binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.pptx binary

@@ -71,6 +71,36 @@ Defined once in `hexabin/web_static/brand.css` on `:root`. Reference via `var(--
 - **Fonts** — `--sb-font-ui`, `--sb-font-display`, `--sb-font-mono`.
 - **Radii** — `--sb-radius-sm` (6px), `--sb-radius-md` (10px), `--sb-radius-lg` (14px), `--sb-radius-xl` (16px).
 - **Shadows** — `--sb-shadow-card` (subtle card lift), `--sb-shadow-float` (modals/toasts).
+- **Semantic (theme-mapped)** — see Theming below. **Rule: surfaces, text, and borders must use the semantic tokens** (`--sb-surface`, `--sb-text`, `--sb-border`, …); the raw palette tokens are for brand hues only (logos, category colors, buttons).
+
+## Theming (light / dark)
+
+Both themes ship on every page. The theme is the `data-theme="light" | "dark"` attribute on `<html>`:
+
+- A tiny **inline bootstrap script** in each template `<head>` (before the stylesheets) sets `data-theme` pre-paint from `localStorage['hexabin-theme']`, falling back to `prefers-color-scheme` — no flash of the wrong theme.
+- `hexabin/web_static/theme.js` owns the **`.sb-theme-toggle`** buttons (`[data-theme-toggle]`), persists explicit choices to `localStorage['hexabin-theme']`, follows OS changes only while no explicit choice exists, and dispatches a **`hexabin:themechange`** `CustomEvent` on `window`. JS that paints colors (SVG charts, Leaflet tiles, category swatches) must read tokens via `getComputedStyle` at render time and re-render on that event.
+
+Semantic tokens and their values:
+
+| Token | Light | Dark |
+|---|---|---|
+| `--sb-bg` (page) | `#F5F5F7` | `#0F1613` |
+| `--sb-surface` (cards/sidebar/nav) | `#FFFFFF` | `#161E1A` |
+| `--sb-surface-2` (nested/inputs) | `#F5F5F7` | `#1D2722` |
+| `--sb-surface-2-hover` | `#ebe9e3` | `#243029` |
+| `--sb-text` | `#1d2722` | `#E8EDEA` |
+| `--sb-text-muted` | `#8C8C8C` | `#9AA69F` |
+| `--sb-border` (hairlines) | `rgba(29,39,34,0.06)` | `rgba(255,255,255,0.08)` |
+| `--sb-border-strong` | `rgba(29,39,34,0.10)` | `rgba(255,255,255,0.14)` |
+| `--sb-hover` (row/nav hover tint) | `rgba(45,90,66,0.06)` | `rgba(255,255,255,0.06)` |
+| `--sb-glass` (sticky nav) | `rgba(245,245,247,0.85)` | `rgba(15,22,19,0.85)` |
+| `--sb-accent-ink` (forest as text/icon) | `#2D5A42` | `#6FAE8C` |
+| `--sb-shadow-card` / `--sb-shadow-float` | ink-tinted, soft | black-based, stronger |
+| `color-scheme` | `light` | `dark` |
+
+Dark-only remaps for legibility on dark surfaces: `--sb-success #66BB6A`, `--sb-warning #FFA726`, `--sb-error #EF5350`, `--sb-info #42A5F5`, `--sb-organic #2E6B45`. All other brand hues are identical in both themes.
+
+**Exception pattern**: elements with a *solid category-color background* (cat chips, bin-mock slats, chart bars) keep literal `var(--sb-ink)` dark text in both themes — a pastel chip always needs dark text. Intrinsically dark surfaces (camera stream `#1a1a1a`, map stage `#1e2226`, `.section-dark`, footer) are theme-independent.
 
 ## Shared Component Classes
 
@@ -81,6 +111,7 @@ Provided by `brand.css` and available on every page — reuse these instead of r
 - **Card** — `.sb-card` (white surface, `--sb-radius-lg`, hairline border).
 - **Toasts** — `.toast-host` container + `.toast` (modifiers `success` / `error` / `leave`).
 - **Modal** — `.modal-backdrop` + `.modal` + `.modal-actions` (confirm dialog scaffolding in `_cc_base.html`).
+- **Theme toggle** — `.sb-theme-toggle` icon button with `data-theme-toggle` attribute + `.sb-icon-sun`/`.sb-icon-moon` inline SVGs (wired by `theme.js`; shows the moon in light mode, the sun in dark).
 - **Animations** — `sbPulse`, `sbFadeIn` keyframes.
 
 ## CSS File Ownership
@@ -89,10 +120,11 @@ Provided by `brand.css` and available on every page — reuse these instead of r
 |------|------|-------|
 | `hexabin/web_static/brand.css` | Tokens + shared components above | Loaded **first** by every template |
 | `hexabin/web_static/dashboard.css` | Control Center layout: sidebar, cards grid, filters, page-specific styles | Admin pages only |
-| `hexabin/web_static/site.css` | Presentation site: glassmorphism dark theme, responsive (768px / 1024px breakpoints) | Public `/site` only |
+| `hexabin/web_static/site.css` | Presentation site: editorial biophilic design, responsive (700px / 1024px breakpoints) | Public `/site` only |
 | `hexabin/web_static/style.css` | Legacy dashboard styles | **Back-compat only — do not extend** |
 
-## Themes
+## Surfaces
 
-- **Control Center (admin)** — light theme: `--sb-cream` page background, white `.sb-card` surfaces, `--sb-ink` text.
-- **Presentation site (`/site`)** — dedicated glassmorphism **dark** theme in `site.css`; same brand palette and fonts.
+- **Control Center (admin)** — app chrome: sidebar + cards on `--sb-surface`, page on `--sb-bg`.
+- **Presentation site (`/site`)** — editorial biophilic design in `site.css`; same brand palette and fonts, with permanently dark statistics/footer sections (`.section-dark`).
+- Both surfaces support **light and dark** themes via the semantic tokens (see Theming above).

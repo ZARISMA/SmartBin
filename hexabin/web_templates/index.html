@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ bin_id | default('Bin') }} · HexaBin</title>
+    <script>
+        (function(){try{var t=localStorage.getItem('hexabin-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='light';}})();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Chakra+Petch:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -11,41 +14,41 @@
     <link rel="stylesheet" href="/static/dashboard.css">
     <style>
         .bin-detail-wrap { padding: 24px 32px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; max-width: 1400px; margin: 0 auto; }
-        .stream-card { background: var(--sb-white); border-radius: 14px; padding: 0; overflow: hidden; box-shadow: var(--sb-shadow-card); }
+        .stream-card { background: var(--sb-surface); border-radius: 14px; padding: 0; overflow: hidden; box-shadow: var(--sb-shadow-card); }
         .stream-card img { width: 100%; display: block; background: #1a1a1a; }
-        .stream-card .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 360px; color: var(--sb-stone); gap: 8px; }
+        .stream-card .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 360px; color: var(--sb-text-muted); gap: 8px; }
         .stream-card .empty .icon { font-size: 36px; }
-        .stream-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid rgba(29,39,34,0.06); }
-        .stream-head .title { font-size: 16px; font-weight: 700; color: var(--sb-ink); letter-spacing: -0.01em; }
-        .panel-card { background: var(--sb-white); border-radius: 14px; padding: 20px; box-shadow: var(--sb-shadow-card); }
-        .panel-card h2 { font-family: var(--sb-font-display); font-size: 24px; font-weight: 400; color: var(--sb-ink); margin: 0 0 12px; letter-spacing: -0.02em; }
+        .stream-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--sb-border); }
+        .stream-head .title { font-size: 16px; font-weight: 700; color: var(--sb-text); letter-spacing: -0.01em; }
+        .panel-card { background: var(--sb-surface); border-radius: 14px; padding: 20px; box-shadow: var(--sb-shadow-card); }
+        .panel-card h2 { font-family: var(--sb-font-display); font-size: 24px; font-weight: 400; color: var(--sb-text); margin: 0 0 12px; letter-spacing: -0.02em; }
         .panel-card + .panel-card { margin-top: 16px; }
         .label-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
         .cat-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--sb-stone); display: inline-block; }
-        #label { font-family: var(--sb-font-display); font-size: 32px; color: var(--sb-ink); letter-spacing: -0.02em; }
-        .detail { color: var(--sb-stone); font-size: 13px; margin: 4px 0 0; }
+        #label { font-family: var(--sb-font-display); font-size: 32px; color: var(--sb-text); letter-spacing: -0.02em; }
+        .detail { color: var(--sb-text-muted); font-size: 13px; margin: 4px 0 0; }
         .bin-controls-row { display: flex; gap: 8px; margin-top: 16px; }
         .bin-controls-row .sb-btn { flex: 1; }
         .history-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-        .history-list li { display: flex; gap: 12px; font-size: 13px; color: var(--sb-ink); padding: 6px 0; border-bottom: 1px solid rgba(29,39,34,0.05); }
+        .history-list li { display: flex; gap: 12px; font-size: 13px; color: var(--sb-text); padding: 6px 0; border-bottom: 1px solid var(--sb-border); }
         .history-list li:last-child { border-bottom: none; }
-        .hist-time { color: var(--sb-stone); font-family: var(--sb-font-mono); font-size: 11px; min-width: 80px; }
-        .stat-total { font-family: var(--sb-font-display); font-size: 42px; color: var(--sb-ink); letter-spacing: -0.02em; }
-        .stat-total-label { font-size: 11px; color: var(--sb-stone); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .hist-time { color: var(--sb-text-muted); font-family: var(--sb-font-mono); font-size: 11px; min-width: 80px; }
+        .stat-total { font-family: var(--sb-font-display); font-size: 42px; color: var(--sb-text); letter-spacing: -0.02em; }
+        .stat-total-label { font-size: 11px; color: var(--sb-text-muted); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
         .stat-item { display: grid; grid-template-columns: 80px 1fr 48px; gap: 10px; align-items: center; padding: 4px 0; font-size: 13px; }
-        .stat-label { color: var(--sb-ink); font-weight: 600; }
-        .stat-bar { height: 6px; background: var(--sb-cream); border-radius: 999px; overflow: hidden; }
+        .stat-label { color: var(--sb-text); font-weight: 600; }
+        .stat-bar { height: 6px; background: var(--sb-surface-2); border-radius: 999px; overflow: hidden; }
         .stat-bar-fill { height: 100%; border-radius: 999px; }
-        .stat-count { font-family: var(--sb-font-mono); color: var(--sb-stone); font-size: 12px; text-align: right; }
+        .stat-count { font-family: var(--sb-font-mono); color: var(--sb-text-muted); font-size: 12px; text-align: right; }
         .entries-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .entries-table th, .entries-table td { padding: 8px 6px; text-align: left; border-bottom: 1px solid rgba(29,39,34,0.05); }
-        .entries-table th { font-size: 10px; color: var(--sb-stone); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+        .entries-table th, .entries-table td { padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--sb-border); }
+        .entries-table th { font-size: 10px; color: var(--sb-text-muted); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
         .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
         .badge.manual { background: rgba(140,140,140,0.14); color: var(--sb-stone); }
         .badge.auto { background: rgba(76,175,80,0.14); color: var(--sb-success); }
-        .detail-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 32px; background: var(--sb-white); border-bottom: 1px solid rgba(29,39,34,0.06); }
-        .detail-header .back { color: var(--sb-forest); text-decoration: none; font-size: 13px; font-weight: 600; margin-right: 16px; }
-        .detail-header h1 { margin: 0; font-size: 22px; color: var(--sb-ink); letter-spacing: -0.01em; }
+        .detail-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 32px; background: var(--sb-surface); border-bottom: 1px solid var(--sb-border); }
+        .detail-header .back { color: var(--sb-accent-ink); text-decoration: none; font-size: 13px; font-weight: 600; margin-right: 16px; }
+        .detail-header h1 { margin: 0; font-size: 22px; color: var(--sb-text); letter-spacing: -0.01em; }
         @media (max-width: 1100px) {
             .bin-detail-wrap { grid-template-columns: 1fr; padding: 16px; }
         }
@@ -59,6 +62,10 @@
         </div>
         <div style="display:flex; align-items:center; gap:12px;">
             <span id="mode-badge" class="badge manual">MANUAL</span>
+            <button type="button" class="sb-theme-toggle" data-theme-toggle aria-label="Toggle dark mode" title="Toggle dark mode">
+                <svg class="sb-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                <svg class="sb-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+            </button>
             <form method="POST" action="/logout" style="margin:0;">
                 <button type="submit" class="sb-btn sb-btn-secondary" style="padding:6px 14px; font-size:12px;">Logout</button>
             </form>
@@ -129,12 +136,14 @@
         const TOGGLE_URL = '{{ toggle_url | default("/api/toggle-auto") }}';
         const STATE_URL = '{{ state_url | default("/api/state") }}';
         const BIN_QUERY = BIN_ID ? '?bin_id=' + encodeURIComponent(BIN_ID) : '';
-        const CAT_COLORS = {
-            Plastic: '#87CEEB', Glass: '#40E0D0', Paper: '#D2B48C',
-            Organic: '#1E4D2B', Aluminum: '#A9A9A9', Other: '#9370DB',
-            Empty: '#8C8C8C'
+        // Category colors come from the brand tokens so theme remaps (e.g. dark --sb-organic) apply.
+        const CAT_TOKENS = {
+            Plastic: '--sb-plastic', Glass: '--sb-glass', Paper: '--sb-paper',
+            Organic: '--sb-organic', Aluminum: '--sb-aluminum', Other: '--sb-other-1',
+            Empty: '--sb-empty'
         };
-        function catColor(label) { return CAT_COLORS[label] || '#8C8C8C'; }
+        function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+        function catColor(label) { return cssVar(CAT_TOKENS[label] || '--sb-empty') || '#8C8C8C'; }
 
         async function classify() {
             const btn = document.getElementById('btn-classify');
@@ -212,7 +221,7 @@
                 tbody.innerHTML = '';
                 for (const e of entries) {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `<td class="cc-mono" style="font-size:11px; color:var(--sb-stone);">${e.timestamp || ''}</td><td style="color:${catColor(e.label)}; font-weight: 600;">${e.label || ''}</td><td>${e.description || ''}</td><td style="color:var(--sb-stone);">${e.brand_product || ''}</td>`;
+                    tr.innerHTML = `<td class="cc-mono" style="font-size:11px; color:var(--sb-text-muted);">${e.timestamp || ''}</td><td style="color:${catColor(e.label)}; font-weight: 600;">${e.label || ''}</td><td>${e.description || ''}</td><td style="color:var(--sb-text-muted);">${e.brand_product || ''}</td>`;
                     tbody.appendChild(tr);
                 }
             } catch (e) { /* ignore */ }
@@ -224,6 +233,14 @@
         if (HAS_LOCAL_CAMERA) pollState();
         pollStats();
         pollEntries();
+
+        // Repaint category-colored elements immediately on theme switch.
+        window.addEventListener('hexabin:themechange', () => {
+            if (HAS_LOCAL_CAMERA) pollState();
+            pollStats();
+            pollEntries();
+        });
     </script>
+    <script src="/static/theme.js" defer></script>
 </body>
 </html>

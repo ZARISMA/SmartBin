@@ -1,6 +1,7 @@
 /* HexaBin brand tokens & shared utilities
  * Loaded by every template (site, login, dashboard pages, per-bin detail).
  * Palette mirrors DESIGN.md; type system is Manrope + Chakra Petch + JetBrains Mono.
+ * Theming: semantic tokens remap under <html data-theme="dark"> (set pre-paint, toggled by theme.js).
  */
 
 :root {
@@ -41,6 +42,43 @@
     --sb-radius-xl: 16px;
     --sb-shadow-card: 0 1px 2px rgba(29, 39, 34, 0.04), 0 1px 1px rgba(29, 39, 34, 0.02);
     --sb-shadow-float: 0 12px 40px rgba(0, 0, 0, 0.08);
+    /* Semantic (theme-mapped) — surfaces/text/borders MUST use these, never raw palette values */
+    --sb-bg: var(--sb-cream);
+    --sb-surface: var(--sb-white);
+    --sb-surface-2: var(--sb-cream);
+    --sb-surface-2-hover: #ebe9e3;
+    --sb-text: var(--sb-ink);
+    --sb-text-muted: var(--sb-stone);
+    --sb-border: rgba(29, 39, 34, 0.06);
+    --sb-border-strong: rgba(29, 39, 34, 0.10);
+    --sb-hover: rgba(45, 90, 66, 0.06);
+    --sb-glass: rgba(245, 245, 247, 0.85);
+    --sb-accent-ink: var(--sb-forest);
+    color-scheme: light;
+}
+
+/* Dark theme — forest-tinted charcoal. Toggled by theme.js via <html data-theme>. */
+:root[data-theme="dark"] {
+    --sb-bg: #0F1613;
+    --sb-surface: #161E1A;
+    --sb-surface-2: #1D2722;
+    --sb-surface-2-hover: #243029;
+    --sb-text: #E8EDEA;
+    --sb-text-muted: #9AA69F;
+    --sb-border: rgba(255, 255, 255, 0.08);
+    --sb-border-strong: rgba(255, 255, 255, 0.14);
+    --sb-hover: rgba(255, 255, 255, 0.06);
+    --sb-glass: rgba(15, 22, 19, 0.85);
+    --sb-accent-ink: #6FAE8C;
+    --sb-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 1px rgba(0, 0, 0, 0.25);
+    --sb-shadow-float: 0 12px 40px rgba(0, 0, 0, 0.50);
+    /* Brightened for legibility on dark surfaces */
+    --sb-success: #66BB6A;
+    --sb-warning: #FFA726;
+    --sb-error: #EF5350;
+    --sb-info: #42A5F5;
+    --sb-organic: #2E6B45;
+    color-scheme: dark;
 }
 
 * {
@@ -51,13 +89,13 @@ html, body {
     margin: 0;
     padding: 0;
     font-family: var(--sb-font-ui);
-    color: var(--sb-ink);
+    color: var(--sb-text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-    background: var(--sb-cream);
+    background: var(--sb-bg);
 }
 
 a {
@@ -123,18 +161,18 @@ button {
 
 .sb-btn-primary   { background: var(--sb-forest); color: var(--sb-white); }
 .sb-btn-primary:hover:not(:disabled) { background: #244836; }
-.sb-btn-secondary { background: var(--sb-cream); color: var(--sb-ink); }
-.sb-btn-secondary:hover:not(:disabled) { background: #ebe9e3; }
-.sb-btn-outline   { background: var(--sb-white); color: var(--sb-forest); border: 1px solid rgba(45, 90, 66, 0.30); }
-.sb-btn-outline:hover:not(:disabled) { background: rgba(45, 90, 66, 0.04); }
-.sb-btn-ghost     { background: transparent; color: var(--sb-ink); }
+.sb-btn-secondary { background: var(--sb-surface-2); color: var(--sb-text); }
+.sb-btn-secondary:hover:not(:disabled) { background: var(--sb-surface-2-hover); }
+.sb-btn-outline   { background: var(--sb-surface); color: var(--sb-accent-ink); border: 1px solid rgba(45, 90, 66, 0.30); }
+.sb-btn-outline:hover:not(:disabled) { background: var(--sb-hover); }
+.sb-btn-ghost     { background: transparent; color: var(--sb-text); }
 .sb-btn-danger    { background: var(--sb-error); color: var(--sb-white); }
 
 /* ── Card ────────────────────────────────────────────────────────────── */
 .sb-card {
-    background: var(--sb-white);
+    background: var(--sb-surface);
     border-radius: var(--sb-radius-lg);
-    border: 1px solid rgba(29, 39, 34, 0.05);
+    border: 1px solid var(--sb-border);
     overflow: hidden;
 }
 
@@ -152,6 +190,7 @@ button {
 .toast {
     background: var(--sb-ink);
     color: var(--sb-white);
+    border: 1px solid transparent;
     padding: 12px 18px;
     border-radius: var(--sb-radius-md);
     font-size: 13px;
@@ -164,6 +203,7 @@ button {
 .toast.success { background: var(--sb-forest); }
 .toast.error   { background: var(--sb-error); }
 .toast.leave   { opacity: 0; transform: translateY(8px); transition: opacity 240ms ease, transform 240ms ease; }
+:root[data-theme="dark"] .toast { border-color: var(--sb-border-strong); }
 
 /* ── Modal ───────────────────────────────────────────────────────────── */
 .modal-backdrop {
@@ -175,7 +215,8 @@ button {
 .modal-backdrop[hidden] { display: none; }
 [hidden] { display: none !important; }
 .modal {
-    background: var(--sb-white);
+    background: var(--sb-surface);
+    border: 1px solid var(--sb-border);
     border-radius: var(--sb-radius-lg);
     padding: 28px 28px 22px;
     width: min(420px, calc(100vw - 32px));
@@ -187,15 +228,37 @@ button {
     font-size: 26px;
     font-weight: 500;
     letter-spacing: -0.02em;
-    color: var(--sb-ink);
+    color: var(--sb-text);
 }
 .modal p {
     margin: 0 0 24px;
     font-size: 14px;
     line-height: 1.5;
-    color: var(--sb-ink);
+    color: var(--sb-text);
     opacity: 0.75;
 }
 .modal-actions {
     display: flex; justify-content: flex-end; gap: 10px;
 }
+
+/* ── Theme toggle ────────────────────────────────────────────────────── */
+.sb-theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--sb-border-strong);
+    border-radius: 999px;
+    background: var(--sb-surface);
+    color: var(--sb-text-muted);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.sb-theme-toggle:hover { background: var(--sb-hover); color: var(--sb-text); }
+.sb-theme-toggle svg { width: 16px; height: 16px; display: block; }
+/* Affordance icons: light shows the moon (switch to dark), dark shows the sun */
+.sb-theme-toggle .sb-icon-sun { display: none; }
+:root[data-theme="dark"] .sb-theme-toggle .sb-icon-sun { display: block; }
+:root[data-theme="dark"] .sb-theme-toggle .sb-icon-moon { display: none; }
