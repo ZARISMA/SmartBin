@@ -21,7 +21,8 @@ import time
 import cv2
 import numpy as np
 
-from .config import EDGE_API_KEY, WEB_HOST, WEB_PORT
+from .camera_config import CameraConfig, CameraConfigStore
+from .config import CAMERA_CONFIG_FILE, EDGE_API_KEY, WEB_HOST, WEB_PORT
 from .log_setup import get_logger
 from .schemas import BinCommand
 from .state import AppState
@@ -75,9 +76,9 @@ def _check_auth(auth: str) -> bool:
     return bool(EDGE_API_KEY) and token == EDGE_API_KEY
 
 
-def _build_app(state: AppState, buf: FrameBuffer):
+def _build_app(state: AppState, buf: FrameBuffer, store: CameraConfigStore):
     from fastapi import FastAPI, Header
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import JSONResponse, Response
     from starlette.responses import StreamingResponse
 
     app = FastAPI(title="HexaBin Edge")
@@ -93,6 +94,19 @@ def _build_app(state: AppState, buf: FrameBuffer):
             _gen_frames(buf),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
+
+    @app.get("/camera/{index}/snapshot")
+    def camera_snapshot(index: int, authorization: str = Header("")):
+        """Latest *raw* (untransformed) frame for one camera — feeds the editor."""
+        if not _check_auth(authorization):
+            return _unauthorized()
+        frame = store.get_raw(index)
+        if frame is None:
+            return Response(content=_placeholder_frame("No camera frame"), media_type="image/jpeg")
+        ok, jpeg = cv2.imencode(".jpg", frame)
+        if not ok:
+            return JSONResponse({"error": "encode failed"}, status_code=500)
+        return Response(content=jpeg.tobytes(), media_type="image/jpeg")
 
     @app.post("/classify")
     def classify(authorization: str = Header("")):
@@ -205,6 +219,31 @@ def _build_app(state: AppState, buf: FrameBuffer):
             state.request_restart()
             return {"status": "ok", "message": f"pipeline will change to {value} on restart"}
 
+        if action == "set_camera_config":
+            if not cmd.cameras:
+                return JSONResponse(
+                    {"status": "error", "message": "no cameras provided"}, status_code=400
+                )
+            try:
+                for cam in cmd.cameras:
+                    cfg = CameraConfig.from_dict(
+                        {
+                            "rotation": cam.rotation,
+                            "flip_h": cam.flip_h,
+                            "flip_v": cam.flip_v,
+                            "crop": cam.crop,
+                        }
+                    )
+                    store.set(cam.cam_index, cfg)
+            except (ValueError, TypeError) as exc:
+                return JSONResponse(
+                    {"status": "error", "message": f"invalid camera config: {exc}"},
+                    status_code=400,
+                )
+            store.save_json(CAMERA_CONFIG_FILE)
+            logger.info("Admin command: set_camera_config (%d camera(s))", len(cmd.cameras))
+            return {"status": "ok", "message": "camera config saved — applies live"}
+
         if action == "classify":
             frame = buf.get()
             if frame is None:
@@ -243,14 +282,24 @@ def _build_app(state: AppState, buf: FrameBuffer):
 def start_edge_server(
     state: AppState,
     buf: FrameBuffer,
+    store: CameraConfigStore | None = None,
     *,
     host: str | None = None,
     port: int | None = None,
 ) -> FrameBuffer:
-    """Start the edge HTTP server on a daemon thread. Returns the frame buffer."""
+    """Start the edge HTTP server on a daemon thread. Returns the frame buffer.
+
+    *store* is the shared camera-config store owned by the capture loop; when
+    omitted a fresh one is created and seeded from disk so the snapshot and
+    set_camera_config endpoints still function (used by entry points that do not
+    yet thread their store through)."""
     if not EDGE_API_KEY:
         logger.warning("Edge server not started — EDGE_API_KEY not set.")
         return buf
+
+    if store is None:
+        store = CameraConfigStore()
+        store.load_json(CAMERA_CONFIG_FILE)
 
     bind_host = host or WEB_HOST or "0.0.0.0"
     bind_port = port or WEB_PORT
@@ -261,7 +310,7 @@ def start_edge_server(
         logger.warning("Edge server not started — uvicorn not installed.")
         return buf
 
-    app = _build_app(state, buf)
+    app = _build_app(state, buf, store)
 
     def _run() -> None:
         try:

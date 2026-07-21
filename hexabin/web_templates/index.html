@@ -105,6 +105,16 @@
                 {% endif %}
             </div>
 
+            {% if has_local_camera %}
+            <div class="panel-card">
+                <div class="cell-key">Cameras</div>
+                <p class="detail" style="margin-bottom:12px;">Rotate, flip and crop each camera. Saved settings apply live.</p>
+                <div class="bin-controls-row">
+                    <button class="sb-btn sb-btn-secondary" id="btn-edit-cameras" onclick="openCameraEditor()">✎ Edit cameras</button>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="panel-card">
                 <div class="cell-key">Recent</div>
                 <ul class="history-list" id="history-list"></ul>
@@ -128,6 +138,28 @@
             </div>
         </aside>
     </main>
+
+    {% if has_local_camera %}
+    <div id="cam-editor" class="cam-editor-backdrop" hidden>
+        <div class="cam-editor">
+            <div class="cam-editor-head">
+                <h2>Edit cameras</h2>
+                <button class="cam-editor-close" id="cam-editor-close" aria-label="Close">✕</button>
+            </div>
+            <div class="cam-editor-body" id="cam-editor-body"></div>
+            <div class="cam-editor-foot">
+                <span class="cam-editor-hint">Drag the box to set the crop. Changes apply after you Save.</span>
+                <div class="cam-editor-actions">
+                    <button class="sb-btn sb-btn-ghost" id="cam-reset" type="button">Reset</button>
+                    <button class="sb-btn sb-btn-secondary" id="cam-cancel" type="button">Cancel</button>
+                    <button class="sb-btn sb-btn-primary" id="cam-save" type="button">Save cameras</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="toast-host" class="toast-host" aria-live="polite"></div>
+    <script src="/static/dashboard_cameras.js" defer></script>
+    {% endif %}
 
     <script>
         const BIN_ID = '{{ bin_id | default("") }}';

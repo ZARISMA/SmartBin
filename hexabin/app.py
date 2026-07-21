@@ -18,8 +18,9 @@ import cv2
 import depthai as dai
 import numpy as np
 
-from .cameraOak import crop_sides, make_pipeline
-from .config import CROP_PERCENT, DISPLAY_SIZE, EDGE_MODE, MAX_DT, WINDOW
+from .camera_config import CameraConfigStore, apply_transform
+from .cameraOak import make_pipeline
+from .config import CAMERA_CONFIG_FILE, DISPLAY_SIZE, EDGE_MODE, MAX_DT, WINDOW
 from .log_setup import get_logger
 from .state import AppState
 from .ui import draw_overlay
@@ -91,6 +92,13 @@ def run_loop(strategy: Strategy, state: AppState | None = None) -> None:
     logger.info("Starting Smart Waste AI (%s)", type(strategy).__name__)
 
     headless = _is_headless()
+
+    # Per-camera geometry (rotate/flip/crop) — reloaded from disk so a saved
+    # edit survives a restart; shared with the edge server so the dashboard can
+    # read raw snapshots and push new configs while the loop runs.
+    camera_store = CameraConfigStore()
+    camera_store.load_json(CAMERA_CONFIG_FILE)
+
     frame_buf = None
     if EDGE_MODE:
         from .edge_client import start_heartbeat_thread
@@ -98,7 +106,7 @@ def run_loop(strategy: Strategy, state: AppState | None = None) -> None:
 
         start_heartbeat_thread(state)
         frame_buf = FrameBuffer()
-        start_edge_server(state, frame_buf)
+        start_edge_server(state, frame_buf, camera_store)
 
     if headless:
         logger.info("Headless mode — skipping OpenCV GUI.")
@@ -171,7 +179,8 @@ def run_loop(strategy: Strategy, state: AppState | None = None) -> None:
                     if q.has():
                         frame = q.get().getCvFrame()
                         last_ts[i] = time.time()
-                        frame = crop_sides(frame, CROP_PERCENT)
+                        camera_store.set_raw(i, frame)
+                        frame = apply_transform(frame, camera_store.get(i))
                         frame = cv2.resize(frame, DISPLAY_SIZE, interpolation=cv2.INTER_AREA)
                         last_frames[i] = frame
 

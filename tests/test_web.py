@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
-from hexabin.config import ADMIN_PASSWORD, ADMIN_USERNAME
+from hexabin.config import ADMIN_PASSWORD, ADMIN_USERNAME, BIN_ID
 from hexabin.llm import CircuitOpenError, ClassificationResult, LLMError
 
 # Matches HEXABIN_EDGE_API_KEY set in conftest.py before hexabin imports.
@@ -38,6 +38,32 @@ def anon_client():
 
         with TestClient(app) as c:
             yield c
+
+
+@pytest.fixture
+def isolated_client(tmp_path, monkeypatch):
+    """TestClient backed by a fresh temp DB — safe for destructive auth tests.
+
+    The lifespan seeds admin/password123 into the temp DB, so real end-to-end
+    login / change-password / add-user flows can run without touching the dev DB.
+    """
+    import hexabin.database as db
+    import hexabin.web as web
+
+    monkeypatch.setattr(db, "DB_FILE", str(tmp_path / "web.db"))
+    monkeypatch.setattr(db, "_initialized", False)
+    monkeypatch.setattr(db, "_pg_pool", None)
+    monkeypatch.setattr(db, "DB_BACKEND", "sqlite")
+    monkeypatch.setattr(web, "_login_failures", {})
+    with patch("hexabin.web._start_camera_thread"):
+        with TestClient(web.app) as c:
+            yield c
+
+
+def _login(c, username, password):
+    return c.post(
+        "/login", data={"username": username, "password": password}, follow_redirects=False
+    )
 
 
 class TestIndex:
@@ -513,3 +539,166 @@ class TestApiReport:
         entry = mock_insert.call_args[0][0]
         assert entry["confidence"] == pytest.approx(0.66)
         assert entry["llm_backend"] == "gemini"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Settings page + user management
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestSettingsPage:
+    def test_authed_returns_page(self, client):
+        r = client.get("/settings")
+        assert r.status_code == 200
+        assert "Your account" in r.text and "Users" in r.text
+
+    def test_anon_redirects_to_login(self, anon_client):
+        r = anon_client.get("/settings", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"] == "/login"
+
+    def test_users_api_anon_rejected(self, anon_client):
+        assert anon_client.get("/api/users").status_code == 401
+
+    def test_create_user_anon_rejected(self, anon_client):
+        r = anon_client.post("/api/users", json={"username": "x", "password": "secret12"})
+        assert r.status_code == 401
+
+
+class TestAuthFlow:
+    """Real end-to-end auth against an isolated temp DB (seeded admin)."""
+
+    def test_seeded_admin_can_login(self, isolated_client):
+        assert _login(isolated_client, "admin", "password123").status_code == 302
+
+    def test_change_password_retires_old(self, isolated_client):
+        c = isolated_client
+        assert _login(c, "admin", "password123").status_code == 302
+        r = c.post(
+            "/api/account/password",
+            json={"current_password": "password123", "new_password": "brandnew1"},
+        )
+        assert r.status_code == 200
+        c.post("/logout")
+        assert _login(c, "admin", "password123").status_code == 401  # old retired
+        assert _login(c, "admin", "brandnew1").status_code == 302  # new works
+
+    def test_change_password_wrong_current_rejected(self, isolated_client):
+        c = isolated_client
+        _login(c, "admin", "password123")
+        r = c.post(
+            "/api/account/password",
+            json={"current_password": "WRONG", "new_password": "brandnew1"},
+        )
+        assert r.status_code == 403
+
+    def test_add_user_then_login(self, isolated_client):
+        c = isolated_client
+        _login(c, "admin", "password123")
+        assert c.post("/api/users", json={"username": "op2", "password": "secret12"}).status_code == 200
+        c.post("/logout")
+        assert _login(c, "op2", "secret12").status_code == 302
+
+    def test_delete_last_account_blocked(self, isolated_client):
+        c = isolated_client
+        _login(c, "admin", "password123")
+        assert c.delete("/api/users/admin").status_code == 409
+
+    def test_delete_user_ok_when_multiple(self, isolated_client):
+        c = isolated_client
+        _login(c, "admin", "password123")
+        c.post("/api/users", json={"username": "op2", "password": "secret12"})
+        assert c.delete("/api/users/op2").status_code == 200
+
+    def test_add_user_validation(self, isolated_client):
+        c = isolated_client
+        _login(c, "admin", "password123")
+        assert c.post("/api/users", json={"username": "ab", "password": "secret12"}).status_code == 400
+        assert c.post("/api/users", json={"username": "okname", "password": "12345"}).status_code == 400
+        c.post("/api/users", json={"username": "dupuser", "password": "secret12"})
+        assert c.post("/api/users", json={"username": "dupuser", "password": "secret12"}).status_code == 409
+
+    def test_login_throttle_blocks_after_failures(self, isolated_client):
+        c = isolated_client
+        for _ in range(5):
+            _login(c, "admin", "wrongpass")
+        # 6th attempt is blocked regardless of correctness
+        assert _login(c, "admin", "password123").status_code == 429
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Camera-config endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _fresh_store(monkeypatch):
+    import hexabin.web as web
+    from hexabin.camera_config import CameraConfigStore
+
+    store = CameraConfigStore()
+    monkeypatch.setattr(web, "_camera_store", store)
+    return store
+
+
+class TestCameraConfigApi:
+    def test_get_local_returns_defaults(self, client, monkeypatch):
+        _fresh_store(monkeypatch)
+        r = client.get(f"/api/bin/{BIN_ID}/camera-config")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["source"] == "local"
+        assert len(data["cameras"]) == 2
+        # default == legacy symmetric CROP_PERCENT side-crop
+        assert data["cameras"][0]["crop"][0] == pytest.approx(0.20)
+
+    def test_post_local_applies_and_persists(self, client, tmp_path, monkeypatch):
+        import hexabin.web as web
+
+        store = _fresh_store(monkeypatch)
+        monkeypatch.setattr(web, "CAMERA_CONFIG_FILE", str(tmp_path / "cams.json"))
+        with patch("hexabin.web.upsert_camera_config", return_value=True) as up:
+            r = client.post(
+                f"/api/bin/{BIN_ID}/camera-config",
+                json={
+                    "cameras": [
+                        {
+                            "cam_index": 0,
+                            "rotation": 90,
+                            "flip_h": True,
+                            "flip_v": False,
+                            "crop": [0.1, 0.1, 0.9, 0.9],
+                        }
+                    ]
+                },
+            )
+        assert r.status_code == 200
+        assert r.json()["applied"] == "local"
+        assert store.get(0).rotation == 90 and store.get(0).flip_h is True
+        assert up.called  # server DB desired-state upserted
+        assert (tmp_path / "cams.json").exists()  # bin-local applied-state saved
+
+    def test_post_invalid_returns_400(self, client, monkeypatch):
+        _fresh_store(monkeypatch)
+        with patch("hexabin.web.upsert_camera_config", return_value=True):
+            r = client.post(
+                f"/api/bin/{BIN_ID}/camera-config",
+                json={"cameras": [{"cam_index": 0, "rotation": 45, "crop": [0, 0, 1, 1]}]},
+            )
+        assert r.status_code == 400
+
+    def test_post_empty_returns_400(self, client, monkeypatch):
+        _fresh_store(monkeypatch)
+        r = client.post(f"/api/bin/{BIN_ID}/camera-config", json={"cameras": []})
+        assert r.status_code == 400
+
+    def test_post_anon_rejected(self, anon_client):
+        r = anon_client.post(f"/api/bin/{BIN_ID}/camera-config", json={"cameras": []})
+        assert r.status_code == 401
+
+    def test_snapshot_local_no_frame_returns_503(self, client, monkeypatch):
+        _fresh_store(monkeypatch)
+        r = client.get(f"/api/bin/{BIN_ID}/camera/0/snapshot")
+        assert r.status_code == 503
+
+    def test_snapshot_anon_rejected(self, anon_client):
+        assert anon_client.get(f"/api/bin/{BIN_ID}/camera/0/snapshot").status_code == 401

@@ -44,15 +44,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
-from . import analytics
+from . import analytics, users
 from .actuator import resolve_module
+from .camera_config import CameraConfig, CameraConfigStore, apply_transform, default_config
 from .config import (
-    ADMIN_PASSWORD,
-    ADMIN_USERNAME,
     AUTO_INTERVAL,
     BIN_ID,
+    CAMERA_CONFIG_FILE,
     CAMERA_MODE,
-    CROP_PERCENT,
     DATASET_DIR,
     DISPLAY_SIZE,
     EDGE_API_KEY,
@@ -76,20 +75,25 @@ from .config import (
 )
 from .database import (
     get_active_bins,
+    get_camera_configs,
     get_entries,
     get_entry_by_id,
     get_entry_count,
     get_label_counts,
     insert_entry,
+    upsert_camera_config,
 )
 from .llm import CircuitOpenError, build_backend
 from .log_setup import get_logger
 from .schemas import (
     BinCommand,
     BinHeartbeat,
+    CameraConfigPayload,
     EdgeClassifyRequest,
     EdgeClassifyResponse,
     EdgeReport,
+    PasswordChange,
+    UserCreate,
 )
 from .state import AppState
 from .ui import draw_nn_detections, draw_overlay
@@ -123,6 +127,10 @@ class CachedStaticFiles(StaticFiles):
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    # DB is authoritative for accounts; seed the first admin from env if empty.
+    users.seed_admin_if_empty()
+    # Reload saved per-camera geometry so edits survive a restart.
+    _camera_store.load_json(CAMERA_CONFIG_FILE)
     _start_camera_thread()
     if EDGE_MODE:
         from .edge_client import start_heartbeat_thread
@@ -148,10 +156,11 @@ def _bearer_token(request: Request) -> str:
 
 
 def _is_admin(request: Request) -> bool:
-    """Operator auth: session cookie or the admin password as a bearer token."""
+    """Operator auth: a valid session cookie, or any account's password as a
+    bearer token (DB-authoritative — see hexabin/users.py)."""
     if request.session.get("user"):
         return True
-    return _bearer_token(request) == ADMIN_PASSWORD
+    return users.verify_bearer(_bearer_token(request))
 
 
 def _is_edge_client(request: Request) -> bool:
@@ -164,6 +173,37 @@ def _is_edge_client(request: Request) -> bool:
     if EDGE_API_KEY and token == EDGE_API_KEY:
         return True
     return _is_admin(request)
+
+
+# ── Login throttle (per client IP) ───────────────────────────────────────────
+
+_login_failures: dict[str, list[float]] = {}
+_login_lock = threading.Lock()
+_LOGIN_MAX_FAILURES = 5
+_LOGIN_WINDOW = 300.0  # seconds — failures older than this are forgotten
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _login_blocked(ip: str) -> bool:
+    now = time.monotonic()
+    with _login_lock:
+        fails = [t for t in _login_failures.get(ip, []) if now - t < _LOGIN_WINDOW]
+        _login_failures[ip] = fails
+        return len(fails) >= _LOGIN_MAX_FAILURES
+
+
+def _record_login_failure(ip: str) -> None:
+    now = time.monotonic()
+    with _login_lock:
+        _login_failures.setdefault(ip, []).append(now)
+
+
+def _clear_login_failures(ip: str) -> None:
+    with _login_lock:
+        _login_failures.pop(ip, None)
 
 
 _SAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._-]")
@@ -313,6 +353,11 @@ _latest_frame: np.ndarray | None = None
 _frame_lock = threading.Lock()
 _cameras_ok = False
 
+# Per-camera geometry for this process's local cameras (if any). Populated from
+# disk at startup and applied live in the capture loops; the camera-config
+# endpoints read/write it for the local bin.
+_camera_store = CameraConfigStore()
+
 
 def _set_frame(frame: np.ndarray) -> None:
     global _latest_frame
@@ -335,7 +380,7 @@ def _camera_loop_oak() -> None:
     try:
         import depthai as dai  # noqa: I001
 
-        from .cameraOak import crop_sides, make_pipeline
+        from .cameraOak import make_pipeline
     except Exception as e:
         logger.error("Cannot import OAK camera modules: %s", e)
         return
@@ -364,7 +409,8 @@ def _camera_loop_oak() -> None:
                     if q.has():
                         frame = q.get().getCvFrame()
                         last_ts[i] = time.time()
-                        frame = crop_sides(frame, CROP_PERCENT)
+                        _camera_store.set_raw(i, frame)
+                        frame = apply_transform(frame, _camera_store.get(i))
                         frame = cv2.resize(frame, DISPLAY_SIZE, interpolation=cv2.INTER_AREA)
                         last_frames[i] = frame
 
@@ -396,7 +442,7 @@ def _camera_loop_raspberry() -> None:
     global _cameras_ok
 
     try:
-        from .cameraraspberry import crop_sides, grab_frame, make_cameras, stop_cameras
+        from .cameraraspberry import grab_frame, make_cameras, stop_cameras
     except Exception as e:
         logger.error("Cannot import Raspberry Pi camera modules: %s", e)
         return
@@ -421,7 +467,8 @@ def _camera_loop_raspberry() -> None:
             last_frames: list[np.ndarray | None] = [None, None]
             for i, cam in enumerate(cameras):
                 frame = grab_frame(cam)
-                frame = crop_sides(frame, CROP_PERCENT)
+                _camera_store.set_raw(i, frame)
+                frame = apply_transform(frame, _camera_store.get(i))
                 frame = cv2.resize(frame, DISPLAY_SIZE, interpolation=cv2.INTER_AREA)
                 last_frames[i] = frame
 
@@ -482,11 +529,15 @@ def _camera_loop_oak_native() -> None:
 
                 # Update frame for the web stream
                 if votes.rgb_frame is not None:
+                    _camera_store.set_raw(0, votes.rgb_frame)
+                    transformed = apply_transform(votes.rgb_frame, _camera_store.get(0))
                     disp = cv2.resize(
-                        votes.rgb_frame,
+                        transformed,
                         (OAK_DISPLAY_W, OAK_DISPLAY_H),
                         interpolation=cv2.INTER_AREA,
                     )
+                    # NN boxes are decorative here; they may drift under a
+                    # non-default transform (single-camera native mode).
                     draw_nn_detections(disp, votes.nn_detections)
                     _set_frame(disp)
 
@@ -525,8 +576,11 @@ def _camera_loop_oak_native() -> None:
 
                     elif oak_state == "detected":
                         if votes.rgb_frame is not None and _state.start_classify():
-                            img_bytes = encode_frame(votes.rgb_frame)
-                            launch_classify(img_bytes, votes.rgb_frame.copy(), _state)
+                            classify_frame = apply_transform(
+                                votes.rgb_frame, _camera_store.get(0)
+                            )
+                            img_bytes = encode_frame(classify_frame)
+                            launch_classify(img_bytes, classify_frame.copy(), _state)
                             _state.set_status("Classifying...", "Sending to Gemini AI...")
                             oak_state = "classifying"
 
@@ -622,9 +676,19 @@ def login_page(request: Request):
 
 @app.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+    ip = _client_ip(request)
+    if _login_blocked(ip):
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"error": "Too many attempts — wait a few minutes and try again."},
+            status_code=429,
+        )
+    if users.verify_user(username, password):
+        _clear_login_failures(ip)
         request.session["user"] = username
         return RedirectResponse("/", status_code=302)
+    _record_login_failure(ip)
     return templates.TemplateResponse(
         request=request,
         name="login.html",
@@ -706,6 +770,17 @@ def dashboard_classifications(request: Request):
             "user": request.session.get("user", "admin"),
             "categories": VALID_CLASSES,
         },
+    )
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def dashboard_settings(request: Request):
+    if not _is_admin(request):
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard_settings.html",
+        context={"active": "settings", "user": request.session.get("user", "admin")},
     )
 
 
@@ -804,6 +879,21 @@ def _proxy_request(
         return e.code, payload
     except Exception as e:
         return 502, {"error": f"edge unreachable: {e}"}
+
+
+def _proxy_get_bytes(host: str, path: str) -> tuple[int, bytes, str]:
+    """GET raw bytes from an edge endpoint (e.g. a camera snapshot)."""
+    url = f"http://{host}{path}"
+    req = urllib.request.Request(url, headers=_edge_headers())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            ctype = resp.headers.get("Content-Type", "application/octet-stream")
+            return resp.status, resp.read(), ctype
+    except urllib.error.HTTPError as e:
+        return e.code, b"", "application/json"
+    except Exception as exc:
+        logger.warning("Proxy snapshot from %s failed: %s", host, exc)
+        return 502, b"", "application/json"
 
 
 @app.get("/api/bin/{bin_id}/stream")
@@ -1120,6 +1210,180 @@ def api_alerts(request: Request):
     if not _is_admin(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return _derive_alerts()
+
+
+# ── Routes: User accounts (admin) ─────────────────────────────────────────────
+
+
+@app.get("/api/users")
+def api_users(request: Request):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return {"users": users.list_users(), "current": request.session.get("user", "")}
+
+
+@app.post("/api/users")
+def api_create_user(request: Request, body: UserCreate):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    username = (body.username or "").strip()
+    if not users.valid_username(username):
+        return JSONResponse(
+            {"error": "Username must be 3–32 chars: letters, digits, . _ -"}, status_code=400
+        )
+    if not users.valid_password(body.password):
+        return JSONResponse(
+            {"error": f"Password must be at least {users.MIN_PASSWORD_LEN} characters"},
+            status_code=400,
+        )
+    if users.user_exists(username):
+        return JSONResponse({"error": "That username already exists"}, status_code=409)
+    if users.create_user(username, body.password) is None:
+        return JSONResponse({"error": "Could not create user"}, status_code=500)
+    return {"status": "ok", "username": username}
+
+
+@app.delete("/api/users/{username}")
+def api_delete_user(request: Request, username: str):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if not users.user_exists(username):
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    # Never allow the fleet to be left with no way in.
+    if users.count_users() <= 1:
+        return JSONResponse({"error": "Cannot delete the last account"}, status_code=409)
+    if not users.delete_user(username):
+        return JSONResponse({"error": "Could not delete user"}, status_code=500)
+    return {"status": "ok"}
+
+
+@app.post("/api/account/password")
+def api_change_password(request: Request, body: PasswordChange):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    username = request.session.get("user")
+    if not username:
+        return JSONResponse(
+            {"error": "Password change requires a logged-in session"}, status_code=403
+        )
+    if not users.verify_user(username, body.current_password):
+        return JSONResponse({"error": "Current password is incorrect"}, status_code=403)
+    if not users.valid_password(body.new_password):
+        return JSONResponse(
+            {"error": f"New password must be at least {users.MIN_PASSWORD_LEN} characters"},
+            status_code=400,
+        )
+    if not users.change_password(username, body.new_password):
+        return JSONResponse({"error": "Could not update password"}, status_code=500)
+    return {"status": "ok"}
+
+
+# ── Routes: Camera geometry (admin) ───────────────────────────────────────────
+
+
+def _owns_local_cameras(bin_id: str) -> bool:
+    """True when this process is the one running *bin_id*'s cameras."""
+    return bin_id == BIN_ID and CAMERA_MODE != "none"
+
+
+def _local_camera_count() -> int:
+    return 1 if CAMERA_MODE == "oak-native" else 2
+
+
+@app.get("/api/bin/{bin_id}/camera-config")
+def api_get_camera_config(request: Request, bin_id: str):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if _owns_local_cameras(bin_id):
+        # Live source of truth for what the capture loop is applying.
+        cams = [
+            {"cam_index": i, **_camera_store.get(i).to_dict()}
+            for i in range(_local_camera_count())
+        ]
+        return {"cameras": cams, "source": "local"}
+    # Remote / server-only: return saved desired-state, else defaults.
+    saved = get_camera_configs(bin_id)
+    if saved:
+        return {"cameras": saved, "source": "db"}
+    info = _get_bin_info(bin_id)
+    n = info.camera_count if info and info.camera_count else 2
+    default = default_config().to_dict()
+    return {"cameras": [{"cam_index": i, **default} for i in range(n)], "source": "default"}
+
+
+@app.post("/api/bin/{bin_id}/camera-config")
+def api_set_camera_config(request: Request, bin_id: str, body: CameraConfigPayload):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if not body.cameras:
+        return JSONResponse({"error": "no cameras provided"}, status_code=400)
+
+    # Validate every camera before persisting anything.
+    validated: list[tuple[int, CameraConfig]] = []
+    for cam in body.cameras:
+        try:
+            cfg = CameraConfig.from_dict(
+                {
+                    "rotation": cam.rotation,
+                    "flip_h": cam.flip_h,
+                    "flip_v": cam.flip_v,
+                    "crop": cam.crop,
+                }
+            )
+        except (ValueError, TypeError) as exc:
+            return JSONResponse(
+                {"error": f"camera {cam.cam_index}: {exc}"}, status_code=400
+            )
+        validated.append((cam.cam_index, cfg))
+
+    # Server DB = fleet desired-state (drives the dashboard).
+    for idx, cfg in validated:
+        upsert_camera_config(bin_id, idx, cfg.to_dict())
+
+    # Apply to whichever process actually owns the cameras.
+    if _owns_local_cameras(bin_id):
+        for idx, cfg in validated:
+            _camera_store.set(idx, cfg)
+        _camera_store.save_json(CAMERA_CONFIG_FILE)
+        return {"status": "ok", "applied": "local"}
+
+    info = _get_bin_info(bin_id)
+    if info is None or not info.host:
+        # Saved to the DB; the offline bin will not receive it until it is online
+        # and the operator saves again.
+        return {"status": "ok", "applied": "saved", "detail": "bin offline — saved to server"}
+    if _rate_limited(bin_id):
+        return JSONResponse(
+            {"error": "rate limited — wait a moment between commands"}, status_code=429
+        )
+    cmd = {"action": "set_camera_config", "cameras": [c.model_dump() for c in body.cameras]}
+    status, data = _proxy_request(info.host, "/command", method="POST", json_body=cmd)
+    ok = status == 200
+    return JSONResponse(
+        {"status": "ok" if ok else "error", "applied": "remote", "edge": data},
+        status_code=status,
+    )
+
+
+@app.get("/api/bin/{bin_id}/camera/{index}/snapshot")
+def api_camera_snapshot(request: Request, bin_id: str, index: int):
+    if not _is_admin(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if _owns_local_cameras(bin_id):
+        frame = _camera_store.get_raw(index)
+        if frame is None:
+            return JSONResponse({"error": "no camera frame available"}, status_code=503)
+        ok, jpeg = cv2.imencode(".jpg", frame)
+        if not ok:
+            return JSONResponse({"error": "encode failed"}, status_code=500)
+        return Response(content=jpeg.tobytes(), media_type="image/jpeg")
+    info = _get_bin_info(bin_id)
+    if info is None or not info.host:
+        return JSONResponse({"error": "bin not registered"}, status_code=404)
+    status, content, ctype = _proxy_get_bytes(info.host, f"/camera/{index}/snapshot")
+    if status != 200 or not content:
+        return JSONResponse({"error": "snapshot unavailable"}, status_code=status or 502)
+    return Response(content=content, media_type=ctype)
 
 
 @app.get("/api/analytics")

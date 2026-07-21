@@ -470,3 +470,105 @@ class TestGetEntryById:
     def test_missing_id_returns_none(self, tmp_path, monkeypatch):
         db, _ = _setup_db(tmp_path, monkeypatch)
         assert db.get_entry_by_id(999) is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# users table
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestUsersTable:
+    def test_table_created(self, tmp_path, monkeypatch):
+        db, db_path = _setup_db(tmp_path, monkeypatch)
+        with sqlite3.connect(db_path) as conn:
+            cur = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+            )
+            assert cur.fetchone() is not None
+
+    def test_create_and_get(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        uid = db.create_user("alice", "hash123")
+        assert uid is not None
+        row = db.get_user("alice")
+        assert row["username"] == "alice"
+        assert row["password_hash"] == "hash123"
+
+    def test_count_and_list(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        assert db.count_users() == 0
+        db.create_user("a", "h1")
+        db.create_user("b", "h2")
+        assert db.count_users() == 2
+        assert {u["username"] for u in db.list_users()} == {"a", "b"}
+
+    def test_unique_username(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        assert db.create_user("a", "h1") is not None
+        assert db.create_user("a", "h2") is None
+
+    def test_set_password(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        db.create_user("a", "old")
+        assert db.set_password("a", "new") is True
+        assert db.get_user("a")["password_hash"] == "new"
+
+    def test_delete(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        db.create_user("a", "h")
+        assert db.delete_user("a") is True
+        assert db.get_user("a") is None
+
+    def test_list_password_hashes(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        db.create_user("a", "h1")
+        db.create_user("b", "h2")
+        assert set(db.list_password_hashes()) == {"h1", "h2"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# camera_configs table
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestCameraConfigsTable:
+    def test_table_created(self, tmp_path, monkeypatch):
+        db, db_path = _setup_db(tmp_path, monkeypatch)
+        with sqlite3.connect(db_path) as conn:
+            cur = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='camera_configs'"
+            )
+            assert cur.fetchone() is not None
+
+    def test_upsert_then_get(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        cfg = {"rotation": 90, "flip_h": True, "flip_v": False, "crop": [0.1, 0.2, 0.8, 0.9]}
+        assert db.upsert_camera_config("bin-x", 0, cfg) is True
+        rows = db.get_camera_configs("bin-x")
+        assert len(rows) == 1
+        r = rows[0]
+        assert r["cam_index"] == 0
+        assert r["rotation"] == 90
+        assert r["flip_h"] is True
+        assert r["flip_v"] is False
+        assert r["crop"] == [0.1, 0.2, 0.8, 0.9]
+
+    def test_upsert_updates_in_place(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        db.upsert_camera_config("bin-x", 0, {"rotation": 0, "crop": [0, 0, 1, 1]})
+        db.upsert_camera_config("bin-x", 0, {"rotation": 180, "crop": [0, 0, 1, 1]})
+        rows = db.get_camera_configs("bin-x")
+        assert len(rows) == 1  # not duplicated (PK on bin_id+cam_index)
+        assert rows[0]["rotation"] == 180
+
+    def test_multiple_cameras_and_bins(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        db.upsert_camera_config("bin-a", 0, {"crop": [0, 0, 1, 1]})
+        db.upsert_camera_config("bin-a", 1, {"crop": [0, 0, 1, 1]})
+        db.upsert_camera_config("bin-b", 0, {"crop": [0, 0, 1, 1]})
+        assert len(db.get_camera_configs("bin-a")) == 2
+        assert len(db.get_camera_configs("bin-b")) == 1
+
+    def test_empty_when_none(self, tmp_path, monkeypatch):
+        db, _ = _setup_db(tmp_path, monkeypatch)
+        assert db.get_camera_configs("nope") == []

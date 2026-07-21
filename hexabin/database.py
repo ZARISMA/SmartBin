@@ -8,6 +8,7 @@ SQLite is the default for local development; PostgreSQL is used in Docker.
 import os
 import sqlite3
 import threading
+from datetime import datetime
 
 from .config import BIN_ID, DB_BACKEND, DB_FILE, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USER
 from .log_setup import get_logger
@@ -97,6 +98,60 @@ _PG_INSERT = (
     f" ({', '.join(_INSERT_COLS)})"
     f" VALUES ({', '.join('%(' + c + ')s' for c in _INSERT_COLS)});"
 )
+
+# ── Users (dashboard accounts) ─────────────────────────────────────────────────
+
+_SQLITE_CREATE_USERS = """
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at    TEXT
+);
+"""
+
+_PG_CREATE_USERS = """
+CREATE TABLE IF NOT EXISTS users (
+    id            SERIAL PRIMARY KEY,
+    username      TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
+# ── Camera geometry (per-bin, per-camera desired-state) ────────────────────────
+
+_SQLITE_CREATE_CAMERA = """
+CREATE TABLE IF NOT EXISTS camera_configs (
+    bin_id     TEXT NOT NULL,
+    cam_index  INTEGER NOT NULL,
+    rotation   INTEGER DEFAULT 0,
+    flip_h     INTEGER DEFAULT 0,
+    flip_v     INTEGER DEFAULT 0,
+    crop_x0    REAL DEFAULT 0.0,
+    crop_y0    REAL DEFAULT 0.0,
+    crop_x1    REAL DEFAULT 1.0,
+    crop_y1    REAL DEFAULT 1.0,
+    updated_at TEXT,
+    PRIMARY KEY (bin_id, cam_index)
+);
+"""
+
+_PG_CREATE_CAMERA = """
+CREATE TABLE IF NOT EXISTS camera_configs (
+    bin_id     TEXT NOT NULL,
+    cam_index  INTEGER NOT NULL,
+    rotation   INTEGER DEFAULT 0,
+    flip_h     BOOLEAN DEFAULT FALSE,
+    flip_v     BOOLEAN DEFAULT FALSE,
+    crop_x0    DOUBLE PRECISION DEFAULT 0.0,
+    crop_y0    DOUBLE PRECISION DEFAULT 0.0,
+    crop_x1    DOUBLE PRECISION DEFAULT 1.0,
+    crop_y1    DOUBLE PRECISION DEFAULT 1.0,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (bin_id, cam_index)
+);
+"""
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
@@ -262,6 +317,8 @@ def init_db() -> None:
             with conn:
                 with conn.cursor() as cur:
                     cur.execute(_PG_CREATE)
+                    cur.execute(_PG_CREATE_USERS)
+                    cur.execute(_PG_CREATE_CAMERA)
             logger.info(
                 "PostgreSQL database ready: %s@%s:%s/%s", DB_USER, DB_HOST, DB_PORT, DB_NAME
             )
@@ -271,6 +328,8 @@ def init_db() -> None:
         os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
         with sqlite3.connect(DB_FILE) as conn:
             conn.execute(_SQLITE_CREATE)
+            conn.execute(_SQLITE_CREATE_USERS)
+            conn.execute(_SQLITE_CREATE_CAMERA)
             # PG creates these in its DDL; legacy tables may lack the columns.
             for ddl in (
                 "CREATE INDEX IF NOT EXISTS idx_waste_label ON waste_entries(label)",
@@ -583,3 +642,236 @@ def get_entry_by_id(entry_id: int) -> dict | None:
     except Exception as e:
         logger.error("DB query failed: %s", e)
         return None
+
+
+# ── User accounts ─────────────────────────────────────────────────────────────
+
+
+def count_users() -> int:
+    """Return the number of dashboard accounts (0 → the seed should run)."""
+    _ensure_init()
+    try:
+        return int(_fetch_rows("SELECT COUNT(*) FROM users")[0][0])
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return 0
+
+
+def get_user(username: str) -> dict | None:
+    """Return {id, username, password_hash, created_at} or None."""
+    _ensure_init()
+    ph = "%(u)s" if _use_pg() else ":u"
+    sql = f"SELECT id, username, password_hash, created_at FROM users WHERE username = {ph}"
+    try:
+        rows = _fetch_rows(sql, {"u": username})
+        if not rows:
+            return None
+        r = rows[0]
+        return {
+            "id": r[0],
+            "username": r[1],
+            "password_hash": r[2],
+            "created_at": str(r[3]) if r[3] else "",
+        }
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return None
+
+
+def list_users() -> list[dict]:
+    """Return all accounts (id, username, created_at) — never the hash."""
+    _ensure_init()
+    try:
+        rows = _fetch_rows("SELECT id, username, created_at FROM users ORDER BY username")
+        return [
+            {"id": r[0], "username": r[1], "created_at": str(r[2]) if r[2] else ""} for r in rows
+        ]
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return []
+
+
+def list_password_hashes() -> list[str]:
+    """Return every stored password hash — used to match a bearer token."""
+    _ensure_init()
+    try:
+        return [r[0] for r in _fetch_rows("SELECT password_hash FROM users")]
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return []
+
+
+def create_user(username: str, password_hash: str) -> int | None:
+    """Insert one account. Returns the new id, or None on failure (incl. a
+    duplicate username, which violates the UNIQUE constraint)."""
+    _ensure_init()
+    try:
+        if _use_pg():
+            pool = _get_pg_pool()
+            conn = pool.getconn()
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "INSERT INTO users (username, password_hash)"
+                            " VALUES (%(u)s, %(p)s) RETURNING id",
+                            {"u": username, "p": password_hash},
+                        )
+                        return int(cur.fetchone()[0])
+            finally:
+                pool.putconn(conn)
+        else:
+            with sqlite3.connect(DB_FILE) as conn:
+                cur = conn.execute(
+                    "INSERT INTO users (username, password_hash, created_at)"
+                    " VALUES (:u, :p, :c)",
+                    {
+                        "u": username,
+                        "p": password_hash,
+                        "c": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    },
+                )
+                return cur.lastrowid
+    except Exception as e:
+        logger.error("Create user failed: %s", e)
+        return None
+
+
+def set_password(username: str, password_hash: str) -> bool:
+    """Update one account's password hash. Returns True if a row changed."""
+    _ensure_init()
+    try:
+        if _use_pg():
+            pool = _get_pg_pool()
+            conn = pool.getconn()
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE users SET password_hash = %(p)s WHERE username = %(u)s",
+                            {"p": password_hash, "u": username},
+                        )
+                        return cur.rowcount > 0
+            finally:
+                pool.putconn(conn)
+        else:
+            with sqlite3.connect(DB_FILE) as conn:
+                cur = conn.execute(
+                    "UPDATE users SET password_hash = :p WHERE username = :u",
+                    {"p": password_hash, "u": username},
+                )
+                return cur.rowcount > 0
+    except Exception as e:
+        logger.error("Set password failed: %s", e)
+        return False
+
+
+def delete_user(username: str) -> bool:
+    """Delete one account. Returns True if a row was removed."""
+    _ensure_init()
+    try:
+        if _use_pg():
+            pool = _get_pg_pool()
+            conn = pool.getconn()
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "DELETE FROM users WHERE username = %(u)s", {"u": username}
+                        )
+                        return cur.rowcount > 0
+            finally:
+                pool.putconn(conn)
+        else:
+            with sqlite3.connect(DB_FILE) as conn:
+                cur = conn.execute("DELETE FROM users WHERE username = :u", {"u": username})
+                return cur.rowcount > 0
+    except Exception as e:
+        logger.error("Delete user failed: %s", e)
+        return False
+
+
+# ── Camera geometry configs ───────────────────────────────────────────────────
+
+
+def get_camera_configs(bin_id: str) -> list[dict]:
+    """Return saved per-camera transforms for a bin, ordered by camera index."""
+    _ensure_init()
+    ph = "%(b)s" if _use_pg() else ":b"
+    sql = (
+        "SELECT cam_index, rotation, flip_h, flip_v, crop_x0, crop_y0, crop_x1, crop_y1,"
+        f" updated_at FROM camera_configs WHERE bin_id = {ph} ORDER BY cam_index"
+    )
+    try:
+        rows = _fetch_rows(sql, {"b": bin_id})
+        return [
+            {
+                "cam_index": r[0],
+                "rotation": r[1],
+                "flip_h": bool(r[2]),
+                "flip_v": bool(r[3]),
+                "crop": [r[4], r[5], r[6], r[7]],
+                "updated_at": str(r[8]) if r[8] else "",
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error("DB query failed: %s", e)
+        return []
+
+
+def upsert_camera_config(bin_id: str, cam_index: int, cfg: dict) -> bool:
+    """Insert-or-update one camera's transform.
+
+    cfg: ``{rotation, flip_h, flip_v, crop: [x0, y0, x1, y1]}``.
+    """
+    _ensure_init()
+    crop = cfg.get("crop") or [0.0, 0.0, 1.0, 1.0]
+    params = {
+        "b": bin_id,
+        "i": int(cam_index),
+        "rot": int(cfg.get("rotation", 0)),
+        "fh": bool(cfg.get("flip_h", False)),
+        "fv": bool(cfg.get("flip_v", False)),
+        "x0": float(crop[0]),
+        "y0": float(crop[1]),
+        "x1": float(crop[2]),
+        "y1": float(crop[3]),
+    }
+    try:
+        if _use_pg():
+            pool = _get_pg_pool()
+            conn = pool.getconn()
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "INSERT INTO camera_configs"
+                            " (bin_id, cam_index, rotation, flip_h, flip_v,"
+                            "  crop_x0, crop_y0, crop_x1, crop_y1)"
+                            " VALUES (%(b)s, %(i)s, %(rot)s, %(fh)s, %(fv)s,"
+                            "  %(x0)s, %(y0)s, %(x1)s, %(y1)s)"
+                            " ON CONFLICT (bin_id, cam_index) DO UPDATE SET"
+                            "  rotation = EXCLUDED.rotation, flip_h = EXCLUDED.flip_h,"
+                            "  flip_v = EXCLUDED.flip_v, crop_x0 = EXCLUDED.crop_x0,"
+                            "  crop_y0 = EXCLUDED.crop_y0, crop_x1 = EXCLUDED.crop_x1,"
+                            "  crop_y1 = EXCLUDED.crop_y1, updated_at = NOW()",
+                            params,
+                        )
+                return True
+            finally:
+                pool.putconn(conn)
+        else:
+            params["ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with sqlite3.connect(DB_FILE) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO camera_configs"
+                    " (bin_id, cam_index, rotation, flip_h, flip_v,"
+                    "  crop_x0, crop_y0, crop_x1, crop_y1, updated_at)"
+                    " VALUES (:b, :i, :rot, :fh, :fv, :x0, :y0, :x1, :y1, :ts)",
+                    params,
+                )
+            return True
+    except Exception as e:
+        logger.error("Upsert camera config failed: %s", e)
+        return False

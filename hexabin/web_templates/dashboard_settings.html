@@ -1,0 +1,63 @@
+{% extends "_cc_base.html" %}
+
+{% block title %}Settings · HexaBin{% endblock %}
+{% block kicker %}§ Administer{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<div class="settings-grid">
+
+    <section class="sb-card settings-card">
+        <div class="settings-card-head">
+            <h2>Your account</h2>
+            <p class="settings-sub">Signed in as <strong id="current-user">{{ user }}</strong>. Change your password below.</p>
+        </div>
+        <form id="password-form" class="settings-form" autocomplete="off">
+            <div class="settings-field">
+                <label for="current_password">Current password</label>
+                <input type="password" id="current_password" name="current_password" autocomplete="current-password" required>
+            </div>
+            <div class="settings-field">
+                <label for="new_password">New password</label>
+                <input type="password" id="new_password" name="new_password" autocomplete="new-password" required>
+            </div>
+            <div class="settings-field">
+                <label for="confirm_password">Confirm new password</label>
+                <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required>
+            </div>
+            <div class="settings-actions">
+                <button type="submit" class="sb-btn sb-btn-primary">Update password</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="sb-card settings-card">
+        <div class="settings-card-head">
+            <h2>Users</h2>
+            <p class="settings-sub">Every account has full operator access.</p>
+        </div>
+        <ul class="user-list" id="user-list">
+            <li class="user-empty">Loading…</li>
+        </ul>
+
+        <form id="add-user-form" class="settings-form settings-form-inline">
+            <div class="settings-field">
+                <label for="new_username">Username</label>
+                <input type="text" id="new_username" name="username" autocomplete="off" placeholder="e.g. operator2" required>
+            </div>
+            <div class="settings-field">
+                <label for="add_password">Password</label>
+                <input type="password" id="add_password" name="password" autocomplete="new-password" placeholder="min 6 characters" required>
+            </div>
+            <div class="settings-actions">
+                <button type="submit" class="sb-btn sb-btn-secondary">Add user</button>
+            </div>
+        </form>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dashboard_settings.js" defer></script>
+{% endblock %}

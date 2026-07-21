@@ -20,6 +20,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 DATASET_DIR = os.path.join(BASE_DIR, "waste_dataset")
 DB_FILE = os.path.join(DATASET_DIR, "waste.db")
+# Per-camera geometry (rotate/flip/crop) saved by the dashboard; applied-state
+# that the capture loop reloads on startup so an edit survives a restart.
+CAMERA_CONFIG_FILE = os.path.join(DATASET_DIR, "camera_config.json")
 
 # ── Database ──────────────────────────────────────────────────────────────────
 DB_BACKEND = settings.db_backend

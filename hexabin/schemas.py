@@ -106,12 +106,34 @@ class BinHeartbeat(BaseModel):
     warnings: list[WarningInfo] = Field(default_factory=list)
 
 
+class CameraSettings(BaseModel):
+    """One camera's geometry transform, pushed from the dashboard to a bin.
+
+    ``crop`` is ``[x0, y0, x1, y1]`` normalized to ``[0, 1]`` of the
+    rotated+flipped frame. Structural validation (ranges, min size, rotation
+    whitelist) is enforced by ``camera_config.CameraConfig.from_dict``.
+    """
+
+    cam_index: int = 0
+    rotation: int = 0
+    flip_h: bool = False
+    flip_v: bool = False
+    crop: list[float] = Field(default=[0.0, 0.0, 1.0, 1.0], min_length=4, max_length=4)
+
+
+class CameraConfigPayload(BaseModel):
+    """Camera-config save request from the dashboard editor."""
+
+    cameras: list[CameraSettings]
+
+
 BinCommandAction = Literal[
     "stop",
     "start",
     "restart",
     "set_strategy",
     "set_pipeline",
+    "set_camera_config",
     "classify",
     "toggle_auto",
     "clear_warnings",
@@ -123,6 +145,7 @@ class BinCommand(BaseModel):
 
     action: BinCommandAction
     value: str | None = None  # strategy/pipeline name for set_* actions
+    cameras: list[CameraSettings] | None = None  # payload for set_camera_config
 
 
 class CommandResult(BaseModel):
@@ -130,3 +153,20 @@ class CommandResult(BaseModel):
 
     status: str = "ok"
     message: str = ""
+
+
+# ── Dashboard request bodies (admin UI → server) ──────────────────────────────
+
+
+class UserCreate(BaseModel):
+    """New dashboard account requested from the Settings page."""
+
+    username: str
+    password: str
+
+
+class PasswordChange(BaseModel):
+    """Change-password request for the signed-in account."""
+
+    current_password: str
+    new_password: str

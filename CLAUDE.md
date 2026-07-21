@@ -24,9 +24,14 @@ python main.py
 
 ## Authentication
 
-Dashboard and API require login. Default credentials: `admin` / `password123`.
-Override via `HEXABIN_ADMIN_USERNAME` and `HEXABIN_ADMIN_PASSWORD` env vars.
-The presentation site at `/site` is public (no login required).
+Dashboard and API require login. Accounts are **DB-authoritative** (`users`
+table, PBKDF2-hashed passwords): `HEXABIN_ADMIN_USERNAME` /
+`HEXABIN_ADMIN_PASSWORD` only **seed** the first account when the table is empty
+(default `admin` / `password123`). After first boot, change your password and
+add operators from the **Settings** page (`/settings`); env changes no longer
+affect existing accounts (see `docs/adr/0001-db-authoritative-auth.md`). The
+last account cannot be deleted. `/login` is rate-limited per IP. The
+presentation site at `/site` is public (no login required).
 
 Auth is **scoped**: the admin session/password opens everything; the edge API key
 (`HEXABIN_EDGE_API_KEY` as a Bearer token) is valid ONLY for the ingest endpoints
@@ -115,7 +120,8 @@ Routes (all require login; all redirect to `/login` otherwise):
 | `/analytics` | `dashboard_analytics.html` | `dashboard_analytics.js` | KPI strip, charts, period switch, CSV export — all real data from `/api/analytics?period=24h\|7d\|30d\|90d\|ytd` |
 | `/alerts` | `dashboard_alerts.html` | `dashboard_alerts.js` | Camera-availability alerts from live heartbeats (`/api/alerts`: `camera_count` 0 → `NO_CAMERA` error, 1 → `SINGLE_CAMERA` warning; stale bins excluded) |
 | `/classifications` | `dashboard_classifications.html` | `dashboard_classifications.js` | Browse classification records: bin/category/search filters, pagination (`/api/entries` + `/api/entries/count`), thumbnails + lightbox via authed `/api/entries/{id}/image` |
-| `/bin/{bin_id}` | `index.html` | — | Per-bin detail view (live stream, controls, stats) |
+| `/settings` | `dashboard_settings.html` | `dashboard_settings.js` | Account (change own password) + user management (list / add / delete, last-account guarded) via `/api/account/password` and `/api/users` |
+| `/bin/{bin_id}` | `index.html` | `dashboard_cameras.js` | Per-bin detail view (live stream, controls, stats) + **camera editor** (rotate/flip/crop each camera, `/api/bin/{id}/camera-config`) |
 | `/site` | `site.html` | `site.js` | Public marketing/presentation site |
 | `/login` | `login.html` | — | Authentication |
 
@@ -223,6 +229,7 @@ hexabin/
   app.py             ← shared OAK-camera run loop
   camera.py          ← OAK camera pipeline helper (single device)
   cameraOak.py       ← dual OAK pipeline setup and frame cropping
+  camera_config.py   ← per-camera rotate/flip/crop transform + thread-safe store + JSON persistence
   cameraraspberry.py ← legacy Raspberry Pi picamera2 setup (kept for web.py)
   control.py         ← unified edge runner (docker entry point)
   warnings.py        ← structured runtime warnings surfaced on the dashboard
@@ -241,6 +248,7 @@ hexabin/
   state.py           ← thread-safe AppState class
   strategies.py      ← classification-trigger strategies (Manual, PresenceGate)
   ui.py              ← OpenCV overlay rendering
+  users.py           ← DB-backed dashboard accounts + PBKDF2 password hashing (stdlib)
   utils.py           ← shared frame helpers
   web.py             ← FastAPI web UI with auth, multi-bin dashboard, edge endpoints
   web_templates/         ← Jinja2 HTML templates
@@ -250,7 +258,8 @@ hexabin/
     dashboard_analytics.html ← Analytics page (`/analytics`) — KPIs, charts, export
     dashboard_alerts.html    ← Alerts page (`/alerts`) — camera-availability alerts
     dashboard_classifications.html ← Classifications page (`/classifications`) — record browser
-    index.html           ← per-bin detail view (`/bin/{id}`)
+    dashboard_settings.html ← Settings page (`/settings`) — account password + user management
+    index.html           ← per-bin detail view (`/bin/{id}`) + camera editor
     login.html           ← authentication page
     site.html            ← presentation/marketing website (public)
   web_static/            ← CSS/JS static files
@@ -261,6 +270,8 @@ hexabin/
     dashboard_analytics.js ← Analytics page JS (charts, period switch, CSV)
     dashboard_alerts.js    ← Alerts page JS (5s polling, severity rows, badge)
     dashboard_classifications.js ← Classifications page JS (filters, pagination, lightbox)
+    dashboard_settings.js ← Settings page JS (password change, user add/delete)
+    dashboard_cameras.js ← Camera editor JS (canvas preview, drag crop box, rotate/flip, save)
     cc_nav.js            ← shared sidebar alerts badge (all Control Center pages)
     theme.js             ← light/dark theme toggle + persistence (all pages)
     site.css / site.js   ← presentation site assets
