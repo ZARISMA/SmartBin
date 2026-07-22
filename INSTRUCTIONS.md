@@ -6,7 +6,7 @@ Two machines:
 - **Raspberry Pi** (`hexabin@10.172.194.238`, pass `Hexa1234`) — edge device, reports to the laptop.
 
 Shared edge API key: `smartbin-edge-2026-a7f3k9`. Admin login: `admin` / `password123`.
-
+docker compose up -d
 ---
 
 ## 1. Laptop — start the server
@@ -15,7 +15,7 @@ Open git-bash (or PowerShell) in the repo root and run:
 
 ```bash
 in /HexaBin
-docker compose up -d
+
 ```
 
 Check it's healthy:

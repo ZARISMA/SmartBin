@@ -702,3 +702,25 @@ class TestCameraConfigApi:
 
     def test_snapshot_anon_rejected(self, anon_client):
         assert anon_client.get(f"/api/bin/{BIN_ID}/camera/0/snapshot").status_code == 401
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-bin page — fullscreen button on the live feed
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestBinPageFullscreen:
+    def test_button_present_when_camera(self, client, monkeypatch):
+        import hexabin.web as web
+
+        monkeypatch.setattr(web, "_cameras_ok", True)  # local bin has a live feed
+        r = client.get(f"/bin/{BIN_ID}")
+        assert r.status_code == 200
+        assert 'id="fs-toggle"' in r.text
+        assert "toggleFullscreen()" in r.text
+
+    def test_no_button_when_no_feed(self, client):
+        # Unregistered/remote-offline bin → no stream → no fullscreen button
+        r = client.get("/bin/no-such-bin")
+        assert r.status_code == 200
+        assert 'id="fs-toggle"' not in r.text
